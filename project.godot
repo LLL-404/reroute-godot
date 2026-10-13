@@ -1,0 +1,6 @@
+config_version=5
+
+[application]
+
+config/name="改道 Godot"
+config/description="放墙改道 —— Godot 移植版（sim 核先行，表现层跟进）"

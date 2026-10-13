@@ -1,0 +1,6 @@
+# Godot 本地缓存（不入库）
+.godot/
+# 导出产物
+export/
+*.exe
+*.pck
