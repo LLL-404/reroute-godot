@@ -111,6 +111,7 @@ var sfx_players: Array = [] # 轮换池（AudioStreamPlayer ×4）
 var sfx_amb: AudioStreamPlayer = null # 常驻环境源（循环）
 var bgm_player: AudioStreamPlayer = null # 对局 BGM 源
 var bgm_on := false # 诊断：BGM 开关态（探针用）
+var audio_on := true # headless 跳过实际播放（Dummy 驱动；见 _setup_audio 注释）
 var sfx_log: Dictionary = {} # 诊断计数：文件名 → 播放次数（探针用，生产无害）
 var _sfx_next := 0 # 轮换下标
 var _streams: Dictionary = {} # 流缓存（每文件 load 一次）
@@ -835,7 +836,10 @@ func pick_cell(screen_x: float, screen_y: float) -> Vector2i:
 
 ## 建音频三件套：4 轮换特效源 + 1 常驻环境源（循环）+ BGM 源。
 ## 环境音自 View 初始化即播（标题屏只留环境音）；BGM 由 main 经 bgm() 开关。
+## headless（Dummy 音频驱动）跳过实际播放：听不见，且退出的播放对象回收存在竞态
+## （ObjectDB 泄漏 + resources still in use，实测）——接口/资源/状态断言照常可测。
 func _setup_audio() -> void:
+	audio_on = DisplayServer.get_name() != "headless"
 	var sroot := Node.new()
 	sroot.name = "SFX"
 	add_child(sroot)
@@ -854,7 +858,8 @@ func _setup_audio() -> void:
 			amb_mp3.loop = true
 		sfx_amb.stream = amb
 		sfx_amb.volume_db = linear_to_db(0.22)
-		sfx_amb.play()
+		if audio_on:
+			sfx_amb.play()
 	bgm_player = AudioStreamPlayer.new()
 	bgm_player.name = "bgm"
 	sroot.add_child(bgm_player)
@@ -884,7 +889,8 @@ func play_sound(sname: String, gain: float = 0.8) -> void:
 	_sfx_next = (_sfx_next + 1) % sfx_players.size()
 	p.stream = s
 	p.volume_db = linear_to_db(gain)
-	p.play()
+	if audio_on:
+		p.play()
 	sfx_log[sname] = int(sfx_log.get(sname, 0)) + 1
 
 
@@ -902,9 +908,24 @@ func bgm(enabled: bool) -> void:
 			s_mp3.loop = true
 		bgm_player.stream = s
 		bgm_player.volume_db = linear_to_db(0.34)
-		bgm_player.play()
+		if audio_on:
+			bgm_player.play()
 	else:
 		bgm_player.stop()
+
+
+## 全停音频并解绑流（退出收尾用：带活动播放对象直接 quit 会报 Playback 泄漏/资源占用）。
+func stop_all_audio() -> void:
+	if sfx_amb != null:
+		sfx_amb.stop()
+		sfx_amb.stream = null
+	for p in sfx_players:
+		var ap: AudioStreamPlayer = p
+		ap.stop()
+		ap.stream = null
+	if bgm_player != null:
+		bgm_player.stop()
+		bgm_player.stream = null
 
 
 func _float_bounty(scr: Vector2, text: String) -> void:

@@ -5,6 +5,7 @@ extends Node3D
 # R4 范围：输入（拾取/拖拽线/模式校验/命令派发/TAB 热层/幽灵预览）；HUD/三屏/音频见后续轮。
 
 const Blueprint = preload("res://game/blueprint.gd")
+const Selfcheck = preload("res://game/selfcheck.gd")
 
 const TICK_DT := 1.0 / 20.0
 const MAX_CATCHUP := 5 # 单帧最多补的 tick 数（追平上限，超出丢弃积压）
@@ -38,6 +39,24 @@ func _ready() -> void:
 	new_game()
 	hud.set_visible_hud(false)
 	shell.open_title() # 启动即标题：标题屏压着静态战场（母版口径，paused 初值 true）
+	if _is_selfcheck():
+		_run_selfcheck()
+
+
+## 导出包自证触发检测（C8）：`--headless --selfcheck`（引擎参数后或 ++ 后均可）。
+func _is_selfcheck() -> bool:
+	return OS.get_cmdline_args().has("--selfcheck") or OS.get_cmdline_user_args().has("--selfcheck")
+
+
+## 跑自检并以其返回码退出（R8；headless 导出包验收用）。
+## 退出前全停音频 + 等混音周期完成回收：带活动播放对象直接 quit 会在退出清理报
+## Playback 泄漏 + "resources still in use"（实测），停播后需等音频侧回收生效再退。
+func _run_selfcheck() -> void:
+	var chk = Selfcheck.new()
+	var code: int = chk.run(self)
+	view.stop_all_audio()
+	await get_tree().create_timer(0.5).timeout
+	get_tree().quit(code)
 
 
 ## HUD 构建与接线（口径同母版 main.Start：hud.init + 回调注入）。
