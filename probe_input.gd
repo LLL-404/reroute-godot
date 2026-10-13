@@ -16,10 +16,10 @@ func _initialize() -> void:
 	var packed: PackedScene = load("res://game/main.tscn")
 	var main = packed.instantiate()
 	root.add_child(main)
-	main.set_process(false) # 探针独占推进（无 tick 干扰）
-	main.paused = false
 	for _i in 3:
-		await process_frame
+		await process_frame # -s 模式：_ready 在首帧才跑；set_process 须在 ready 之后调用才粘
+	main.set_process(false) # 探针独占推进（无 tick 干扰）
+	main.start_match() # 进入对局（R6 起启动即标题屏；本探针测对局内输入）
 	var view = main.view
 	var world = main.world
 	vp_size = get_root().get_visible_rect().size

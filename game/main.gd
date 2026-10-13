@@ -19,6 +19,8 @@ var paused := true # R1 新局即跑（标题屏 R6 接入后恢复"启动即暂
 var time_scale := 1.0
 var hud = null # HUD（game/hud.gd 实例）
 var hud_layer: CanvasLayer
+var shell = null # 界面壳（game/screens.gd 实例）
+var over_shown := false
 
 # ---- 输入状态（口径同母版 main.lua） ----
 var mode := "wall"
@@ -32,8 +34,10 @@ var hud_regions_provider: Callable
 func _ready() -> void:
 	view = $View
 	_setup_hud()
+	_setup_shell()
 	new_game()
-	paused = false
+	hud.set_visible_hud(false)
+	shell.open_title() # 启动即标题：标题屏压着静态战场（母版口径，paused 初值 true）
 
 
 ## HUD 构建与接线（口径同母版 main.Start：hud.init + 回调注入）。
@@ -54,15 +58,70 @@ func _setup_hud() -> void:
 	view.on_float = Callable(hud, "float_bounty")
 
 
+## 界面壳构建与接线（口径同母版 main.Start：Shell.init 注入回调）。
+func _setup_shell() -> void:
+	shell = preload("res://game/screens.gd").new()
+	shell.name = "Shell"
+	add_child(shell)
+	shell.init({
+		"start_match": Callable(self, "start_match"),
+		"restart": Callable(self, "restart_game"),
+		"resume": Callable(self, "resume_game"),
+		"to_title": Callable(self, "to_title"),
+		"pause": Callable(self, "pause_game"),
+	}, hud)
+
+
+# ---------------- 屏幕流转（页状态 = 游戏状态：进行中 = 空态） ----------------
+
+## 标题 → 对局：用启动/回标题时备好的那局。
+func start_match() -> void:
+	paused = false
+	acc = 0.0
+	time_scale = 1.0
+	drag_start = Vector2i(-1, -1)
+	hud.reset()
+	hud.set_visible_hud(true)
+	view.bgm(true)
+	shell.close_all()
+
+
+func pause_game() -> void:
+	if world.outcome != World.RUNNING or paused:
+		return
+	paused = true
+	drag_start = Vector2i(-1, -1)
+	shell.open_pause()
+
+
+func resume_game() -> void:
+	if not paused:
+		return
+	paused = false
+	shell.resume()
+
+
+func restart_game() -> void: # 暂停/结算 → 重开一局
+	new_game()
+	start_match()
+
+
+func to_title() -> void: # 暂停/结算 → 标题：备一局新的压着静态战场
+	paused = true
+	drag_start = Vector2i(-1, -1)
+	hud.set_visible_hud(false)
+	view.bgm(false)
+	new_game()
+	shell.open_title()
+
+
 func _on_hud_mode(m: String) -> void:
 	mode = m
 	hud.set_mode(m)
 
 
 func _on_hud_pause() -> void:
-	# R6 换成 Shell.open_pause()（暂停屏）；R5 临时直接切暂停态
-	if world != null and world.outcome == World.RUNNING:
-		paused = not paused
+	pause_game()
 
 
 func _on_hud_heat() -> void:
@@ -87,6 +146,7 @@ func new_game() -> void:
 	acc = 0.0
 	drag_start = Vector2i(-1, -1)
 	heat_on = false
+	over_shown = false
 	if hud != null:
 		hud.reset()
 	print("[Game] 新对局 run=", run_index, " seed=", BASE_SEED + run_index)
@@ -104,10 +164,15 @@ func _process(dt: float) -> void:
 			steps += 1
 		if steps == MAX_CATCHUP:
 			acc = 0.0
+	elif not paused and not over_shown:
+		over_shown = true
+		hud.set_visible_hud(false)
+		shell.open_gameover(world.outcome == World.WON, world)
 	view.sync(world)
 	update_ghost()
-	if hud != null:
-		hud.update(world)
+	if not paused or shell.current_page() == "pause":
+		hud.update(world) # 暂停时仍刷（面板静置）；标题/结算下 HUD 已整体隐藏
+	shell.update()
 
 
 # ---------------- 输入（移植 main.lua：拖拽放墙/塔、点覆盖层挖矿、点建筑拆除） ----------------
@@ -125,8 +190,11 @@ func _unhandled_input(event: InputEvent) -> void:
 		mouse_pos = mm.position
 	elif event is InputEventKey:
 		var mk: InputEventKey = event
-		if mk.pressed and not mk.echo and mk.keycode == KEY_TAB:
-			toggle_heat()
+		if mk.pressed and not mk.echo:
+			if shell != null and shell.handle_key(mk.keycode):
+				return
+			if mk.keycode == KEY_TAB:
+				toggle_heat()
 
 
 func in_hud_region(x: float, y: float) -> bool:
@@ -255,9 +323,9 @@ func update_ghost() -> void:
 		view.show_ghost([cell], not mode_valid(mode, cell.x, cell.y))
 
 
-## 威胁热层开关（TAB / 顶栏按钮共用；Shell 接入前不判屏幕栈）。
+## 威胁热层开关（TAB / 顶栏按钮共用；仅进行中——标题/暂停/结算下不响应）。
 func toggle_heat() -> void:
-	if world == null:
+	if world == null or (shell != null and shell.current_page() != ""):
 		return
 	heat_on = not heat_on
 	view.set_heat(heat_on)

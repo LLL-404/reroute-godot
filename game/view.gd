@@ -825,6 +825,11 @@ func play_sound(_name: String, _gain: float) -> void:
 	pass
 
 
+## 对局 BGM 开关（R7 装入音频源前为安全空转）。
+func bgm(_on: bool) -> void:
+	pass
+
+
 func _float_bounty(scr: Vector2, text: String) -> void:
 	if on_float.is_valid():
 		on_float.call(scr.x, scr.y, text)
