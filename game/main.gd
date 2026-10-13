@@ -17,6 +17,8 @@ var run_index := 0
 var acc := 0.0
 var paused := true # R1 新局即跑（标题屏 R6 接入后恢复"启动即暂停"口径）
 var time_scale := 1.0
+var hud = null # HUD（game/hud.gd 实例）
+var hud_layer: CanvasLayer
 
 # ---- 输入状态（口径同母版 main.lua） ----
 var mode := "wall"
@@ -29,8 +31,48 @@ var hud_regions_provider: Callable
 
 func _ready() -> void:
 	view = $View
+	_setup_hud()
 	new_game()
 	paused = false
+
+
+## HUD 构建与接线（口径同母版 main.Start：hud.init + 回调注入）。
+func _setup_hud() -> void:
+	hud_layer = CanvasLayer.new()
+	hud_layer.name = "HudLayer"
+	hud_layer.layer = 10
+	add_child(hud_layer)
+	hud = preload("res://game/hud.gd").new()
+	hud_layer.add_child(hud)
+	hud.build({
+		"on_mode": Callable(self, "_on_hud_mode"),
+		"on_pause": Callable(self, "_on_hud_pause"),
+		"on_heat": Callable(self, "_on_hud_heat"),
+		"on_skill": Callable(self, "_on_hud_skill"),
+	})
+	hud_regions_provider = Callable(hud, "hit_regions")
+	view.on_float = Callable(hud, "float_bounty")
+
+
+func _on_hud_mode(m: String) -> void:
+	mode = m
+	hud.set_mode(m)
+
+
+func _on_hud_pause() -> void:
+	# R6 换成 Shell.open_pause()（暂停屏）；R5 临时直接切暂停态
+	if world != null and world.outcome == World.RUNNING:
+		paused = not paused
+
+
+func _on_hud_heat() -> void:
+	toggle_heat()
+
+
+func _on_hud_skill() -> void:
+	if world != null and int(world.hero["skill_cd"]) == 0:
+		world.apply_command({ "kind": "shock" }) # 冷却/终局守卫在模拟层
+		view.play_sound("orc_chief_roar.mp3", 0.9)
 
 
 func new_game() -> void:
@@ -45,6 +87,8 @@ func new_game() -> void:
 	acc = 0.0
 	drag_start = Vector2i(-1, -1)
 	heat_on = false
+	if hud != null:
+		hud.reset()
 	print("[Game] 新对局 run=", run_index, " seed=", BASE_SEED + run_index)
 
 
@@ -62,6 +106,8 @@ func _process(dt: float) -> void:
 			acc = 0.0
 	view.sync(world)
 	update_ghost()
+	if hud != null:
+		hud.update(world)
 
 
 # ---------------- 输入（移植 main.lua：拖拽放墙/塔、点覆盖层挖矿、点建筑拆除） ----------------
@@ -215,3 +261,5 @@ func toggle_heat() -> void:
 		return
 	heat_on = not heat_on
 	view.set_heat(heat_on)
+	if hud != null:
+		hud.set_heat_vis(heat_on)
