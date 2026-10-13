@@ -1,8 +1,8 @@
 extends Node3D
 
 # 《改道》Godot 版主循环（移植 reroute/scripts/main.lua 的轻量档）。
-# 20Hz 固定步长模拟（tick 语义同 warden 切片）+ 渲染帧同步。
-# R1 范围：tick 推进 + 视图同步；输入/HUD/三屏/音频见后续轮。
+# 20Hz 固定步长模拟（tick 语义同 warden 切片）+ 渲染帧同步 + 指针/键盘输入闭环。
+# R4 范围：输入（拾取/拖拽线/模式校验/命令派发/TAB 热层/幽灵预览）；HUD/三屏/音频见后续轮。
 
 const Blueprint = preload("res://game/blueprint.gd")
 
@@ -10,13 +10,21 @@ const TICK_DT := 1.0 / 20.0
 const MAX_CATCHUP := 5 # 单帧最多补的 tick 数（追平上限，超出丢弃积压）
 const BASE_SEED := 20261003
 
-var view = null # View（preload 脚本实例）；动态引用（脚本未 class_name）
+var view = null # View（preload 脚本实例）；动态引用
 var world: World = null
 var sc: Scenario = null
 var run_index := 0
 var acc := 0.0
 var paused := true # R1 新局即跑（标题屏 R6 接入后恢复"启动即暂停"口径）
 var time_scale := 1.0
+
+# ---- 输入状态（口径同母版 main.lua） ----
+var mode := "wall"
+var drag_start := Vector2i(-1, -1) # 拖拽起始格
+var mouse_pos := Vector2(-1.0, -1.0)
+var heat_on := false
+## HUD 命中区提供者（R5 注入；未注入 = 无 HUD 区域）
+var hud_regions_provider: Callable
 
 
 func _ready() -> void:
@@ -35,6 +43,8 @@ func new_game() -> void:
 	view.build_terrain(world.grid)
 	view.sync(world)
 	acc = 0.0
+	drag_start = Vector2i(-1, -1)
+	heat_on = false
 	print("[Game] 新对局 run=", run_index, " seed=", BASE_SEED + run_index)
 
 
@@ -51,3 +61,157 @@ func _process(dt: float) -> void:
 		if steps == MAX_CATCHUP:
 			acc = 0.0
 	view.sync(world)
+	update_ghost()
+
+
+# ---------------- 输入（移植 main.lua：拖拽放墙/塔、点覆盖层挖矿、点建筑拆除） ----------------
+
+func _unhandled_input(event: InputEvent) -> void:
+	if event is InputEventMouseButton:
+		var mb: InputEventMouseButton = event
+		if mb.button_index == MOUSE_BUTTON_LEFT:
+			if mb.pressed:
+				pointer_down(mb.position)
+			else:
+				pointer_up(mb.position)
+	elif event is InputEventMouseMotion:
+		var mm: InputEventMouseMotion = event
+		mouse_pos = mm.position
+	elif event is InputEventKey:
+		var mk: InputEventKey = event
+		if mk.pressed and not mk.echo and mk.keycode == KEY_TAB:
+			toggle_heat()
+
+
+func in_hud_region(x: float, y: float) -> bool:
+	if not hud_regions_provider.is_valid():
+		return false
+	var regions: Array = hud_regions_provider.call()
+	for r in regions:
+		var rect: Rect2 = r
+		if rect.has_point(Vector2(x, y)):
+			return true
+	return false
+
+
+## 模式合法性（口径同母版 mode_valid；非法 = 幽灵红色 + 命令被模拟层守卫拒绝）。
+func mode_valid(m: String, x: int, y: int) -> bool:
+	if m == "wall" or m == "tower":
+		var def: Dictionary = Sim.BUILDINGS[(Sim.B_WALL if m == "wall" else Sim.B_TOWER) - 1]
+		if world.supply < int(def["cost"]):
+			return false
+		if not world.grid.passable(x, y):
+			return false
+		if world.building_at(x, y) != null:
+			return false
+		return world.cell_vacant(x, y)
+	elif m == "dig":
+		return world.grid.at(x, y) == Grid.COVER
+	elif m == "fill" or m == "lower":
+		if not world.grid.passable(x, y):
+			return false
+		if world.building_at(x, y) != null:
+			return false
+		if not world.cell_vacant(x, y):
+			return false
+		if x == int(world.hero["x"]) and y == int(world.hero["y"]):
+			return false
+		var cur: int = world.grid.get_h(x, y)
+		if m == "fill":
+			return cur < Sim.H_MAX and world.supply >= Sim.FILL_COST
+		return cur > Sim.H_MIN and world.supply >= Sim.LOWER_COST
+	elif m == "hero":
+		return world.grid.passable(x, y)
+	elif m == "remove":
+		var b = world.building_at(x, y)
+		return b != null and int(b["kind"]) != Sim.B_CORE
+	return false
+
+
+## 拖拽线（Bresenham，上限 12 格；口径同母版 line_cells）。
+func line_cells(a: Vector2i, b: Vector2i) -> Array:
+	var cells: Array = []
+	var x0 := a.x
+	var y0 := a.y
+	var dx := absi(b.x - x0)
+	var dy := -absi(b.y - y0)
+	var sx := 1 if x0 < b.x else -1
+	var sy := 1 if y0 < b.y else -1
+	var err := dx + dy
+	for _i in 16:
+		cells.append(Vector2i(x0, y0))
+		if (x0 == b.x and y0 == b.y) or cells.size() >= 12:
+			break
+		var e2 := 2 * err
+		if e2 >= dy:
+			err += dy
+			x0 += sx
+		if e2 <= dx:
+			err += dx
+			y0 += sy
+	return cells
+
+
+func set_mode(m: String) -> void:
+	mode = m
+
+
+func apply_mode_at(m: String, x: int, y: int) -> void:
+	world.apply_command({ "kind": m, "x": x, "y": y })
+
+
+func pointer_down(pos: Vector2) -> void:
+	mouse_pos = pos
+	if world == null or world.outcome != World.RUNNING or paused:
+		return
+	if in_hud_region(pos.x, pos.y):
+		return
+	var cell: Vector2i = view.pick_cell(pos.x, pos.y)
+	if cell.x < 0:
+		return
+	if mode == "wall" or mode == "tower":
+		drag_start = cell
+	else:
+		apply_mode_at(mode, cell.x, cell.y)
+
+
+func pointer_up(pos: Vector2) -> void:
+	mouse_pos = pos
+	if paused:
+		drag_start = Vector2i(-1, -1)
+		return
+	if drag_start.x >= 0:
+		var cell: Vector2i = view.pick_cell(pos.x, pos.y)
+		if cell.x >= 0 and world.outcome == World.RUNNING:
+			for c in line_cells(drag_start, cell):
+				apply_mode_at(mode, c.x, c.y)
+		drag_start = Vector2i(-1, -1)
+
+
+## 幽灵预览（口径同母版 update_ghost）。
+func update_ghost() -> void:
+	if world == null or world.outcome != World.RUNNING or paused or mouse_pos.x < 0.0 or in_hud_region(mouse_pos.x, mouse_pos.y):
+		view.show_ghost([], false)
+		return
+	var cell: Vector2i = view.pick_cell(mouse_pos.x, mouse_pos.y)
+	if cell.x < 0:
+		view.show_ghost([], false)
+		return
+	if (mode == "wall" or mode == "tower") and drag_start.x >= 0:
+		var cells: Array = line_cells(drag_start, cell)
+		var is_bad := false
+		for c in cells:
+			if not mode_valid(mode, c.x, c.y):
+				is_bad = true
+				break
+		view.show_ghost(cells, is_bad)
+	else:
+		view.show_ghost([cell], not mode_valid(mode, cell.x, cell.y))
+
+
+## 威胁热层开关（TAB / 顶栏按钮共用；Shell 接入前不判屏幕栈）。
+func toggle_heat() -> void:
+	if world == null:
+		return
+	heat_on = not heat_on
+	view.set_heat(heat_on)

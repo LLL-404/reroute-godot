@@ -786,21 +786,21 @@ func world_to_screen(wx: float, wy: float, wz: float) -> Vector2:
 	var depth := dy * float(_fit["fy"]) + dz * float(_fit["fz"])
 	if depth <= 0.1:
 		return Vector2(-1, -1)
-	var nx := -dx / (depth * float(_fit["t45"]) * float(_fit["a"]))
+	var nx := dx / (depth * float(_fit["t45"]) * float(_fit["a"]))
 	var ny := (dy * float(_fit["uy"]) + dz * float(_fit["uz"])) / (depth * float(_fit["t45"]))
 	var vp := get_viewport().get_visible_rect().size
 	return Vector2((nx + 1.0) * 0.5 * vp.x, (1.0 - ny) * 0.5 * vp.y)
 
 
-## 拾取：屏幕坐标 → 战场格。地面有程序化起伏：先按 y=0 求交，取命中格高度再求交，
+## 拾取：屏幕坐标（像素）→ 战场格。地面有程序化起伏：先按 y=0 求交，取命中格高度再求交，
 ## 两轮收敛（地势 ±1.2m、俯角 ≥35° 足够）。返回 Vector2i(-1,-1) = 未命中。
+## 注意：Godot 的 project_ray_* 取像素坐标（非 0..1 归一化；传小值会被当左上角像素 → 射线全偏）。
 func pick_cell(screen_x: float, screen_y: float) -> Vector2i:
 	if camera == null:
 		return Vector2i(-1, -1)
-	var vp := get_viewport().get_visible_rect().size
-	var n := Vector2(screen_x / vp.x, screen_y / vp.y)
-	var origin := camera.project_ray_origin(n)
-	var dir := camera.project_ray_normal(n)
+	var pt := Vector2(screen_x, screen_y)
+	var origin := camera.project_ray_origin(pt)
+	var dir := camera.project_ray_normal(pt)
 	if absf(dir.y) < 0.001:
 		return Vector2i(-1, -1)
 	var t := -origin.y / dir.y
