@@ -22,7 +22,7 @@ window/size/viewport_height=720
 
 [dotnet]
 
-project/assembly_name="改道 Godot"
+project/assembly_name="RerouteGodot"
 
 [editor_plugins]
 
