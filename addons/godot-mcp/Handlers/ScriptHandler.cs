@@ -39,7 +39,7 @@ public class ScriptHandler : BaseHandler
         var fileName = dir.GetNext();
         while (!string.IsNullOrEmpty(fileName))
         {
-            var fullPath = path.TrimEnd('/') + "/" + fileName;
+            var fullPath = JoinPath(path, fileName);
             if (dir.CurrentIsDir())
             {
                 if (!fileName.StartsWith(".") && fileName != "addons")

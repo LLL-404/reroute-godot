@@ -107,12 +107,12 @@ public class ProjectHandler : BaseHandler
             if (dir.CurrentIsDir())
             {
                 if (recursive && !fileName.StartsWith(".") && !SkipDirs.Contains(fileName))
-                    ListFilesRecursive(path.TrimEnd('/') + "/" + fileName, filter, true, files, ref truncated);
+                    ListFilesRecursive(JoinPath(path, fileName), filter, true, files, ref truncated);
             }
             else
             {
                 if (string.IsNullOrEmpty(filter) || MatchesFilter(fileName, filter))
-                    files.Add(path.TrimEnd('/') + "/" + fileName);
+                    files.Add(JoinPath(path, fileName));
             }
             if (files.Count >= MaxFileResults)
             {

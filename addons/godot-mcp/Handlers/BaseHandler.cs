@@ -44,5 +44,12 @@ public abstract class BaseHandler
 
     protected static Variant GetOr(Dictionary dict, string key, Variant defaultValue) =>
         dict.ContainsKey(key) ? dict[key] : defaultValue;
+
+    /// 拼接目录与子项为资源路径。
+    /// 不能用 path.TrimEnd('/')：它会吃掉 res:// 的第二个斜杠（res:// → res:），
+    /// 导致根路径下列出的路径不可回灌（read_file 报 File not found）、递归进不去子目录。
+    /// 这里只把目录补齐到「恰好一个尾斜杠」。
+    protected static string JoinPath(string dir, string name) =>
+        (dir.EndsWith("/") ? dir : dir + "/") + name;
 }
 #endif
