@@ -58,9 +58,11 @@ func _initialize() -> void:
 	var e1a = view.unit_nodes.get(1)
 	var e2a = view.unit_nodes.get(2)
 	if e1a != null:
-		_gcheck(absf(float(e1a["s"]) - 0.42) < 1e-9, "虫群缩放字面量 0.42")
+		var p1: AnimationPlayer = e1a["player"]
+		_gcheck(p1 != null and p1.current_animation == "Crawl", "虫群模型基态 Crawl")
 	if e2a != null:
-		_gcheck(absf(float(e2a["s"]) - 0.72) < 1e-9, "蛮兽缩放字面量 0.72")
+		var p2: AnimationPlayer = e2a["player"]
+		_gcheck(p2 != null and p2.current_animation == "Crawl", "蛮兽模型基态 Crawl")
 
 	prev_hero = Vector2i(int(world.hero["x"]), int(world.hero["y"]))
 
@@ -90,22 +92,36 @@ func _initialize() -> void:
 		if t == 41:
 			var e41 = view.unit_nodes.get(1)
 			_gcheck(e41 != null and int(e41["pulse"]) == 41, "受击脉冲置位 t=41")
+			if e41 != null:
+				var ph41: AnimationPlayer = e41["player"]
+				_gcheck(ph41 != null and ph41.current_animation == "Hurt", "受击动画 Hurt t=41")
 		elif t == 47:
 			var e47 = view.unit_nodes.get(1)
 			_gcheck(e47 != null and int(e47["pulse"]) == -1, "脉冲衰减清除 t=47")
+		elif t == 51:
+			var e51 = view.unit_nodes.get(1)
+			if e51 != null:
+				var pc51: AnimationPlayer = e51["player"]
+				_gcheck(pc51 != null and pc51.current_animation == "Crawl", "受击到期回 Crawl t=51")
+			else:
+				_gcheck(false, "t=51 单位 1 丢失")
 		elif t == 61:
 			_cmp_int(int(view.debug_stats()["death_fx"]), 1, "死亡消散出现 t=61")
+			if view.death_fx.size() == 1:
+				var df61: Dictionary = view.death_fx[0]
+				var pd61: AnimationPlayer = df61["player"]
+				_gcheck(pd61 != null and pd61.current_animation == "Death", "死亡动画启动 t=61")
 		elif t == 68:
 			if view.death_fx.size() == 1:
 				var df: Dictionary = view.death_fx[0]
-				var s7: float = df["s"]
-				var k7 := 7.0 / 12.0
 				var dn7: Node3D = df["node"]
-				_cmp_v3(dn7.scale, Vector3(s7 * (1.0 + 2.0 * k7), s7 * (1.0 - 0.6 * k7), s7 * (1.0 + 2.0 * k7)), "死亡消散缩放 t=68")
+				_cmp_v3(dn7.scale, Vector3(1.0, 1.0, 1.0), "死亡路径不做放大下沉 t=68")
 			else:
 				_gcheck(false, "t=68 消散条目数不符")
 		elif t == 73:
-			_cmp_int(int(view.debug_stats()["death_fx"]), 0, "死亡消散移除 t=73")
+			_cmp_int(int(view.debug_stats()["death_fx"]), 1, "死亡动画中（寿命 28）t=73")
+		elif t == 89:
+			_cmp_int(int(view.debug_stats()["death_fx"]), 0, "死亡动画播完移除 t=89")
 		elif t == 91:
 			_gcheck(view.ring != null, "震荡环出现 t=91")
 			if view.ring != null:
@@ -198,20 +214,20 @@ func _verify(view, world) -> void:
 			var ex := pw.x + (cw.x - pw.x) * frac
 			var ez := pw.z + (cw.z - pw.z) * frac
 			var ey: float = view.ground_y(p.x, p.y) * (1.0 - frac) + view.ground_y(int(u["x"]), int(u["y"])) * frac
-			var s: float = e["s"]
+			var m := 1.0
 			var pulse_i: int = e["pulse"]
 			if pulse_i >= 0:
 				var a := 1.0 - float(t - pulse_i) / 6.0
 				if a > 0.0:
-					s *= (1.0 + 0.6 * a)
+					m = 1.0 + 0.6 * a
 			var nd: Node3D = e["node"]
-			_cmp_v3(nd.position, Vector3(ex, ey + s / 2.0 + 0.02, ez), "单位 %d 位置 t=%d" % [uid, t])
-			_cmp_v3(nd.scale, Vector3(s, s, s), "单位 %d 缩放 t=%d" % [uid, t])
+			_cmp_v3(nd.position, Vector3(ex, ey + 0.02, ez), "单位 %d 位置 t=%d" % [uid, t])
+			_cmp_v3(nd.scale, Vector3(m, m, m), "单位 %d 缩放 t=%d" % [uid, t])
 			var dx := cw.x - pw.x
 			var dz := cw.z - pw.z
 			if dx * dx + dz * dz > 1e-9:
 				moved_seen += 1
-				var want_yaw := atan2(dx, dz)
+				var want_yaw := atan2(dx, dz) + float(view.Z_YAW)
 				var got_yaw := nd.rotation.y
 				var dyaw := absf(got_yaw - want_yaw)
 				dyaw = minf(dyaw, absf(dyaw - TAU))

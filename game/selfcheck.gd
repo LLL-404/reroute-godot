@@ -48,6 +48,37 @@ func run(main) -> int:
 	var font: FontFile = load("res://assets/fonts/simhei.ttf") as FontFile
 	_chk(font != null, "中文字体打进包")
 
+	# ---- 1b. 真实模型资产（glb）打进包 ----
+	var model_paths := [
+		"res://assets/models/zerg_worker.glb",
+		"res://assets/models/zerg_blade.glb",
+		"res://assets/models/zerg_king.glb",
+		"res://assets/models/gold_pile_full.glb",
+		"res://assets/models/rubble_sand.glb",
+	]
+	var mloaded := 0
+	for mp in model_paths:
+		var packed: PackedScene = load(mp) as PackedScene
+		if packed != null:
+			mloaded += 1
+		else:
+			_fail("模型缺失：" + mp)
+	_cmpi(mloaded, model_paths.size(), "5 个模型 glb 打进包")
+	var blade_packed: PackedScene = load("res://assets/models/zerg_blade.glb") as PackedScene
+	if blade_packed != null:
+		var inst0: Node3D = blade_packed.instantiate()
+		var has_player := false
+		var st0: Array = [inst0]
+		while not st0.is_empty():
+			var n0: Node = st0.pop_back()
+			if n0 is AnimationPlayer:
+				has_player = true
+				break
+			for c0 in n0.get_children():
+				st0.append(c0)
+		_chk(has_player, "blade 含 AnimationPlayer（骨架动画管线）")
+		inst0.free()
+
 	# ---- 2. sim 核心：黄金回放 16 指纹（含不变式 + 冻结自证）+ 确定性复跑 ----
 	var samples: Array = []
 	var golden_ok := false

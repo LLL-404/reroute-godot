@@ -5,6 +5,7 @@ extends Node3D
 # 视图层只读模拟状态，绝不回写；插值用的 prev 格存这里，不进指纹。
 
 const Blueprint = preload("res://game/blueprint.gd")
+const ModelsScript = preload("res://game/models.gd")
 
 const CELL_N := 48
 const HALF := 24.0
@@ -15,8 +16,14 @@ const RESERVE_TOP := 60.0
 const RESERVE_RIGHT := 170.0
 const RESERVE_BOTTOM := 28.0
 
-const DEATH_LIFE := 12 # 死亡消散 0.6s（tick）
 const RING_LIFE := 7 # 震荡波扩散环 0.35s
+# 模型路径动作时长（tick，照母版 Z_TICKS：Attack 0.9s / Hurt 0.5s / Death 1.4s）
+const Z_ATTACK := 18
+const Z_HURT := 10
+const Z_DEATH := 28
+const Z_YAW := PI / 2.0 # 模型朝向修正（截面校准：模型 yaw=π/2 时头朝 +Z；母版 UrhoX 口径 0 在 Godot 下差 90°）
+# 敌人 kind → 资产形态（照母版 view3d.ZFORM：虫群 → blade，蛮兽 → king）
+const ZFORM := { 1: 2, 2: 3 }
 
 # 威胁热层：敌人流场"距核心步数"分带染色（d 小=近核心=红，d 大=绕得远=蓝）
 const HEAT_N := 6
@@ -85,6 +92,7 @@ var field_h: PackedFloat64Array
 var height_fn: Callable
 var cur_palette: Dictionary = {}
 var is_ore: Callable
+var models = null # 真实资产模型管理器（ModelsScript 实例；_ready 建立）
 
 ## 击杀赏金浮字回调（R5 HUD 注入 (sx, sy, text)；未注入即空转）
 var on_float: Callable
@@ -118,6 +126,7 @@ var _streams: Dictionary = {} # 流缓存（每文件 load 一次）
 
 
 func _ready() -> void:
+	models = ModelsScript.new()
 	box_mesh = BoxMesh.new()
 	box_mesh.size = Vector3.ONE
 
@@ -366,23 +375,18 @@ func build_terrain(pgrid: Grid) -> void:
 	_stat_solids = solid_insts.size()
 
 
-## 覆盖层占位块：矿格 = 砂金堆（金色矮墩）；表土/插口 = 瓦砾（暗色薄板）。
-## 真实资产（GoldPile/瓦砾模型）在资产轮替换；足印口径同母版 0.94 格。
+## 覆盖层（真实资产）：矿格 = 砂金堆满档（挖开即随覆盖层移除）；
+## 表土/插口 = 瓦砾堆 3 变体（(x*7 + y*13) % 3 确定性取模，同母版口径）。
 func _make_cover(x: int, y: int) -> void:
 	var w := cell_to_world(x, y)
 	var gy := ground_y(x, y)
-	var mi := MeshInstance3D.new()
-	mi.mesh = box_mesh
+	var node: Node3D
 	if is_ore.call(x, y):
-		mi.material_override = mats["gold"]
-		mi.position = Vector3(w.x, gy + 0.28, w.z)
-		mi.scale = Vector3(0.72, 0.56, 0.72)
+		node = models.spawn_gold(tiles, Vector3(w.x, gy, w.z))
 	else:
-		mi.material_override = mats["rubble"]
-		mi.position = Vector3(w.x, gy + 0.10, w.z)
-		mi.scale = Vector3(0.94, 0.20, 0.94)
-	tiles.add_child(mi)
-	cover_nodes[x * 1000 + y] = { "node": mi, "x": x, "y": y }
+		var variant: int = (x * 7 + y * 13) % 3
+		node = models.spawn_rubble(tiles, variant, Vector3(w.x, gy, w.z), 0.94)
+	cover_nodes[x * 1000 + y] = { "node": node, "x": x, "y": y }
 
 
 # ---- 威胁热层 ----
@@ -579,7 +583,7 @@ func sync(world: World) -> void:
 		he["px"] = int(h["x"])
 		he["py"] = int(h["y"])
 
-	# 单位（帧间插值：prev 格存视图层；受击脉冲用 tick 计龄）
+	# 单位（真实模型 + 动作状态机；帧间插值 prev 格存视图层；受击脉冲用 tick 计龄）
 	var useen := {}
 	for u in world.units:
 		if int(u["hp"]) > 0:
@@ -587,46 +591,56 @@ func sync(world: World) -> void:
 			useen[uid] = true
 			var e = unit_nodes.get(uid)
 			if e == null:
-				var unode := MeshInstance3D.new()
+				var spawn: Dictionary = models.spawn_unit(unit_root, int(ZFORM[int(u["kind"])]))
+				var unode: Node3D = spawn["node"]
 				unode.name = "u" + str(uid)
-				unode.mesh = box_mesh
-				var swarm := (int(u["kind"]) == Sim.E_SWARM)
-				unode.material_override = mats["swarm"] if swarm else mats["behemoth"]
-				unit_root.add_child(unode)
+				models.play(spawn["player"], "Crawl", true)
 				e = {
 					"node": unode,
+					"player": spawn["player"],
 					"px": int(u["x"]),
 					"py": int(u["y"]),
-					"s": 0.42 if swarm else 0.72,
 					"kind": int(u["kind"]),
 					"hp": int(u["hp"]),
 					"traveled": 0,
 					"pulse": -1,
+					"anim_until": -1,
 				}
 				unit_nodes[uid] = e
+			var t: int = world.tick_count
+			var player: AnimationPlayer = e["player"]
 			if int(u["hp"]) < int(e["hp"]):
-				e["pulse"] = world.tick_count
-			var frac2 := float((world.tick_count + uid) % int(u["speed_ticks"])) / float(u["speed_ticks"])
+				e["pulse"] = t # 塔火命中 → 受击脉冲/受击动作
+				e["anim_until"] = t + Z_HURT
+				models.play(player, "Hurt", false)
+			# 动作状态机：单发到期回 Crawl；围攻中按确定性相位插 Attack（免 Rng）。
+			if int(e["anim_until"]) >= 0 and t >= int(e["anim_until"]):
+				e["anim_until"] = -1
+				models.play(player, "Crawl", true)
+			if int(e["anim_until"]) < 0 and int(u["atk_target"]) >= 0 and (t + uid) % 50 == 0:
+				e["anim_until"] = t + Z_ATTACK
+				models.play(player, "Attack", false)
+			var frac2 := float((t + uid) % int(u["speed_ticks"])) / float(u["speed_ticks"])
 			var cw2 := cell_to_world(int(u["x"]), int(u["y"]))
 			var pw2 := cell_to_world(int(e["px"]), int(e["py"]))
 			var ix2 := pw2.x + (cw2.x - pw2.x) * frac2
 			var iz2 := pw2.z + (cw2.z - pw2.z) * frac2
 			var iy2 := ground_y(int(e["px"]), int(e["py"])) * (1.0 - frac2) + ground_y(int(u["x"]), int(u["y"])) * frac2
-			var sc: float = e["s"]
+			var m := 1.0
 			var pulse_i: int = e["pulse"]
 			if pulse_i >= 0:
-				var a := 1.0 - float(world.tick_count - pulse_i) / 6.0
+				var a := 1.0 - float(t - pulse_i) / 6.0
 				if a > 0.0:
-					sc = sc * (1.0 + 0.6 * a)
+					m = 1.0 + 0.6 * a
 				else:
 					e["pulse"] = -1
 			var und: Node3D = e["node"]
-			und.position = Vector3(ix2, iy2 + sc / 2.0 + 0.02, iz2)
-			und.scale = Vector3(sc, sc, sc)
+			und.position = Vector3(ix2, iy2 + 0.02, iz2) # 模型底部贴脚点（母版口径）
+			und.scale = Vector3(m, m, m)
 			var dx := cw2.x - pw2.x
 			var dz := cw2.z - pw2.z
 			if dx * dx + dz * dz > 1e-9:
-				und.rotation = Vector3(0.0, atan2(dx, dz), 0.0)
+				und.rotation = Vector3(0.0, atan2(dx, dz) + Z_YAW, 0.0)
 			e["px"] = int(u["x"])
 			e["py"] = int(u["y"])
 			e["hp"] = int(u["hp"])
@@ -637,6 +651,7 @@ func sync(world: World) -> void:
 			var kind3: int = e3["kind"]
 			play_sound("zerg_death.mp3" if kind3 == Sim.E_SWARM else "orc_death.mp3", 0.85)
 			e3["dying"] = world.tick_count
+			models.play(e3["player"], "Death", false) # 模型走死亡动画（1.4s），不做放大下沉
 			death_fx.append(e3)
 			var nd3: Node3D = e3["node"]
 			var scr := world_to_screen(nd3.position.x, nd3.position.y, nd3.position.z)
@@ -653,18 +668,15 @@ func sync(world: World) -> void:
 
 
 ## 死亡消散：放大下沉后移除（box 路径；模型动画路径在资产轮接入）。
+## 死亡消散：模型的死亡动画播完（Z_DEATH = 28 tick = 1.4s）后移除节点。
 func update_death_fx(tick: int) -> void:
 	for i in range(death_fx.size() - 1, -1, -1):
 		var e: Dictionary = death_fx[i]
 		var age := tick - int(e["dying"])
 		var dn: Node3D = e["node"]
-		if age >= DEATH_LIFE:
+		if age >= Z_DEATH:
 			dn.free()
 			death_fx.remove_at(i)
-		else:
-			var k := float(age) / float(DEATH_LIFE)
-			var s: float = e["s"]
-			dn.scale = Vector3(s * (1.0 + 2.0 * k), s * (1.0 - 0.6 * k), s * (1.0 + 2.0 * k))
 
 
 ## 震荡波扩散环：英雄冷却跳升 = 刚施放；方框环贴地扩散到技能半径后移除。
