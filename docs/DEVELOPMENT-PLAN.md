@@ -759,10 +759,14 @@ HUD 全部控件、标题/暂停/结算三屏、三件套音频、真实 glb 资
 | D0-2 开发者认证 | 个人主体、实名与身份证一致、厂商名不重名、地址到门牌号 |
 | D0-3 Android 环境清点 | Godot Android 导出模板（`4.7.2.stable.mono`）、Android SDK（platform-tools + build-tools）、JDK 17、adb 是否就位；缺什么装什么 |
 | D0-4 keystore | 生成 debug keystore（本轮用 debug 签名即可） |
-| D0-5 **开发者日志 ①** | 按 §0.4 三段结构（本期进展 / 问题与风险 / 下期计划）+ ≥1 张配图 + 标签。素材底稿见 §0.5 ①，**不能直接发，必须重排结构** |
+| D0-5 **开发者日志 ①** | ✅ **成稿已就绪**：`docs/devlogs/01-开篇-放墙改道.md`（三段结构 + 配图 + 标签齐备，可直接发布）。发布位置：自己的动态 / 聚光灯论坛（`https://www.taptap.cn/app/710826/topic`）；游戏页面建好后可编辑挪回自己游戏论坛 |
 | D0-6 素材使用声明初稿 | 按官方飞书模板重排 `cashline/docs/AI-ASSETS.md`（见 §0.5 ②）。**先修 §五 的引擎错误：UrhoX → Godot 4.7.2**；数字按 Godot 工程重新点数 |
 
 **出口**：Android 环境清单确认完毕；日志 ① 已发（三段结构 + 标签 + 配图）；素材声明已修引擎项。
+
+> **Godot 版日志存放位置**：`reroute-godot/docs/devlogs/`（新）。
+> `cashline/docs/devlogs/` 的 3 篇是 Maker 版旧稿，仅作素材库，**不要混用**。
+> 已就绪：`01-开篇-放墙改道.md`（D0 用）。
 
 ### 7.4 D1（10-15）· Android 导出管线 + 触屏输入 + 日志 ②
 
