@@ -19,6 +19,7 @@ func register(kit: TestKit) -> void:
 		kit.eq(g.h, 3, "h")
 		kit.eq(g.stride, 6, "stride = w+2")
 		kit.eq(g.rev, 0, "新图 rev=0")
+		kit.eq(g.height_rev, 0, "新图 height_rev=0")
 		for y in 3:
 			for x in 4:
 				kit.eq(g.at(x, y), Grid.OPEN, "初始格应 OPEN")
@@ -65,6 +66,7 @@ func register(kit: TestKit) -> void:
 		kit.eq(g.pmap[p], 1, "OPEN 镜像 1")
 		g.set_cell(1, 1, Grid.SOLID)
 		kit.eq(g.rev, 1, "set 变更 bump rev")
+		kit.eq(g.height_rev, 0, "格子状态不影响高度版本")
 		kit.eq(g.pmap[p], 0, "SOLID 镜像 0")
 		g.set_cell(1, 1, Grid.SOLID)
 		kit.eq(g.rev, 1, "同值 set 不 bump rev")
@@ -84,15 +86,19 @@ func register(kit: TestKit) -> void:
 		g.set_h(1, 1, 2)
 		kit.eq(g.get_h(1, 1), 2, "set_h 写入")
 		kit.eq(g.rev, 1, "set_h bump rev")
+		kit.eq(g.height_rev, 1, "set_h bump height_rev")
 		kit.eq(g.hp[g.pad_idx(1, 1)], 2, "hp 镜像同步")
 		g.set_h(1, 1, 2)
 		kit.eq(g.rev, 1, "同值 set_h 不 bump")
+		kit.eq(g.height_rev, 1, "同值 set_h 不改变高度版本")
 		g.set_h(1, 1, 5)
-		kit.eq(g.rev, 2, "异值 set_h 再 bump"))
+		kit.eq(g.rev, 2, "异值 set_h 再 bump")
+		kit.eq(g.height_rev, 2, "异值 set_h 再 bump 高度版本"))
 
 	kit.test("init-h-no-rev", func():
 		var g := Grid.new(4, 3)
 		g.init_h(1, 1, 3)
 		kit.eq(g.get_h(1, 1), 3, "init_h 写入")
 		kit.eq(g.rev, 0, "init_h 不 bump rev")
+		kit.eq(g.height_rev, 0, "建图期不 bump height_rev")
 		kit.eq(g.hp[g.pad_idx(1, 1)], 3, "hp 镜像同步"))

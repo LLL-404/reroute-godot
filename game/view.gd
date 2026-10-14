@@ -102,7 +102,7 @@ var _fit: Dictionary = {}
 var _fit_w := 0.0
 var _fit_h := 0.0
 
-var _hsum := 0
+var _height_rev := -1
 var _hero_cd := 0
 var _units_n := 0
 var _horn_tick := -999
@@ -268,6 +268,8 @@ func _rebuild_field() -> void:
 	for y in CELL_N:
 		for x in CELL_N:
 			var h := field_h[y * CELL_N + x]
+			if grid != null:
+				h += float(grid.get_h(x, y)) * H_STEP
 			var band := "ground"
 			if h < lo_at:
 				band = "ground_lo"
@@ -323,13 +325,11 @@ func _make_multimesh(insts: Array, mat: Material) -> MultiMeshInstance3D:
 	return mmi
 
 
-## 铺一局的全部动态内容：覆盖层薄板 + Solid 实例 + 动态容器。重启/改高时直接重调。
+## 铺一局的动态内容：覆盖层、Solid 与实体容器；仅换局时整体重建。
 func build_terrain(pgrid: Grid) -> void:
 	grid = pgrid
-	var s := 0
-	for i in grid.hgt.size():
-		s += grid.hgt[i]
-	_hsum = s
+	_height_rev = grid.height_rev
+	_rebuild_field() # 战场柱顶与单位 ground_y 使用同一份模拟高度
 
 	if dyn != null:
 		dyn.free()
@@ -484,13 +484,10 @@ func show_ghost(cells: Array, bad: bool = false) -> void:
 # ---- 每帧同步 ----
 
 func sync(world: World) -> void:
-	# 改高即改地貌（fill/lower 偶发，重建可接受）
-	if grid != null:
-		var s := 0
-		for i in grid.hgt.size():
-			s += grid.hgt[i]
-		if s != _hsum:
-			build_terrain(grid)
+	# 仅重建地面柱带；高度增减总和相同也必须刷新，实体缓存不得被清掉。
+	if grid != null and grid.height_rev != _height_rev:
+		_height_rev = grid.height_rev
+		_rebuild_field()
 	if heat_on and world.grid.rev != heat_rev:
 		rebuild_heat(world)
 

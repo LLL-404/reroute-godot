@@ -17,6 +17,7 @@ var pmap: Array # padded 通行镜像，1=通行；界外/未写 = null（当阻
 var hgt: Array # 高度层 0..5（未加帧）
 var hp: Array # padded 高度镜像（流场热循环）
 var rev: int
+var height_rev: int # 仅运行时改高递增；视图用它检测等量反向改高
 
 
 func _init(pw: int, ph: int, fill: int = OPEN) -> void:
@@ -42,6 +43,7 @@ func _init(pw: int, ph: int, fill: int = OPEN) -> void:
 				pmap[p] = 1
 			hp[p] = 0
 	rev = 0
+	height_rev = 0
 
 
 ## 高度（0 基格坐标）。set_h bump rev：改高即改道，所有流场自动重建。
@@ -58,6 +60,7 @@ func set_h(x: int, y: int, v: int) -> void:
 	hgt[i] = v
 	hp[pad_idx(x, y)] = v
 	rev += 1
+	height_rev += 1
 
 
 ## 初始化某格高度（建图期用，不 bump rev；必须紧跟 new 之后、流场建立之前调用）

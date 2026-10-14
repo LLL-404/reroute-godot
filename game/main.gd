@@ -1,8 +1,7 @@
 extends Node3D
 
-# 《改道》Godot 版主循环（移植 reroute/scripts/main.lua 的轻量档）。
-# 20Hz 固定步长模拟（tick 语义同 warden 切片）+ 渲染帧同步 + 指针/键盘输入闭环。
-# R4 范围：输入（拾取/拖拽线/模式校验/命令派发/TAB 热层/幽灵预览）；HUD/三屏/音频见后续轮。
+# 《改道》Godot 版主循环：20Hz 固定步长模拟、世界到视图同步与输入分发。
+# 对局生命周期统一在这里管理；模拟规则归 sim/，绘制、HUD、页面、音频归 game/ 对应模块。
 
 const Blueprint = preload("res://game/blueprint.gd")
 const Selfcheck = preload("res://game/selfcheck.gd")
@@ -135,8 +134,7 @@ func to_title() -> void: # 暂停/结算 → 标题：备一局新的压着静�
 
 
 func _on_hud_mode(m: String) -> void:
-	mode = m
-	hud.set_mode(m)
+	set_mode(m)
 
 
 func _on_hud_pause() -> void:
@@ -156,6 +154,8 @@ func _on_hud_skill() -> void:
 func new_game() -> void:
 	run_index += 1
 	sc = Scenario.new()
+	# 新局先清理上一局的视觉状态，避免热层跨局残留。
+	view.set_heat(false)
 	var picked: Array = Blueprint.pick(run_index)
 	view.apply_blueprint(picked[0], picked[1])
 	world = World.new(sc, BASE_SEED + run_index)
@@ -168,6 +168,7 @@ func new_game() -> void:
 	over_shown = false
 	if hud != null:
 		hud.reset()
+		hud.set_heat_vis(false)
 	print("[Game] 新对局 run=", run_index, " seed=", BASE_SEED + run_index)
 
 
@@ -237,6 +238,8 @@ func mode_valid(m: String, x: int, y: int) -> bool:
 			return false
 		if world.building_at(x, y) != null:
 			return false
+		if x == int(world.hero["x"]) and y == int(world.hero["y"]):
+			return false
 		return world.cell_vacant(x, y)
 	elif m == "dig":
 		return world.grid.at(x, y) == Grid.COVER
@@ -287,6 +290,8 @@ func line_cells(a: Vector2i, b: Vector2i) -> Array:
 
 func set_mode(m: String) -> void:
 	mode = m
+	if hud != null:
+		hud.set_mode(m)
 
 
 func apply_mode_at(m: String, x: int, y: int) -> void:

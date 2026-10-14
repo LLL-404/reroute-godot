@@ -69,4 +69,6 @@ func run() -> bool:
 			print("[UNIT] PASS " + t["mod"] + "." + t["name"])
 	print("[UNIT-DONE] passed=%d failed=%d" % [passed, failed])
 	print("[UNIT-ALL-GREEN]" if failed == 0 else "[UNIT-RED]")
+	# 用例闭包引用 kit 自身；一次性执行结束后解除循环引用，避免退出时资源泄漏。
+	tests.clear()
 	return failed == 0

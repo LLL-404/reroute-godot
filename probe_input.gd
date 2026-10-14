@@ -83,6 +83,9 @@ func _initialize() -> void:
 	await _click(view, cellD)
 	var bD = world.building_at(cellD.x, cellD.y)
 	_gcheck(bD != null and int(bD["kind"]) == Sim.B_TOWER, "单击放塔")
+	if bD == null:
+		_finish()
+		return
 	_cmp_int(world.supply, sup3 - 60, "放塔扣费 60")
 	view.sync(world)
 	var eD = view.building_nodes.get(int(bD["id"]))
@@ -127,7 +130,13 @@ func _initialize() -> void:
 	_cmp_int(world.supply, sup6, "暂停中零副作用")
 	main.paused = false
 
-	# ---- 10. 屏幕投影一致性（赏金浮字定位口径锁定）----
+	# ---- 10. 建造预览与模拟守卫一致：英雄脚下不可建 ----
+	var hx: int = int(world.hero["x"])
+	var hy: int = int(world.hero["y"])
+	_gcheck(not main.mode_valid("wall", hx, hy), "英雄脚下墙预览为无效")
+	_gcheck(not main.mode_valid("tower", hx, hy), "英雄脚下塔预览为无效")
+
+	# ---- 11. 屏幕投影一致性（赏金浮字定位口径锁定）----
 	for c in [Vector2i(10, 10), Vector2i(24, 24), Vector2i(40, 30)]:
 		var w: Vector3 = view.cell_to_world(c.x, c.y)
 		var gyw: float = view.ground_y(c.x, c.y)
@@ -135,7 +144,53 @@ func _initialize() -> void:
 		var b: Vector2 = view.camera.unproject_position(Vector3(w.x, gyw, w.z))
 		_gcheck(a.x >= 0.0 and a.distance_to(b) < 1.0, "world_to_screen 与引擎投影一致 %s (a=%s b=%s)" % [str(c), str(a), str(b)])
 
+	# ---- 12. 等量反向改高：视图地面随格高更新，不能因高度总和不变漏重建 ----
+	var ha0: int = world.grid.get_h(cellA.x, cellA.y)
+	var he0: int = world.grid.get_h(cellE.x, cellE.y)
+	_gcheck(ha0 < Sim.H_MAX and he0 > Sim.H_MIN, "地形双格具备反向改高空间")
+	if ha0 < Sim.H_MAX and he0 > Sim.H_MIN:
+		view.sync(world) # 先让上一段（拆除）的视觉清理落定，再取基线
+		var top_a := _terrain_top(view, cellA)
+		var top_e := _terrain_top(view, cellE)
+		var units_before: int = view.unit_nodes.size()
+		var buildings_before: int = view.building_nodes.size()
+		var sum_before := 0
+		for h in world.grid.hgt:
+			sum_before += int(h)
+		world.apply_command({ "kind": "fill", "x": cellA.x, "y": cellA.y })
+		world.apply_command({ "kind": "lower", "x": cellE.x, "y": cellE.y })
+		var sum_after := 0
+		for h in world.grid.hgt:
+			sum_after += int(h)
+		_cmp_int(sum_after, sum_before, "正反改高后高度总和相同")
+		view.sync(world)
+		_gcheck(is_equal_approx(_terrain_top(view, cellA), top_a + view.H_STEP), "填高格柱顶上升")
+		_gcheck(is_equal_approx(_terrain_top(view, cellE), top_e - view.H_STEP), "挖低格柱顶下降")
+		_cmp_int(view.unit_nodes.size(), units_before, "改高不清空单位视觉缓存")
+		_cmp_int(view.building_nodes.size(), buildings_before, "改高不清空建筑视觉缓存")
+
+	# ---- 13. 重开时热层同时清理逻辑、视图和 HUD 按钮 ----
+	main.paused = false
+	await _key(KEY_TAB)
+	_gcheck(view.heat_enabled() and main.heat_on, "重开前热层开启")
+	main.restart_game()
+	_gcheck(not view.heat_enabled() and not main.heat_on, "重开后热层关闭")
+	var heat_style: StyleBoxFlat = main.hud.heat_btn.get_meta("sb_normal")
+	_gcheck(heat_style.bg_color == main.hud.DARK["btn"], "重开后 HUD 热层钮熄灭")
 	_finish()
+
+
+## 读取特定战场格柱体顶部高度（独立于 ground_y，防止自我对拍）。
+func _terrain_top(view, cell: Vector2i) -> float:
+	var pos: Vector3 = view.cell_to_world(cell.x, cell.y)
+	for mmi in view.field_root.get_children():
+		var mesh: MultiMesh = mmi.multimesh
+		for i in mesh.instance_count:
+			var xf: Transform3D = mesh.get_instance_transform(i)
+			if is_equal_approx(xf.origin.x, pos.x) and is_equal_approx(xf.origin.z, pos.z):
+				return xf.origin.y + xf.basis.get_scale().y * 0.5
+	_fail("地面柱体缺失：" + str(cell))
+	return NAN
 
 
 # ---------------- 注入辅助 ----------------
