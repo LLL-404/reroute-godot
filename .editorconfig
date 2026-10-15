@@ -1,0 +1,51 @@
+# 格式规范（2026-10-15 补，此前本仓没有这份文件）
+#
+# 值全部来自实测，不是发明：
+#   · .gd 缩进：Tab 行 5920 / 4 空格行 0 → 统一 Tab（Godot 官方风格）
+#   · .gd 行宽 >100 现存 65 处 → 按"现存超限行即缺陷"定 100 为上限
+#   · 对应开发方案 §8.2：缩进 Tab、行宽 ≤100、字符串双引号、提交前 git diff --check 干净
+#
+# 换行符：本仓 .gitattributes 写的是 `* text=auto eol=lf`，索引里存 LF。
+# 工作区现在却是 CRLF——它来自本机 git 的系统级 core.autocrlf=true
+# （来源 D:/Users/23501/.qoder-cn/bin/git/etc/gitconfig，不在 --global、不在仓内）。
+# 索引侧实测 i/crlf = 0、i/mixed = 0，**今天没有历史污染，不需要 renormalize**；
+# 本节的 end_of_line=lf 是防未来：换一台 autocrlf=false 的机器或上 CI 才显形。
+#
+# 判行尾只准用 `git ls-files --eol`。本机 `grep -cP '\r$'` 会静默返 0
+# （od -An -c 明明见 \r\n），拿它当判据会得出"没有 CR"的假结论。
+
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+[*.gd]
+indent_style = tab
+indent_size = 4
+max_line_length = 100
+
+[*.py]
+indent_style = space
+indent_size = 4
+max_line_length = 100
+
+[*.cs]
+indent_style = space
+indent_size = 4
+
+[*.{json,yml,yaml,cfg,import,uid,godot}]
+indent_style = space
+indent_size = 2
+
+[*.md]
+# 文档不套行宽：表格与代码引用行天然超长，套了只会逼人把句子截断
+max_line_length = off
+# Markdown 行尾两个空格是硬换行语法，不能 trim
+trim_trailing_whitespace = false
+
+# addons/godot-mcp 是上游仓库的安装副本，不套本仓风格
+[addons/**]
+max_line_length = off

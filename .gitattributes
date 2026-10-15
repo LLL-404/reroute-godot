@@ -1,0 +1,48 @@
+# 行尾与二进制判定（2026-10-15 补）
+#
+# 为什么必须有它：本仓 2026-10-13 建仓起就没有这份文件，而顶层 games/README.md:69
+# 写着"格式规则在各自 .editorconfig（LF 锁死是硬要求）"——那句话在补上本文件之前
+# 是假的。现测：索引里的 LF 全靠本机 git 的系统级 core.autocrlf=true
+# （来源 D:/Users/23501/.qoder-cn/bin/git/etc/gitconfig，不在 --global、不在仓内），
+# 换一台 autocrlf=false 的机器签出再提交，没有任何东西保证 CR 不混进仓库。
+# reroute 与 cashline 两仓 10-12 已补，本仓是同一个洞第三次被踩
+# （见 docs/GOVERNANCE-AUDIT-20261015.md R5）。
+#
+# 加了它不会引起工作区改动：工作区现在是 autocrlf 给的 CRLF，索引是 LF，
+# 归一化后内容一致，git status 仍为空（本步判据就是这条）。
+* text=auto eol=lf
+
+# 二进制：逐个点名，不靠 git 的启发式猜。
+# 清单来源是本仓索引的实测分类（git ls-files --cached --eol）——
+# 现测被判为"非文本"的 65 个文件只落在五个后缀上：
+# png 25、mp3 19、jpg 10、glb 10、otf 1。
+# 其余后缀（import / uid / gd / cs / out / md / py / cfg / tscn / sln / godot /
+# csproj）实测全部按文本处理，别往 binary 里加。
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.bmp binary
+*.gif binary
+*.webp binary
+*.mp3 binary
+*.wav binary
+*.ogg binary
+*.otf binary
+*.ttf binary
+*.glb binary
+*.pck binary
+*.exe binary
+*.zip binary
+*.7z binary
+*.apk binary
+*.aab binary
+*.mp4 binary
+
+# addons/godot-mcp 是上游仓库 D:\G\skill mcp\MCP\godot-mcp 的安装副本。
+# 上游 C# 源码是 CRLF（现测 addons 下 12 个 .cs 与 plugin.cfg 均为 w/crlf），
+# 单独固定 CRLF，避免同步上游时产生整文件的行尾 diff。
+addons/** eol=crlf
+
+# logs/ 是闸的 stdout / exit 证据快照（Windows 重定向产生 CRLF）。
+# 保持原样，不被行尾归一化改写——它是证据，不是源码。
+logs/** eol=crlf
