@@ -1,9 +1,10 @@
-extends SceneTree
+extends ProbeKit
 
 # 朝向校准探针 v2（十字四向顶视）：四个单位按"游戏完整公式"摆位——
 #   yaw = atan2(dx, dz) + Z_YAW（Z_YAW = PI/2，同 view.gd 常量）
 # 分别朝东（+X）、南（+Z）、西（-X）、北（-Z）。相机顶视（画面↑=北、→=东）。
 # 判定：图中每个单位的大钳应朝各自的移动方向（右 / 下 / 左 / 上）。
+#       exit 0 + stdout 含 [ORIENT] PASS（机械部分：出帧成功）。
 
 const ModelsScript = preload("res://game/models.gd")
 const Z_YAW := PI / 2.0 # 同 view.Z_YAW
@@ -59,6 +60,9 @@ func _initialize() -> void:
 	cam.look_at_from_position(Vector3(0, 8.5, 0), Vector3.ZERO, Vector3(0, 0, -1))
 	for _i in 10:
 		await process_frame
-	root.get_texture().get_image().save_png("res://shots/orient_cross.png")
+	var img := root.get_texture().get_image()
+	check(img != null, "取帧 orient_cross")
+	if img != null:
+		img.save_png("res://shots/orient_cross.png")
 	print("[ORIENT] cross shot saved")
-	quit(0)
+	finish("ORIENT")

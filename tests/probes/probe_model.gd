@@ -1,6 +1,7 @@
-extends SceneTree
+extends ProbeKit
 
 # 模型渲染探针 v2：三个单位形态 + 金堆，含动画帧（Crawl）截图验证。
+# 判定：exit 0 + stdout 含 [MODEL] PASS。
 
 func _initialize() -> void:
 	var root := get_root()
@@ -46,8 +47,8 @@ func _initialize() -> void:
 	]
 	for item in items:
 		var packed: PackedScene = load(item[1])
+		check(packed != null, "加载 " + str(item[1]))
 		if packed == null:
-			print("[MODEL] load FAIL: ", item[1])
 			continue
 		var inst: Node3D = packed.instantiate()
 		inst.position = item[2]
@@ -76,14 +77,20 @@ func _initialize() -> void:
 	cam.look_at_from_position(Vector3(1.6, 1.5, 3.6), Vector3(0, 0.4, 0.6), Vector3.UP)
 	for _i in 30:
 		await process_frame
-	get_root().get_texture().get_image().save_png("res://shots/models_all.png")
+	var img1 := get_root().get_texture().get_image()
+	check(img1 != null, "取帧 models_all")
+	if img1 != null:
+		img1.save_png("res://shots/models_all.png")
 	print("[MODEL] shot models_all saved")
 
 	# 近景 blade（动画中段）
 	cam.look_at_from_position(Vector3(-0.5, 0.9, 2.1), Vector3(-1.05, 0.35, 0.2), Vector3.UP)
 	for _i in 10:
 		await process_frame
-	get_root().get_texture().get_image().save_png("res://shots/model_blade_close.png")
+	var img2 := get_root().get_texture().get_image()
+	check(img2 != null, "取帧 model_blade_close")
+	if img2 != null:
+		img2.save_png("res://shots/model_blade_close.png")
 	print("[MODEL] shot blade close saved")
 
-	quit(0)
+	finish("MODEL")

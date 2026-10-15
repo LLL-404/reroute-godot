@@ -1,4 +1,4 @@
-extends SceneTree
+extends ProbeKit
 
 # C1 判定：主场景 headless 加载 + 地形构建对拍。
 # 跑法（cwd=reroute-godot）：godot --headless -s res://tests/probes/probe_scene.gd
@@ -26,14 +26,12 @@ func _initialize() -> void:
 				n_cover += 1
 
 	var st: Dictionary = view.debug_stats()
-	var ok := true
-	ok = ok and st["field"] == 2304
-	ok = ok and st["ring"] == 4384
-	ok = ok and st["solids"] == n_solid
-	ok = ok and st["covers"] == n_cover
-	ok = ok and n_solid > 0 and n_cover > 0
-	ok = ok and st["cam"] == true
+	check(st["field"] == 2304, "field=2304")
+	check(st["ring"] == 4384, "ring=4384")
+	check(st["solids"] == n_solid, "solids 对拍（%d/%d）" % [st["solids"], n_solid])
+	check(st["covers"] == n_cover, "covers 对拍（%d/%d）" % [st["covers"], n_cover])
+	check(n_solid > 0 and n_cover > 0, "solid/cover 非空（%d/%d）" % [n_solid, n_cover])
+	check(st["cam"] == true, "cam 就位")
 
 	print("[SCENE] field=", st["field"], " ring=", st["ring"], " solids=", st["solids"], "/", n_solid, " covers=", st["covers"], "/", n_cover, " cam=", st["cam"])
-	print("[SCENE] ", "PASS" if ok else "FAIL", " ms=", Time.get_ticks_msec() - t0)
-	quit(0 if ok else 1)
+	finish("SCENE", 6, "ms=%d" % (Time.get_ticks_msec() - t0))

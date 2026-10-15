@@ -1,14 +1,8 @@
-extends SceneTree
+extends ProbeKit
 
 # R4 验证探针：flowfield 移植（距离/贴角/平手/预算不变性/边界/回退/单向崖）。
 # 方向序为 0 基：0E 1NE 2N 3NW 4W 5SW 6S 7SE（Lua 版 1 基同构 -1）。
-var ok := true
-
-
-func check(cond: bool, what: String) -> void:
-	if not cond:
-		ok = false
-		print("  FAIL: ", what)
+# 判定：exit 0 + stdout 含 `[FLOW] PASS`。
 
 
 func run_full(f: FlowField) -> void:
@@ -170,5 +164,4 @@ func _initialize() -> void:
 	run_full(fh)
 	check(fh.dist_at(0, 0) == 20, "hero ignores height")
 
-	print("[R4-PROBE] ", "PASS" if ok else "FAIL")
-	quit(0 if ok else 1)
+	finish("FLOW")

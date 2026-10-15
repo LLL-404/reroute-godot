@@ -1,13 +1,7 @@
-extends SceneTree
+extends ProbeKit
 
-# R3 验证探针：grid 移植（三态/镜像/rev/下标/外环）。exit 0 = 全过。
-var ok := true
-
-
-func check(cond: bool, what: String) -> void:
-	if not cond:
-		ok = false
-		print("  FAIL: ", what)
+# R3 验证探针：grid 移植（三态/镜像/rev/下标/外环）。
+# 判定：exit 0 + stdout 含 `[GRID] PASS`。
 
 
 func _initialize() -> void:
@@ -69,5 +63,4 @@ func _initialize() -> void:
 	var gi := Grid.new(4, 3)
 	gi.init_h(1, 1, 3)
 	check(gi.get_h(1, 1) == 3 and gi.rev == 0 and gi.hp[gi.pad_idx(1, 1)] == 3, "init_h no bump")
-	print("[R3-PROBE] ", "PASS" if ok else "FAIL")
-	quit(0 if ok else 1)
+	finish("GRID")

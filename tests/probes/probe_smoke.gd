@@ -1,4 +1,4 @@
-extends SceneTree
+extends ProbeKit
 
 # R9 全局冒烟（C9）：完整一局「标题 → 开战 → 真实主循环推进 → 收口 → 结算屏 →
 # 终局冻结 → 干净退出」全程，窗口模式运行（真实渲染 + 真实音频路径）。
@@ -27,9 +27,6 @@ const TOWER_SPOTS := [
 	Vector2i(27, 10),
 ]
 
-var checks := 0
-var bad := 0
-var fail_list: Array = []
 var tower_cursor := 0
 var towers_placed := 0
 var last_skill_tick := -99999
@@ -83,19 +80,19 @@ func _initialize() -> void:
 	print("[SMOKE] run=", main.run_index, " seed=", 20261003 + main.run_index)
 
 	# ---- 1. 启动态：标题屏压着静态战场 ----
-	_chk(main.shell.current_page() == "title", "启动即标题屏")
-	_cmpi(w.tick_count, 0, "tick 从 0 起")
-	_chk(w.outcome == World.RUNNING, "开局 RUNNING")
-	_chk(main.paused == true, "标题态暂停")
-	_chk(main.hud.top_bar.visible == false, "标题时 HUD 隐藏")
-	_cmpi(int(w.core["hp"]), 1200, "核心满血 1200")
+	check(main.shell.current_page() == "title", "启动即标题屏")
+	cmp_int(w.tick_count, 0, "tick 从 0 起")
+	check(w.outcome == World.RUNNING, "开局 RUNNING")
+	check(main.paused == true, "标题态暂停")
+	check(main.hud.top_bar.visible == false, "标题时 HUD 隐藏")
+	cmp_int(int(w.core["hp"]), 1200, "核心满血 1200")
 
 	# ---- 2. 开战 ----
 	main.start_match()
-	_chk(main.shell.current_page() == "", "进入对局（页栈空）")
-	_chk(main.paused == false, "对局启动")
-	_chk(main.hud.top_bar.visible == true, "HUD 显示")
-	_chk(view.bgm_on == true, "BGM 开")
+	check(main.shell.current_page() == "", "进入对局（页栈空）")
+	check(main.paused == false, "对局启动")
+	check(main.hud.top_bar.visible == true, "HUD 显示")
+	check(view.bgm_on == true, "BGM 开")
 
 	# ---- 3. 真实主循环推进至收口 ----
 	var frames := 0
@@ -141,76 +138,57 @@ func _initialize() -> void:
 			await process_frame # 渲染帧 + 消息泵
 
 	# ---- 4. 收口断言 ----
-	_chk(w.outcome != World.RUNNING, "一局跑至收口（outcome=%d）" % w.outcome)
-	_chk(w.outcome == World.WON or w.outcome == World.LOST, "收口为终局三态之一")
+	check(w.outcome != World.RUNNING, "一局跑至收口（outcome=%d）" % w.outcome)
+	check(w.outcome == World.WON or w.outcome == World.LOST, "收口为终局三态之一")
 	var end_tick: int = w.tick_count
 	var end_kills: int = w.kills
 	var end_supply: int = w.supply
-	_chk(end_tick > 0 and end_tick <= 8800, "收口 tick 在 (0,8800]（得 %d）" % end_tick)
-	_chk(frames < MAX_FRAMES, "推进帧数在预算内（%d/%d）" % [frames, MAX_FRAMES])
+	check(end_tick > 0 and end_tick <= 8800, "收口 tick 在 (0,8800]（得 %d）" % end_tick)
+	check(frames < MAX_FRAMES, "推进帧数在预算内（%d/%d）" % [frames, MAX_FRAMES])
 
 	# ---- 5. 结算闸与结算屏（main._process 终局分支）----
 	main._process(0.5)
-	_chk(main.over_shown == true, "结算闸触发")
-	_chk(main.shell.current_page() == "gameover", "结算屏打开")
-	_chk(main.hud.top_bar.visible == false, "结算时 HUD 隐藏")
+	check(main.over_shown == true, "结算闸触发")
+	check(main.shell.current_page() == "gameover", "结算屏打开")
+	check(main.hud.top_bar.visible == false, "结算时 HUD 隐藏")
 	var won: bool = (w.outcome == World.WON)
 	var want_title: String = "防线守住了！" if won else "防线失守"
-	_chk(main.shell.go_title.text == want_title, "结算标题（得 %s）" % main.shell.go_title.text)
-	_chk(main.shell.go_body.text.length() > 0, "结算统计非空")
+	check(main.shell.go_title.text == want_title, "结算标题（得 %s）" % main.shell.go_title.text)
+	check(main.shell.go_body.text.length() > 0, "结算统计非空")
 
 	# ---- 6. 终局冻结：世界零副作用 ----
 	for _i in 30:
 		main._process(0.5)
-	_cmpi(w.tick_count, end_tick, "终局冻结：tick 不再推进")
-	_cmpi(w.kills, end_kills, "终局冻结：击杀数不变")
-	_cmpi(w.supply, end_supply, "终局冻结：供给不变")
+	cmp_int(w.tick_count, end_tick, "终局冻结：tick 不再推进")
+	cmp_int(w.kills, end_kills, "终局冻结：击杀数不变")
+	cmp_int(w.supply, end_supply, "终局冻结：供给不变")
 
 	# ---- 7. 冻结后视图/世界一致性 + 收尾截图 ----
 	var alive_end := 0
 	for u2 in w.units:
 		if int(u2["hp"]) > 0:
 			alive_end += 1
-	_cmpi(int(view.debug_stats()["units"]), alive_end, "冻结后视图单位数与世界一致")
+	cmp_int(int(view.debug_stats()["units"]), alive_end, "冻结后视图单位数与世界一致")
 	for _i in 40:
 		await process_frame # 等结算屏淡入完成（0.18s）
 	get_root().get_texture().get_image().save_png("res://shots/smoke_end.png")
 
 	# ---- 8. 全程统计 ----
-	_chk(monotonic, "tick 单调增")
-	_chk(stalled == 0, "推进永不卡死（stalled=%d）" % stalled)
-	_chk(unit_mismatch == 0, "抽样对拍视图/世界单位数一致（%d 次采样）" % samples)
-	_chk(peak_units > 0, "场上出现过敌人（峰值 %d）" % peak_units)
-	_chk(mid_shot, "中场证据图已存")
-	_chk(towers_placed >= 3, "最小防御布塔（%d 座）" % towers_placed)
-	_chk(peak_kills > 0, "击杀链发生过（峰值击破 %d）" % peak_kills)
-	_chk(skills_cast >= 1, "英雄技能链（震荡波有效施放 %d 次）" % skills_cast)
+	check(monotonic, "tick 单调增")
+	check(stalled == 0, "推进永不卡死（stalled=%d）" % stalled)
+	check(unit_mismatch == 0, "抽样对拍视图/世界单位数一致（%d 次采样）" % samples)
+	check(peak_units > 0, "场上出现过敌人（峰值 %d）" % peak_units)
+	check(mid_shot, "中场证据图已存")
+	check(towers_placed >= 3, "最小防御布塔（%d 座）" % towers_placed)
+	check(peak_kills > 0, "击杀链发生过（峰值击破 %d）" % peak_kills)
+	check(skills_cast >= 1, "英雄技能链（震荡波有效施放 %d 次）" % skills_cast)
 	print("[SMOKE] outcome=", ("WON" if won else "LOST"), " tick=", end_tick,
 		" kills=", end_kills, " supply=", end_supply,
 		" peak_units=", peak_units, " peak_kills=", peak_kills,
 		" towers=", towers_placed, " skills=", skills_cast)
 	print("[SMOKE] frames=", frames, " samples=", samples, " mismatch=", unit_mismatch)
 
-	print("[SMOKE] checks=", checks, " bad=", bad)
-	for i in mini(fail_list.size(), 12):
-		print("[SMOKE] fail: ", fail_list[i])
-	print("[SMOKE] ", "PASS" if bad == 0 else "FAIL")
-
-	# ---- 9. 干净退出（R8 口径：停全音频 + 等混音回收）----
+	# ---- 9. 干净退出（R8 口径：停全音频 + 等混音回收）+ 收口 ----
 	view.stop_all_audio()
 	await create_timer(0.5).timeout
-	quit(0 if bad == 0 else 1)
-
-
-func _chk(cond: bool, label: String) -> void:
-	checks += 1
-	if not cond:
-		bad += 1
-		fail_list.append(label)
-
-
-func _cmpi(got: int, want: int, label: String) -> void:
-	checks += 1
-	if got != want:
-		bad += 1
-		fail_list.append("%s got=%d want=%d" % [label, got, want])
+	finish("SMOKE", 20)

@@ -14,7 +14,7 @@ Engineering 保真度极高：模拟核心是**确定性**的，有 16 指纹黄
 |---|---|
 | `sim/` | 模拟核心十模块，纯逻辑、**无浮点、无渲染**：`lua64`(语义 shim) / `canon` / `rng` / `grid` / `flowfield` / `scenario` / `sim`(数值表) / `world` / `verify` / `golden_baseline` |
 | `game/` | 表现层，只读模拟：`main`(主循环/输入) / `view`(3D 门面) + 组件 `view_core`/`view_terrain`/`view_entities`/`view_audio`（D5-1 拆分 2026-10-15） / `models` / `blueprint` / `hud` / `screens` / `selfcheck` |
-| `tests/` | 单测 83 例 + **17 个验收探针**（`tests/probes/`） |
+| `tests/` | 单测 83 例 + **17 个验收探针**（`tests/probes/`，公共夹具 `probe_kit.gd`，D5-2 2026-10-15） |
 | `tools/` | Python 工具：`check_shots.py` / `convert_all.py` / `umd2_to_gltf.py` / `verify_glb.py` |
 | `assets/` | `audio/sfx`(19 mp3) / `fonts`(Noto Sans SC) / `models`(glb) |
 | `docs/` | 开发方案（权威）、审计报告、`devlogs/` |
@@ -113,6 +113,11 @@ python tools/check_shots.py    # 截图像素校验
   + 四组件 `view_core`(246) / `view_terrain`(243) / `view_entities`(418) / `view_audio`(116)。
   机制 = 组合 + 转发属性，外部 `view.xxx` 访问零变化、探针无需改路径；验收 = 拆分前后
   `probe_sync` 输出逐字节一致（已通过：SHA256 相同；全 19 闸 post 比照 pre 全绿）。
+- 探针规整（D5-2）**已完成（2026-10-15）**：新增公共夹具 `tests/probes/probe_kit.gd`
+  （`class_name ProbeKit extends SceneTree`：`check`/`fail`/`cmp_int`/`cmp_approx`/`cmp_v3`/`cmp_rect`/`finish`），
+  17 探针全部 `extends ProbeKit`，输出统一为 `[TAG] checks=N bad=M` + `[TAG] PASS|FAIL`；
+  重构前后 checks 数逐项一致（`probe_sync` 输出 SHA256 逐字节相同）；
+  全 19 闸绿（证据 `logs/gates-20261015-d52/post/`）。夹具改动后需 `--import` 刷类缓存。
 - 历史审计报告（`docs/*-20261015.md`）按**快照原则保持原样**，不要顺着结构整理去改它们。
 
 ---

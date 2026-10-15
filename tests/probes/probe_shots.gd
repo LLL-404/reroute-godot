@@ -1,4 +1,4 @@
-extends SceneTree
+extends ProbeKit
 
 # C3 判定：窗口渲染出帧（非 headless 运行）。
 # 布置一局丰富场景（单位/墙阵/双塔/英雄），推进 90 tick 后截 3 张：
@@ -6,9 +6,7 @@ extends SceneTree
 #   shots/heat.png   威胁热层开启
 #   shots/ghost.png  放墙预览幽灵（绿板）
 # 跑法（cwd=reroute-godot）：godot -s res://tests/probes/probe_shots.gd   （窗口模式，勿加 --headless）
-# 判定：exit 0 + 3 张 PNG 存在，交给 tools/check_shots.py 做像素校验（[SHOTS] PASS）。
-var checks := 0
-var misses := 0
+# 判定：exit 0 + stdout 含 [SHOTS] PASS（3 图非空）；像素口径交给 tools/check_shots.py。
 
 
 func _initialize() -> void:
@@ -32,8 +30,8 @@ func _initialize() -> void:
 			break
 		cells.append(c)
 	if cells.size() < 6:
-		print("[SHOT] FAIL 布置格不足")
-		quit(1)
+		fail("布置格不足（%d/6）" % cells.size())
+		finish("SHOTS", 3)
 		return
 	world.apply_command({ "kind": "spawn", "x": cells[0].x, "y": cells[0].y, "speed": 4, "kind_id": Sim.E_SWARM })
 	world.apply_command({ "kind": "spawn", "x": cells[1].x, "y": cells[1].y, "speed": 4, "kind_id": Sim.E_SWARM })
@@ -68,19 +66,16 @@ func _initialize() -> void:
 		await process_frame
 	_shot("res://shots/ghost.png")
 
-	print("[SHOT] done shots=", checks, " misses=", misses)
-	quit(0 if misses == 0 else 1)
+	finish("SHOTS", 3)
 
 
 func _shot(path: String) -> void:
 	var img := root.get_texture().get_image()
-	checks += 1
+	check(img != null, "截图非空 " + path)
 	if img == null:
-		misses += 1
-		print("[SHOT] FAIL 空图像 ", path)
 		return
 	img.save_png(path)
-	print("[SHOT] ", path, " ", img.get_width(), "x", img.get_height())
+	print("[SHOTS] ", path, " ", img.get_width(), "x", img.get_height())
 
 
 func _find_free(world, x0: int, y0: int, x1: int, y1: int, exclude: Array) -> Vector2i:

@@ -1,13 +1,7 @@
-extends SceneTree
+extends ProbeKit
 
 # R5 验证探针：scenario 移植（数值表/夹具结构/is_ore/指纹对拍引擎现值/波次合同）。
-var ok := true
-
-
-func check(cond: bool, what: String) -> void:
-	if not cond:
-		ok = false
-		print("  FAIL: ", what)
+# 判定：exit 0 + stdout 含 `[SCENARIO] PASS`。
 
 
 func _initialize() -> void:
@@ -81,5 +75,4 @@ func _initialize() -> void:
 	mut.wave_scale_pct = 90
 	check(sc.fingerprint(canon) != mut.fingerprint(canon), "fingerprint negative control")
 
-	print("[R5-PROBE] ", "PASS" if ok else "FAIL")
-	quit(0 if ok else 1)
+	finish("SCENARIO")

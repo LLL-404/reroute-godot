@@ -320,27 +320,27 @@
 
 ---
 
-## 2. 事实基线（2026-10-14 实测）
+## 2. 事实基线（2026-10-14 实测；2026-10-15 D5-2 探针规整后重核）
 
 所有数据均为本次会话在 `D:/G/game/games/reroute-godot` 下实跑所得。
 
 | 项 | 证据 | 命令 |
 |---|---|---|
 | 单测 83 例全绿 | `[UNIT-DONE] passed=83 failed=0` + `[UNIT-ALL-GREEN]` | `<godot> --headless --path <P> -s res://tests/run_tests.gd` |
-| 黄金回放 16 指纹逐位一致 | `[R7-PROBE] PASS` | `<godot> --headless --path <P> -s res://tests/probes/probe_golden.gd` |
-| 主场景构建对拍 | `[SCENE] PASS field=2304 ring=4384 solids=338/338 covers=23/23` | `<godot> --headless --path <P> -s res://tests/probes/probe_scene.gd` |
+| 黄金回放 16 指纹逐位一致 | `[GOLDEN] checks=2 bad=0` + `[GOLDEN] PASS` | `<godot> --headless --path <P> -s res://tests/probes/probe_golden.gd` |
+| 主场景构建对拍 | `[SCENE] checks=6 bad=0` + `[SCENE] PASS`（field=2304 ring=4384 solids=338/338 covers=23/23 对拍） | `<godot> --headless --path <P> -s res://tests/probes/probe_scene.gd` |
 | 视觉同步逐位对拍 1749 断言 | `[SYNC] checks=1749 bad=0 moved=42 match=100` | `<godot> --path <P> -s res://tests/probes/probe_sync.gd`（**窗口模式**） |
 | 输入闭环 41 断言 | `[INPUT] checks=41 bad=0` | `<godot> --path <P> -s res://tests/probes/probe_input.gd`（**窗口模式**） |
-| 三屏流转 39 断言 | `[FLOW] checks=39 bad=0` | `<godot> --path <P> -s res://tests/probes/probe_ui_flow.gd`（**窗口模式**） |
+| 三屏流转 39 断言 | `[UI_FLOW] checks=39 bad=0` | `<godot> --path <P> -s res://tests/probes/probe_ui_flow.gd`（**窗口模式**） |
 | HUD 56 断言 | `[HUD] checks=56 bad=0` | `<godot> --path <P> -s res://tests/probes/probe_hud.gd`（**窗口模式**） |
-| 全局冒烟一局到底 | `[SMOKE] PASS outcome=LOST tick=4139 kills=116 peak_units=28 towers=6 skills=4` | `<godot> --path <P> -s res://tests/probes/probe_smoke.gd`（**窗口模式**） |
-| 三张验收截图可出 | `[SHOT] done shots=3 misses=0` | `<godot> --path <P> -s res://tests/probes/probe_shots.gd`（**窗口模式**） |
-| 截图像素校验 | `[SHOTS] checks=15 fail=0` `warm=751573 teal=2835 red=158640 green=3214` | `python tools/check_shots.py` |
+| 全局冒烟一局到底 | `[SMOKE] checks=31 bad=0` + `[SMOKE] PASS`（outcome=LOST tick=4139 kills=116 peak_units=28 towers=6 skills=4） | `<godot> --path <P> -s res://tests/probes/probe_smoke.gd`（**窗口模式**） |
+| 三张验收截图可出 | `[SHOTS] checks=3 bad=0` | `<godot> --path <P> -s res://tests/probes/probe_shots.gd`（**窗口模式**） |
+| 截图像素校验 | `[SHOTS] checks=15 fail=0` `warm=750294 teal=2835 red=158622 green=3179` | `python tools/check_shots.py` |
 | 资产 57 断言 | `[ASSET] checks=57 bad=0` | `<godot> --path <P> -s res://tests/probes/probe_asset.gd`（**窗口模式**） |
 | 模型动画齐备 | `blade/worker/king anims: Attack/Crawl/Death/Hurt/Idle` | `<godot> --path <P> -s res://tests/probes/probe_model.gd`（**窗口模式**） |
 | 朝向截面图 | `[ORIENT] cross shot saved` | `<godot> --path <P> -s res://tests/probes/probe_orient.gd`（**窗口模式**） |
 | 音频 38 断言 | `[AUDIO] checks=38 bad=0` | `<godot> --path <P> -s res://tests/probes/probe_audio.gd`（**窗口模式**） |
-| 模拟模块 5 探针 | `[R2/R3/R4/R5/R6-PROBE] PASS` | `tests/probes/probe_{sim,grid,flow,scenario,world}.gd`（headless） |
+| 模拟模块 5 探针 | `[SIM/GRID/FLOW/SCENARIO/WORLD]` 各自 `checks=N bad=0` + `PASS`（5/22/52/34/20） | `tests/probes/probe_{sim,grid,flow,scenario,world}.gd`（headless） |
 | Windows 导出可用 | exit 0，`export/game.exe` 109 MB + `game.pck` 72 MB | `<godot> --headless --path <P> --export-release "Windows Desktop" <P>/export/game.exe` |
 | 导出包自证 | `[SELFCHECK] checks=22 bad=0` + `[SELFCHECK] PASS` + exit 0 | `./export/game.exe --headless --selfcheck` |
 
@@ -913,7 +913,7 @@ HUD 全部控件、标题/暂停/结算三屏、三件套音频、真实 glb 资
 | 任务 | 范围 | 验收 |
 |---|---|---|
 | D5-1 `view.gd` 拆分 | 972 行 → `view.gd` 门面 + `view_core`（坐标/相机/渲染基建）+ `view_terrain`（蓝图/柱带/环带/热层/拾取）+ `view_entities`（单位/建筑/英雄/死亡/幽灵）+ `view_audio`（SFX/BGM）。**纯搬移，零行为变化** | ✅ 2026-10-15 完成：拆分前后 `probe_sync` 输出逐字节一致（1749 断言、`match=100`、SHA256 一致）；全 19 闸 post 比照 pre 全绿 |
-| D5-2 探针规整 | 统一输出格式、抽公共夹具（`_chk`/`_cmp` 重复实现在 10+ 个文件里）、补文件头注释。**允许改断言，但每条改动必须在提交信息里写明「原断言为何是错的」**（规范见 §9.5） | 全闸绿；提交信息含逐条断言变更说明 |
+| D5-2 探针规整 | 统一输出格式、抽公共夹具（`_chk`/`_cmp` 重复实现在 10+ 个文件里）、补文件头注释。**允许改断言，但每条改动必须在提交信息里写明「原断言为何是错的」**（规范见 §9.5） | ✅ 2026-10-15 完成：新增 `tests/probes/probe_kit.gd`（ProbeKit 夹具：`check`/`fail`/`cmp_int`/`cmp_approx`/`cmp_v3`/`cmp_rect`/`finish`），17 探针统一 `extends ProbeKit`、输出统一为 `[TAG] checks=N bad=M` + `[TAG] PASS|FAIL`；重构前后 checks 数逐项一致（`probe_sync` 输出 SHA256 逐字节相同），断言变更逐条见提交信息；全 19 闸绿（证据 `logs/gates-20261015-d52/post/`） |
 | D5-3 拖拽预览逐格绘制 | `view.show_ghost` 目前把首尾格画成**单个矩形**，斜线会覆盖非目标格 | `probe_sync` 增加斜线 ghost 断言；目视截图确认 |
 | D5-4 窗口缩放一致性 | HUD 的 `S` 只在 `build()` 算一次，窗口变化时 `_layout()` 只重排不重算比例 | 新增断言：改变视口尺寸后 `S` 与 `hit_regions()` 同步更新 |
 
@@ -1023,17 +1023,17 @@ HUD 全部控件、标题/暂停/结算三屏、三件套音频、真实 glb 资
 | 闸 | 命令 | 通过判据 | 需窗口 |
 |---|---|---|---|
 | 单测 | `run_tests.gd` | `passed=83 failed=0` + `[UNIT-ALL-GREEN]` | 否 |
-| 黄金回放 | `tests/probes/probe_golden.gd` | `[R7-PROBE] PASS`（16 指纹） | 否 |
-| 模拟模块 | `tests/probes/probe_{sim,grid,flow,scenario,world}.gd` | 各自 `PASS` | 否 |
-| 场景构建 | `tests/probes/probe_scene.gd` | `[SCENE] PASS field=2304 ring=4384` | 否 |
+| 黄金回放 | `tests/probes/probe_golden.gd` | `[GOLDEN] checks=2 bad=0` + `PASS`（16 指纹） | 否 |
+| 模拟模块 | `tests/probes/probe_{sim,grid,flow,scenario,world}.gd` | 各自 `[TAG] checks=N bad=0` + `PASS` | 否 |
+| 场景构建 | `tests/probes/probe_scene.gd` | `[SCENE] checks=6 bad=0` + `PASS`（field=2304 ring=4384 对拍） | 否 |
 | 视觉同步 | `tests/probes/probe_sync.gd` | `[SYNC] PASS match=100 bad=0` | **是** |
 | 输入闭环 | `tests/probes/probe_input.gd` | `[INPUT] PASS bad=0` | **是** |
 | HUD | `tests/probes/probe_hud.gd` | `[HUD] PASS bad=0` | **是** |
-| 三屏流转 | `tests/probes/probe_ui_flow.gd` | `[FLOW] PASS bad=0` | **是** |
+| 三屏流转 | `tests/probes/probe_ui_flow.gd` | `[UI_FLOW] PASS bad=0` | **是** |
 | 全局冒烟 | `tests/probes/probe_smoke.gd` | `[SMOKE] PASS` | **是** |
-| 资产/模型 | `tests/probes/probe_{asset,model,orient}.gd` | 各自 PASS（后两者出图） | **是** |
+| 资产/模型 | `tests/probes/probe_{asset,model,orient}.gd` | 各自 `[TAG] PASS`（model/orient 出图；checks=6/1） | **是** |
 | 音频 | `tests/probes/probe_audio.gd` | `[AUDIO] PASS bad=0` | **是** |
-| 截图像素 | `tests/probes/probe_shots.gd` + `python tools/check_shots.py` | `[SHOTS] PASS` | **是** |
+| 截图像素 | `tests/probes/probe_shots.gd` + `python tools/check_shots.py` | 探针 `[SHOTS] checks=3 bad=0` + 像素 `[SHOTS] checks=15 fail=0` | **是** |
 | 导出自证 | `export/game.exe --headless --selfcheck` | `[SELFCHECK] PASS` + exit 0 | 否 |
 | **触屏闭环** | `tests/probes/probe_touch.gd`（D1 新建） | 触摸路径与鼠标路径世界状态逐项一致 | **是** |
 | **Android 可玩** | `adb install` + 启动 + 手动完成一局 | 无崩溃、`adb logcat` 无 ERROR、7 个模式钮 + 技能 + 暂停 + 热层全部可点 | 真机/模拟器 |

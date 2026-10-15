@@ -1,18 +1,12 @@
-extends SceneTree
+extends ProbeKit
 
 # R7 验证探针：黄金回放（C3）——GDScript sim 核逐位复现引擎录制的 16 个基线指纹。
-var ok := true
-
-
-func check(cond: bool, what: String) -> void:
-	if not cond:
-		ok = false
-		print("  FAIL: ", what)
+# 判定：exit 0 + stdout 含 `[GOLDEN] PASS`。
 
 
 func _initialize() -> void:
 	var sc := Scenario.new()
-	print("[R7] golden replay running (seed=" + str(GoldenBaseline.SEED) + ", cmds=" + str(Verify.SCRIPT_COMMANDS.size()) + ")...")
+	print("[GOLDEN] golden replay running (seed=" + str(GoldenBaseline.SEED) + ", cmds=" + str(Verify.SCRIPT_COMMANDS.size()) + ")...")
 	var res := Verify.run_world(sc, GoldenBaseline.SEED, Verify.SCRIPT_COMMANDS, GoldenBaseline.EVERY, true)
 	var samples = res[0]
 	var err = res[1]
@@ -26,7 +20,7 @@ func _initialize() -> void:
 				var got: Array = samples[i]
 				if got[0] != want[0] or got[1] != want[1]:
 					check(false, "tick " + str(want[0]) + ": 得 " + str(got[1]) + " 期 " + str(want[1]))
-		print("[R7] all " + str(samples.size()) + " fingerprints compared")
+		print("[GOLDEN] all " + str(samples.size()) + " fingerprints compared")
 
 	# 确定性复跑：同种子同命令流，两遍逐位一致
 	var res2 := Verify.run_world(Scenario.new(), GoldenBaseline.SEED, Verify.SCRIPT_COMMANDS, GoldenBaseline.EVERY, false)
@@ -39,5 +33,4 @@ func _initialize() -> void:
 				same = false
 		check(same, "determinism rerun")
 
-	print("[R7-PROBE] ", "PASS" if ok else "FAIL")
-	quit(0 if ok else 1)
+	finish("GOLDEN")

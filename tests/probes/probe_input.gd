@@ -1,14 +1,11 @@
-extends SceneTree
+extends ProbeKit
 
 # C4 判定：输入闭环端到端。
 # 通过 Window.push_input 注入真实鼠标/键盘事件，断言 world 状态按预期变化：
 #   单击放墙 / 拖拽放墙线 / 挖矿(矿+25) / 放塔(施工压扁) / 拆除(退 50%) /
 #   英雄移动 / 原地目标被拒 / TAB 热层开关 / SOLID 格零副作用 / 暂停中零副作用。
 # 跑法（cwd=reroute-godot，窗口模式）：godot -s res://tests/probes/probe_input.gd
-var checks := 0
-var bad := 0
-var first_bad := ""
-var fail_list: Array = []
+# 判定：exit 0 + stdout 含 `[INPUT] PASS`。
 var vp_size := Vector2(1280.0, 720.0)
 
 
@@ -29,27 +26,27 @@ func _initialize() -> void:
 	var used: Array = []
 	var row_cells: Array = []
 	var row := _find_row(view, world, 8, 6, 36, 26, 4, used)
-	_gcheck(row.x >= 0, "4 连可点击行")
+	check(row.x >= 0, "4 连可点击行")
 	if row.x >= 0:
 		for k in 4:
 			row_cells.append(Vector2i(row.x + k, row.y))
 		for c in row_cells:
 			used.append(c) # 行格全部排除，防与单击/塔/英雄格重叠
 	var cellA := _find_clickable(view, world, 8, 6, 36, 26, false, used)
-	_gcheck(cellA.x >= 0, "单击墙格")
+	check(cellA.x >= 0, "单击墙格")
 	used.append(cellA)
 	var cellD := _find_clickable(view, world, 8, 6, 36, 26, false, used)
-	_gcheck(cellD.x >= 0, "塔格")
+	check(cellD.x >= 0, "塔格")
 	used.append(cellD)
 	var cellE := _find_clickable(view, world, 8, 6, 36, 26, false, used)
-	_gcheck(cellE.x >= 0, "英雄目标格")
+	check(cellE.x >= 0, "英雄目标格")
 	used.append(cellE)
 	var ore_cell := _find_ore(view, world)
-	_gcheck(ore_cell.x >= 0, "可点击矿格")
+	check(ore_cell.x >= 0, "可点击矿格")
 	var solid_cell := _find_solid_block(view, world)
-	_gcheck(solid_cell.x >= 0, "可点击实心块格")
+	check(solid_cell.x >= 0, "可点击实心块格")
 	if bad > 0:
-		_finish()
+		finish("INPUT", 15)
 		return
 
 	# ---- 1. 单击放墙 ----
@@ -57,69 +54,69 @@ func _initialize() -> void:
 	var sup0: int = world.supply
 	await _click(view, cellA)
 	var bA = world.building_at(cellA.x, cellA.y)
-	_gcheck(bA != null and int(bA["kind"]) == Sim.B_WALL, "单击放墙")
-	_cmp_int(world.supply, sup0 - 10, "放墙扣费 10")
+	check(bA != null and int(bA["kind"]) == Sim.B_WALL, "单击放墙")
+	cmp_int(world.supply, sup0 - 10, "放墙扣费 10")
 	view.sync(world)
-	_cmp_int(view.building_nodes.size(), 2, "墙节点出现（核心+墙）")
+	cmp_int(view.building_nodes.size(), 2, "墙节点出现（核心+墙）")
 
 	# ---- 2. 拖拽放墙线（4 连）----
 	main.set_mode("wall")
 	var sup1: int = world.supply
 	var n0: int = world.buildings.size()
 	await _drag(view, row_cells[0], row_cells[3])
-	_cmp_int(world.buildings.size(), n0 + 4, "拖拽放墙 4 格")
-	_cmp_int(world.supply, sup1 - 40, "拖拽扣费 40")
+	cmp_int(world.buildings.size(), n0 + 4, "拖拽放墙 4 格")
+	cmp_int(world.supply, sup1 - 40, "拖拽扣费 40")
 
 	# ---- 3. 挖矿 ----
 	main.set_mode("dig")
 	var sup2: int = world.supply
 	await _click(view, ore_cell)
-	_cmp_int(world.grid.at(ore_cell.x, ore_cell.y), Grid.OPEN, "矿格变 OPEN")
-	_cmp_int(world.supply, sup2 + 25, "挖矿 +25")
+	cmp_int(world.grid.at(ore_cell.x, ore_cell.y), Grid.OPEN, "矿格变 OPEN")
+	cmp_int(world.supply, sup2 + 25, "挖矿 +25")
 
 	# ---- 4. 放塔（施工压扁）----
 	main.set_mode("tower")
 	var sup3: int = world.supply
 	await _click(view, cellD)
 	var bD = world.building_at(cellD.x, cellD.y)
-	_gcheck(bD != null and int(bD["kind"]) == Sim.B_TOWER, "单击放塔")
+	check(bD != null and int(bD["kind"]) == Sim.B_TOWER, "单击放塔")
 	if bD == null:
-		_finish()
+		finish("INPUT", 15)
 		return
-	_cmp_int(world.supply, sup3 - 60, "放塔扣费 60")
+	cmp_int(world.supply, sup3 - 60, "放塔扣费 60")
 	view.sync(world)
 	var eD = view.building_nodes.get(int(bD["id"]))
-	_gcheck(eD != null and absf(float(eD["node"].scale.y) - 0.35) < 0.001, "塔施工压扁 0.35")
+	check(eD != null and absf(float(eD["node"].scale.y) - 0.35) < 0.001, "塔施工压扁 0.35")
 
 	# ---- 5. 拆除（退 50%）----
 	main.set_mode("remove")
 	var sup4: int = world.supply
 	await _click(view, cellA)
-	_gcheck(world.building_at(cellA.x, cellA.y) == null, "拆除墙")
-	_cmp_int(world.supply, sup4 + 5, "拆除退款 50%（5）")
+	check(world.building_at(cellA.x, cellA.y) == null, "拆除墙")
+	cmp_int(world.supply, sup4 + 5, "拆除退款 50%（5）")
 
 	# ---- 6. 英雄移动 + 原地目标被拒 ----
 	main.set_mode("hero")
 	await _click(view, cellE)
-	_cmp_int(int(world.hero["tx"]), cellE.x, "英雄目标 x")
-	_cmp_int(int(world.hero["ty"]), cellE.y, "英雄目标 y")
+	cmp_int(int(world.hero["tx"]), cellE.x, "英雄目标 x")
+	cmp_int(int(world.hero["ty"]), cellE.y, "英雄目标 y")
 	var tx_keep: int = int(world.hero["tx"])
 	await _click(view, Vector2i(int(world.hero["x"]), int(world.hero["y"])))
-	_cmp_int(int(world.hero["tx"]), tx_keep, "原地目标被拒")
+	cmp_int(int(world.hero["tx"]), tx_keep, "原地目标被拒")
 
 	# ---- 7. TAB 热层 ----
-	_gcheck(view.heat_enabled() == false, "初始热层关")
+	check(view.heat_enabled() == false, "初始热层关")
 	await _key(KEY_TAB)
-	_gcheck(view.heat_enabled() == true, "TAB 开热层")
+	check(view.heat_enabled() == true, "TAB 开热层")
 	await _key(KEY_TAB)
-	_gcheck(view.heat_enabled() == false, "TAB 关热层")
+	check(view.heat_enabled() == false, "TAB 关热层")
 
 	# ---- 8. SOLID 格放墙被拒（零副作用）----
 	main.set_mode("wall")
 	var sup5: int = world.supply
 	await _click(view, solid_cell)
-	_cmp_int(world.supply, sup5, "SOLID 格零副作用")
-	_gcheck(world.building_at(solid_cell.x, solid_cell.y) == null, "SOLID 格无建筑")
+	cmp_int(world.supply, sup5, "SOLID 格零副作用")
+	check(world.building_at(solid_cell.x, solid_cell.y) == null, "SOLID 格无建筑")
 
 	# ---- 9. 暂停中点击被拒 ----
 	main.paused = true
@@ -127,14 +124,14 @@ func _initialize() -> void:
 	var sup6: int = world.supply
 	var cellP := _find_clickable(view, world, 8, 6, 36, 26, false, [])
 	await _click(view, cellP)
-	_cmp_int(world.supply, sup6, "暂停中零副作用")
+	cmp_int(world.supply, sup6, "暂停中零副作用")
 	main.paused = false
 
 	# ---- 10. 建造预览与模拟守卫一致：英雄脚下不可建 ----
 	var hx: int = int(world.hero["x"])
 	var hy: int = int(world.hero["y"])
-	_gcheck(not main.mode_valid("wall", hx, hy), "英雄脚下墙预览为无效")
-	_gcheck(not main.mode_valid("tower", hx, hy), "英雄脚下塔预览为无效")
+	check(not main.mode_valid("wall", hx, hy), "英雄脚下墙预览为无效")
+	check(not main.mode_valid("tower", hx, hy), "英雄脚下塔预览为无效")
 
 	# ---- 11. 屏幕投影一致性（赏金浮字定位口径锁定）----
 	for c in [Vector2i(10, 10), Vector2i(24, 24), Vector2i(40, 30)]:
@@ -142,12 +139,12 @@ func _initialize() -> void:
 		var gyw: float = view.ground_y(c.x, c.y)
 		var a: Vector2 = view.world_to_screen(w.x, gyw, w.z)
 		var b: Vector2 = view.camera.unproject_position(Vector3(w.x, gyw, w.z))
-		_gcheck(a.x >= 0.0 and a.distance_to(b) < 1.0, "world_to_screen 与引擎投影一致 %s (a=%s b=%s)" % [str(c), str(a), str(b)])
+		check(a.x >= 0.0 and a.distance_to(b) < 1.0, "world_to_screen 与引擎投影一致 %s (a=%s b=%s)" % [str(c), str(a), str(b)])
 
 	# ---- 12. 等量反向改高：视图地面随格高更新，不能因高度总和不变漏重建 ----
 	var ha0: int = world.grid.get_h(cellA.x, cellA.y)
 	var he0: int = world.grid.get_h(cellE.x, cellE.y)
-	_gcheck(ha0 < Sim.H_MAX and he0 > Sim.H_MIN, "地形双格具备反向改高空间")
+	check(ha0 < Sim.H_MAX and he0 > Sim.H_MIN, "地形双格具备反向改高空间")
 	if ha0 < Sim.H_MAX and he0 > Sim.H_MIN:
 		view.sync(world) # 先让上一段（拆除）的视觉清理落定，再取基线
 		var top_a := _terrain_top(view, cellA)
@@ -162,22 +159,22 @@ func _initialize() -> void:
 		var sum_after := 0
 		for h in world.grid.hgt:
 			sum_after += int(h)
-		_cmp_int(sum_after, sum_before, "正反改高后高度总和相同")
+		cmp_int(sum_after, sum_before, "正反改高后高度总和相同")
 		view.sync(world)
-		_gcheck(is_equal_approx(_terrain_top(view, cellA), top_a + view.H_STEP), "填高格柱顶上升")
-		_gcheck(is_equal_approx(_terrain_top(view, cellE), top_e - view.H_STEP), "挖低格柱顶下降")
-		_cmp_int(view.unit_nodes.size(), units_before, "改高不清空单位视觉缓存")
-		_cmp_int(view.building_nodes.size(), buildings_before, "改高不清空建筑视觉缓存")
+		check(is_equal_approx(_terrain_top(view, cellA), top_a + view.H_STEP), "填高格柱顶上升")
+		check(is_equal_approx(_terrain_top(view, cellE), top_e - view.H_STEP), "挖低格柱顶下降")
+		cmp_int(view.unit_nodes.size(), units_before, "改高不清空单位视觉缓存")
+		cmp_int(view.building_nodes.size(), buildings_before, "改高不清空建筑视觉缓存")
 
 	# ---- 13. 重开时热层同时清理逻辑、视图和 HUD 按钮 ----
 	main.paused = false
 	await _key(KEY_TAB)
-	_gcheck(view.heat_enabled() and main.heat_on, "重开前热层开启")
+	check(view.heat_enabled() and main.heat_on, "重开前热层开启")
 	main.restart_game()
-	_gcheck(not view.heat_enabled() and not main.heat_on, "重开后热层关闭")
+	check(not view.heat_enabled() and not main.heat_on, "重开后热层关闭")
 	var heat_style: StyleBoxFlat = main.hud.heat_btn.get_meta("sb_normal")
-	_gcheck(heat_style.bg_color == main.hud.DARK["btn"], "重开后 HUD 热层钮熄灭")
-	_finish()
+	check(heat_style.bg_color == main.hud.DARK["btn"], "重开后 HUD 热层钮熄灭")
+	finish("INPUT", 15)
 
 
 ## 读取特定战场格柱体顶部高度（独立于 ground_y，防止自我对拍）。
@@ -189,7 +186,7 @@ func _terrain_top(view, cell: Vector2i) -> float:
 			var xf: Transform3D = mesh.get_instance_transform(i)
 			if is_equal_approx(xf.origin.x, pos.x) and is_equal_approx(xf.origin.z, pos.z):
 				return xf.origin.y + xf.basis.get_scale().y * 0.5
-	_fail("地面柱体缺失：" + str(cell))
+	fail("地面柱体缺失：" + str(cell))
 	return NAN
 
 
@@ -279,12 +276,12 @@ func _find_clickable(view, world, x0: int, y0: int, x1: int, y1: int, _unused: b
 func _find_row(view, world, x0: int, y0: int, x1: int, y1: int, n: int, exclude: Array) -> Vector2i:
 	for y in range(y0, y1 + 1):
 		for x in range(x0, x1 - n + 2):
-			var ok := true
+			var row_ok := true
 			for k in n:
 				if exclude.has(Vector2i(x + k, y)) or not _clickable(view, world, x + k, y):
-					ok = false
+					row_ok = false
 					break
-			if ok:
+			if row_ok:
 				return Vector2i(x, y)
 	return Vector2i(-1, -1)
 
@@ -318,33 +315,3 @@ func _find_solid_block(view, world) -> Vector2i:
 			if _clickable_cover(view, world, x, y):
 				return Vector2i(x, y)
 	return Vector2i(-1, -1)
-
-
-# ---------------- 判定辅助 ----------------
-
-func _fail(msg: String) -> void:
-	bad += 1
-	if first_bad == "":
-		first_bad = msg
-	fail_list.append(msg)
-
-
-func _gcheck(cond: bool, label: String) -> void:
-	checks += 1
-	if not cond:
-		_fail(label)
-
-
-func _cmp_int(got: int, want: int, label: String) -> void:
-	checks += 1
-	if got != want:
-		_fail(label + " got=%d want=%d" % [got, want])
-
-
-func _finish() -> void:
-	var ok := bad == 0 and checks >= 15
-	print("[INPUT] checks=", checks, " bad=", bad)
-	for i in mini(fail_list.size(), 12):
-		print("[INPUT] fail: ", fail_list[i])
-	print("[INPUT] ", "PASS" if ok else "FAIL")
-	quit(0 if ok else 1)

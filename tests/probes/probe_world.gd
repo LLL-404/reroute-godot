@@ -1,13 +1,7 @@
-extends SceneTree
+extends ProbeKit
 
 # R6 验证探针：world 移植（构造/命令/200 tick 不变式/确定性/冻结/schema）。
-var ok := true
-
-
-func check(cond: bool, what: String) -> void:
-	if not cond:
-		ok = false
-		print("  FAIL: ", what)
+# 判定：exit 0 + stdout 含 `[WORLD] PASS`。
 
 
 func _initialize() -> void:
@@ -80,5 +74,4 @@ func _initialize() -> void:
 		f.tick()
 	check(f.fingerprint() == fp0, "frozen after outcome")
 
-	print("[R6-PROBE] ", "PASS" if ok else "FAIL")
-	quit(0 if ok else 1)
+	finish("WORLD")
