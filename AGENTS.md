@@ -118,6 +118,10 @@ python tools/check_shots.py    # 截图像素校验
   17 探针全部 `extends ProbeKit`，输出统一为 `[TAG] checks=N bad=M` + `[TAG] PASS|FAIL`；
   重构前后 checks 数逐项一致（`probe_sync` 输出 SHA256 逐字节相同）；
   全 19 闸绿（证据 `logs/gates-20261015-d52/post/`）。夹具改动后需 `--import` 刷类缓存。
+- 拖拽预览逐格（D5-3）**已完成（2026-10-15）**：`view_entities.show_ghost` 由「首尾单拉伸盒」
+  改为**逐格方块**（各自贴合所在柱顶；`ghost_mi` 仍指首格）；斜线拖拽不再覆盖线外格。
+  `probe_sync` 幽灵断言重写（盒数=格数 + 逐格世界位/缩放/染色；直连+斜线），
+  负对照实跑（旧实现 + 新断言 = `bad=2 FAIL`）；`shots/ghost.png` 改斜线目视件（对角阶梯绿格）。
 - 历史审计报告（`docs/*-20261015.md`）按**快照原则保持原样**，不要顺着结构整理去改它们。
 
 ---

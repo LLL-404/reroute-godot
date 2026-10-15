@@ -4,7 +4,7 @@ extends ProbeKit
 # 布置一局丰富场景（单位/墙阵/双塔/英雄），推进 90 tick 后截 3 张：
 #   shots/game.png   对局全景（含地形/建筑/单位/核心）
 #   shots/heat.png   威胁热层开启
-#   shots/ghost.png  放墙预览幽灵（绿板）
+#   shots/ghost.png  放墙预览幽灵（斜线逐格绿板，D5-3 目视件）
 # 跑法（cwd=reroute-godot）：godot -s res://tests/probes/probe_shots.gd   （窗口模式，勿加 --headless）
 # 判定：exit 0 + stdout 含 [SHOTS] PASS（3 图非空）；像素口径交给 tools/check_shots.py。
 
@@ -58,9 +58,9 @@ func _initialize() -> void:
 		await process_frame
 	_shot("res://shots/heat.png")
 
-	# ---- 幽灵预览（放墙拖拽三连）----
+	# ---- 幽灵预览（斜线拖拽：经 main.line_cells 的真产线，逐格绿板）----
 	view.set_heat(false)
-	view.show_ghost([Vector2i(20, 12), Vector2i(23, 12)], false)
+	view.show_ghost(main.line_cells(Vector2i(20, 12), Vector2i(23, 15)), false)
 	view.sync(world)
 	for _i in 3:
 		await process_frame

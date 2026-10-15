@@ -3,7 +3,7 @@ extends ProbeKit
 # C2 判定：视觉同步逐位正确。
 # 做法：接管主循环（关 main._process），逐 tick 推进 + view.sync，
 # 按母版（view3d.lua）插值口径重算全部实体期望值，与节点实测对拍：
-#   单位位置/缩放/受击脉冲、建筑位置/施工压扁、英雄位置/起伏、死亡消散、震荡环、幽灵、热层。
+#   单位位置/缩放/受击脉冲、建筑位置/施工压扁、英雄位置/起伏、死亡消散、震荡环、幽灵（逐格/斜线）、热层。
 # 跑法（cwd=reroute-godot，窗口模式）：godot -s res://tests/probes/probe_sync.gd
 # 判定：exit 0 + stdout 含 [SYNC] match=100 + stderr 无 ERROR。
 var moved_seen := 0
@@ -142,17 +142,14 @@ func _initialize() -> void:
 			prev_cells[int(u["id"])] = Vector2i(int(u["x"]), int(u["y"]))
 		prev_hero = Vector2i(int(world.hero["x"]), int(world.hero["y"]))
 
-	# ---- 幽灵预览 ----
-	view.show_ghost([Vector2i(8, 8), Vector2i(11, 8)], false)
-	check(view.ghost_alive == true, "幽灵出现")
-	if view.ghost_alive:
-		var gy: float = maxf(view.ground_y(8, 8), view.ground_y(11, 8))
-		cmp_v3(view.ghost.position, Vector3(-14.0, gy + 0.12, -15.5), "幽灵位置")
-		cmp_v3(view.ghost.scale, Vector3(3.06, 0.24, 0.96), "幽灵缩放")
-		check(view.ghost_mi.material_override == view.mats["ghost_ok"], "幽灵有效性染色 ok")
-	view.show_ghost([Vector2i(8, 8), Vector2i(11, 8)], true)
+	# ---- 幽灵预览（逐格绘制：直连 + 斜线不越线）----
+	var straight := [Vector2i(8, 8), Vector2i(9, 8), Vector2i(10, 8), Vector2i(11, 8)]
+	_ghost_cells_check(view, straight, false)
+	view.show_ghost(straight, true)
 	if view.ghost_alive:
 		check(view.ghost_mi.material_override == view.mats["ghost_bad"], "幽灵无效染色 bad")
+	var diag := [Vector2i(8, 8), Vector2i(9, 9), Vector2i(10, 10), Vector2i(11, 11)]
+	_ghost_cells_check(view, diag, false)
 	view.show_ghost([])
 	check(view.ghost_alive == false and view.ghost == null, "幽灵清除")
 
@@ -274,6 +271,25 @@ func _verify(view, world) -> void:
 		var dhy := absf(got_hyaw - want_hyaw)
 		dhy = minf(dhy, absf(dhy - TAU))
 		check(dhy <= 0.02, "英雄朝向 t=%d got=%.4f want=%.4f" % [t, got_hyaw, want_hyaw])
+
+
+## 幽灵逐格断言：盒数 = 格数，且逐格世界位/缩放/染色对拍（直连与斜线共用）。
+func _ghost_cells_check(view, cells: Array, bad: bool) -> void:
+	view.show_ghost(cells, bad)
+	check(view.ghost_alive == true, "幽灵出现")
+	if not view.ghost_alive:
+		return
+	cmp_int(view.ghost.get_child_count(), cells.size(), "虚空盒数=格数（%d 格）" % cells.size())
+	if view.ghost.get_child_count() != cells.size():
+		return
+	var mat: Material = view.mats["ghost_bad"] if bad else view.mats["ghost_ok"]
+	for i in cells.size():
+		var c: Vector2i = cells[i]
+		var w: Vector3 = view.cell_to_world(c.x, c.y)
+		var mi: MeshInstance3D = view.ghost.get_child(i)
+		cmp_v3(mi.position, Vector3(w.x, view.ground_y(c.x, c.y) + 0.12, w.z), "虚空格(%d,%d)世界位" % [c.x, c.y])
+		cmp_v3(mi.scale, Vector3(0.96, 0.24, 0.96), "虚空格(%d,%d)缩放" % [c.x, c.y])
+		check(mi.material_override == mat, "虚空格(%d,%d)染色" % [c.x, c.y])
 
 
 func _find_unit(world, uid: int):

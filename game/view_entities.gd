@@ -128,6 +128,7 @@ func _make_cover(x: int, y: int) -> void:
 # ---- 幽灵预览 ----
 
 ## cells = Array[Vector2i] 或空（藏起）；bad = 有效性染色。
+## 逐格一个方块（斜线不覆盖线外格，各自贴合所在柱顶）；ghost_mi 指向首格网格。
 func show_ghost(cells: Array, bad: bool = false) -> void:
 	if cells.is_empty():
 		if ghost_alive and ghost != null:
@@ -139,23 +140,26 @@ func show_ghost(cells: Array, bad: bool = false) -> void:
 	if not ghost_alive or ghost == null:
 		ghost = Node3D.new()
 		ghost.name = "Ghost"
-		ghost_mi = MeshInstance3D.new()
-		ghost_mi.mesh = core.box_mesh
-		ghost.add_child(ghost_mi)
+		ghost_mi = null
 		dyn.add_child(ghost)
 		ghost_alive = true
-	var first: Vector2i = cells[0]
-	var last: Vector2i = cells[cells.size() - 1]
-	var fw := core.cell_to_world(first.x, first.y)
-	var lw := core.cell_to_world(last.x, last.y)
-	var cx := (fw.x + lw.x) / 2.0
-	var cz := (fw.z + lw.z) / 2.0
-	var sx := maxf(absf(lw.x - fw.x), 0.9) + 0.06
-	var sz := maxf(absf(lw.z - fw.z), 0.9) + 0.06
-	var gy := maxf(terrain.ground_y(first.x, first.y), terrain.ground_y(last.x, last.y))
-	ghost.position = Vector3(cx, gy + 0.12, cz)
-	ghost.scale = Vector3(sx, 0.24, sz)
-	ghost_mi.material_override = core.mats["ghost_bad"] if bad else core.mats["ghost_ok"]
+	while ghost.get_child_count() > cells.size():
+		var extra: Node = ghost.get_child(ghost.get_child_count() - 1)
+		ghost.remove_child(extra)
+		extra.queue_free()
+	while ghost.get_child_count() < cells.size():
+		var fresh := MeshInstance3D.new()
+		fresh.mesh = core.box_mesh
+		ghost.add_child(fresh)
+	var mat: Material = core.mats["ghost_bad"] if bad else core.mats["ghost_ok"]
+	for i in cells.size():
+		var c: Vector2i = cells[i]
+		var w := core.cell_to_world(c.x, c.y)
+		var mi: MeshInstance3D = ghost.get_child(i)
+		mi.material_override = mat
+		mi.position = Vector3(w.x, terrain.ground_y(c.x, c.y) + 0.12, w.z)
+		mi.scale = Vector3(0.96, 0.24, 0.96)
+	ghost_mi = ghost.get_child(0)
 
 
 # ---- 每帧同步 ----
