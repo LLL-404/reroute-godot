@@ -52,6 +52,7 @@ var hero_goal_tx: int
 var hero_goal_ty: int
 
 
+## 初始化世界状态：建网格、放核心、建主场流场
 func _init(psc: Scenario, pseed: int, prebuild_budget: int = 2048) -> void:
 	sc = psc
 	seed = pseed
@@ -90,6 +91,7 @@ func _init(psc: Scenario, pseed: int, prebuild_budget: int = 2048) -> void:
 	place_building(Sim.B_CORE, sc.core.x, sc.core.y)
 
 
+## 同步重建主场流场（初始化时调用；运行时走摊销补场）
 func _rebuild_field_sync() -> void:
 	field.begin(field_goals)
 	while not field.done():
@@ -145,6 +147,7 @@ func apply_command(cmd: Dictionary) -> void:
 	# 未知命令 = Nop：零副作用
 
 
+## 生成一个敌人单位（含波次缩放 HP、速度抖动）
 func spawn_unit(x: int, y: int, speed_ticks: int, kind: int) -> void:
 	var e: Dictionary = Sim.ENEMIES[kind - 1]
 	var hp: int = e["hp"]
@@ -169,6 +172,7 @@ func spawn_unit(x: int, y: int, speed_ticks: int, kind: int) -> void:
 	units.append(unit)
 
 
+## 该格是否有单位占据
 func cell_vacant(x: int, y: int) -> bool:
 	for i in units.size():
 		var u: Dictionary = units[i]
@@ -177,6 +181,7 @@ func cell_vacant(x: int, y: int) -> bool:
 	return true
 
 
+## 放置建筑（含施工时间、立即挡路）；核心额外记录
 func place_building(bkind: int, x: int, y: int) -> Dictionary:
 	var def: Dictionary = Sim.BUILDINGS[bkind - 1]
 	# 第 1 波之前施工时间减半（切片 1 的教学让步）
@@ -201,6 +206,7 @@ func place_building(bkind: int, x: int, y: int) -> Dictionary:
 	return b
 
 
+## 尝试建造（供给/通行/占用/英雄守卫通过后扣费放置）
 func try_build(bkind: int, x: int, y: int) -> void:
 	var def: Dictionary = Sim.BUILDINGS[bkind - 1]
 	if supply < def["cost"]:
@@ -217,6 +223,7 @@ func try_build(bkind: int, x: int, y: int) -> void:
 	place_building(bkind, x, y)
 
 
+## 拆除建筑（核心不可拆；施工完退 50%，否则退 80%）
 func try_remove(x: int, y: int) -> void:
 	var b = building_at(x, y)
 	if b == null or b["kind"] == Sim.B_CORE or b["hp"] <= 0:
@@ -231,6 +238,7 @@ func try_remove(x: int, y: int) -> void:
 
 # ---------------- 一 tick ----------------
 
+## 推进一步模拟（固定次序：摊销补场 → 波次 → 移动 → 英雄 → 塔/施工 → 清尸 → 判定）
 func tick() -> void:
 	if outcome != RUNNING:
 		return
@@ -254,6 +262,7 @@ func tick() -> void:
 	judge()
 
 
+## 波次导演：到点的波次表条目发射；暗门开后定时渗怪
 func run_waves() -> void:
 	for w in sc.waves:
 		if w[0] == tick_count:
@@ -262,6 +271,7 @@ func run_waves() -> void:
 		emit_wave(3, Sim.E_SWARM, 2) # 盆地出怪口（1 基 = 3）
 
 
+## 发射一波敌人（螺旋找空格 + 速度抖动）
 func emit_wave(spawn_idx: int, kind: int, count: int) -> void:
 	var sx: int = sc.spawns[spawn_idx - 1].x
 	var sy: int = sc.spawns[spawn_idx - 1].y
@@ -291,6 +301,7 @@ func _find_spawn_cell(sx: int, sy: int) -> Vector2i:
 	return Vector2i(Lua64.mod(fb, grid.w), Lua64.idiv(fb, grid.w))
 
 
+## 单位移动：沿主场流场走一格；被封分支处理啃建筑/转围攻
 func move_units() -> void:
 	for ui in units.size():
 		var unit: Dictionary = units[ui]
@@ -459,6 +470,7 @@ func damage_building(id: int, dmg: int) -> void:
 			return
 
 
+## 塔开火与建筑施工：施工递减；塔找最近敌人射程内开火；击杀结算赏金
 func towers_and_build() -> void:
 	for i in buildings.size():
 		var b: Dictionary = buildings[i]
@@ -493,6 +505,7 @@ func towers_and_build() -> void:
 								kills += 1
 
 
+## 清尸：移除死亡单位（保留核心建筑）
 func compact() -> void:
 	# 建新数组而非原地压缩：GDScript 对带推断元素类型的数组做下标赋值会报类型错误
 	var kept_u := []
@@ -508,6 +521,7 @@ func compact() -> void:
 	buildings = kept_b
 
 
+## 胜负判定：到终局 tick 且场上无敌人 = 胜；超时 = 负
 func judge() -> void:
 	if outcome != RUNNING:
 		return # 本 tick 内已分胜负（核心被啃等）不许被改写
@@ -572,5 +586,6 @@ func canonical_bytes() -> Canon.Buf:
 	return b
 
 
+## 计算 FNV-1a 指纹（经 canonical_bytes 编码）
 func fingerprint() -> int:
 	return canonical_bytes().fingerprint()

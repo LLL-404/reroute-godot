@@ -174,6 +174,7 @@ func _ready() -> void:
 	_setup_audio()
 
 
+## 创建标准 PBR 材质（可选自发光）
 func make_material(r: float, g: float, b: float, emissive: Variant = null) -> StandardMaterial3D:
 	var m := StandardMaterial3D.new()
 	m.albedo_color = Color(r, g, b, 1.0)
@@ -186,6 +187,7 @@ func make_material(r: float, g: float, b: float, emissive: Variant = null) -> St
 	return m
 
 
+## 在 parent 下添加一个盒体部件（位置 + 缩放 + 材质名）
 func _part(parent: Node3D, px: float, py: float, pz: float, sx: float, sy: float, sz: float, matname: String) -> void:
 	var mi := MeshInstance3D.new()
 	mi.mesh = box_mesh
@@ -197,10 +199,12 @@ func _part(parent: Node3D, px: float, py: float, pz: float, sx: float, sy: float
 
 # ---- 坐标映射 ----
 
+## 格子坐标 → 世界坐标（格中心）
 func cell_to_world(x: int, y: int) -> Vector3:
 	return Vector3(float(x) - HALF + 0.5, 0.0, float(y) - HALF + 0.5)
 
 
+## 世界坐标 → 格子坐标；界外返回 (-1, -1)
 func world_to_cell(wx: float, wz: float) -> Vector2i:
 	var cx := int(floor(wx + HALF))
 	var cy := int(floor(wz + HALF))
@@ -287,6 +291,7 @@ func _rebuild_field() -> void:
 	_stat_field = total
 
 
+## 重建外围环带（两圈：近圈贴战场边缘、远圈延展地平线）
 func _rebuild_ring() -> void:
 	for c in world_root.get_children():
 		c.free()
@@ -299,6 +304,7 @@ func _rebuild_ring() -> void:
 	_stat_ring = insts.size()
 
 
+## 收集环带方块实例（界外距离 > inner 的格位）
 func _collect_ring(out: Array, lo: int, hi: int, step: int, inner: float) -> void:
 	for wz in range(lo, hi + 1, step):
 		for wx in range(lo, hi + 1, step):
@@ -307,6 +313,7 @@ func _collect_ring(out: Array, lo: int, hi: int, step: int, inner: float) -> voi
 				out.append([Vector3(float(wx), (h - 6.0) / 2.0, float(wz)), Vector3(float(step), h + 6.0, float(step))])
 
 
+## 构建 MultiMeshInstance3D（实例数组 + 材质）
 func _make_multimesh(insts: Array, mat: Material) -> MultiMeshInstance3D:
 	var mm := MultiMesh.new()
 	mm.transform_format = MultiMesh.TRANSFORM_3D
@@ -391,6 +398,7 @@ func _make_cover(x: int, y: int) -> void:
 
 # ---- 威胁热层 ----
 
+## 开关威胁热层（关时立即移除热层节点）
 func set_heat(on: bool) -> void:
 	heat_on = on
 	if not on:
@@ -401,6 +409,7 @@ func set_heat(on: bool) -> void:
 		_stat_heat = 0
 
 
+## 热层是否开启
 func heat_enabled() -> bool:
 	return heat_on
 
@@ -483,6 +492,7 @@ func show_ghost(cells: Array, bad: bool = false) -> void:
 
 # ---- 每帧同步 ----
 
+## 每帧同步：地形高度变化重建、热层刷新、覆盖层消失、建筑/英雄/单位/死亡消散/震荡环/相机取景
 func sync(world: World) -> void:
 	# 仅重建地面柱带；高度增减总和相同也必须刷新，实体缓存不得被清掉。
 	if grid != null and grid.height_rev != _height_rev:
@@ -716,6 +726,7 @@ func update_shock_ring(world: World) -> void:
 
 # ---- 相机取景 ----
 
+## 确保相机存在（懒创建）
 func _ensure_camera() -> void:
 	if camera != null:
 		return
@@ -937,6 +948,7 @@ func stop_all_audio() -> void:
 		bgm_player.stream = null
 
 
+## 击杀赏金浮字回调（转发给 HUD）
 func _float_bounty(scr: Vector2, text: String) -> void:
 	if on_float.is_valid():
 		on_float.call(scr.x, scr.y, text)

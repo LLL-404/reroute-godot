@@ -20,6 +20,7 @@ var go_title: Label
 var go_body: Label
 
 
+## 初始化：注入回调、HUD 引用、缩放、层级、宿主控件
 func init(callbacks: Dictionary, hud_ref) -> void:
 	cb = callbacks
 	hud = hud_ref
@@ -271,6 +272,7 @@ func _build_gameover() -> Control:
 
 # ---------------- 页切换 ----------------
 
+## 懒建页面（首次调用时构建并缓存）
 func _ensure(name: String) -> Control:
 	if pages.has(name):
 		return pages[name]
@@ -288,6 +290,7 @@ func _ensure(name: String) -> Control:
 	return p
 
 
+## 显示指定页面（其余隐藏，0.18s 淡入）
 func _show(name: String) -> void:
 	for k in pages:
 		pages[k].visible = (k == name)

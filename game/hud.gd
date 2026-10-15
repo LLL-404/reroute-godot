@@ -79,6 +79,7 @@ var _skill_shown := -1
 var _banner_tween: Tween = null
 
 
+## 初始化：全屏铺底、监听窗口变化
 func _ready() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -299,6 +300,7 @@ func _build_floats() -> void:
 
 # ---------------- 布局（绝对像素，S 缩放） ----------------
 
+## 重排所有控件（窗口尺寸变化时调用；绝对像素布局）
 func _layout() -> void:
 	if top_bar == null:
 		return
@@ -412,6 +414,7 @@ func float_bounty(sx: float, sy: float, text: String) -> void:
 			return
 
 
+## 更新浮字（按 tick 上浮淡出）
 func _update_floats(tick: int) -> void:
 	for f in floats:
 		if f["active"]:
@@ -448,6 +451,7 @@ func banner(title: String, sub: String, danger: bool = false) -> void:
 	_banner_until = _tick + BANNER_LIFE
 
 
+## tick → "分:秒" 文本
 func _fmt_time(ticks: int) -> String:
 	var s := maxi(0, ceili(float(ticks) / 20.0))
 	return "%d:%02d" % [s / 60, s % 60]
@@ -479,6 +483,7 @@ func _wave_banner_info(sc: Scenario, tick: int) -> Array:
 	return [ticks.size(), "+".join(parts), boss]
 
 
+## 波次行文本：下一波倒计时 / 暗门已开 / 最后一波
 func _wave_text(world: World, sc: Scenario) -> String:
 	var next_w = _next_wave_tick(world, sc)
 	if next_w != null:
@@ -505,6 +510,7 @@ func build_stats(world: World) -> String:
 	]
 
 
+## 每帧更新 HUD：血条 / 波次 / 供给 / 浮字 / 横幅 / 英雄技能冷却
 func update(world: World) -> void:
 	var sc: Scenario = world.sc
 	_tick = world.tick_count
@@ -560,6 +566,7 @@ func update(world: World) -> void:
 			skill_btn.text = "震荡波"
 
 
+## 重置所有状态缓存（新局/回标题时调用）
 func _reset_caches() -> void:
 	_skill_shown = -1
 	_supply = null
@@ -572,6 +579,7 @@ func _reset_caches() -> void:
 	_banner_until = null
 
 
+## HUD 重置（新局开始时调用：清浮字、横幅、缓存、模式按钮）
 func reset() -> void:
 	_reset_caches()
 	if _toplevel.size() > 0 and banner_root != null:

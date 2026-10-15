@@ -31,6 +31,7 @@ var heat_on := false
 var hud_regions_provider: Callable
 
 
+## 初始化：建 HUD/壳、开新局、显示标题屏；自检模式触发 export 验收
 func _ready() -> void:
 	view = $View
 	_setup_hud()
@@ -172,6 +173,7 @@ func new_game() -> void:
 	print("[Game] 新对局 run=", run_index, " seed=", BASE_SEED + run_index)
 
 
+## 主循环：推进模拟 tick、终局检测、视图同步、HUD 更新
 func _process(dt: float) -> void:
 	if world == null:
 		return
@@ -197,6 +199,7 @@ func _process(dt: float) -> void:
 
 # ---------------- 输入（移植 main.lua：拖拽放墙/塔、点覆盖层挖矿、点建筑拆除） ----------------
 
+## 输入分发：鼠标按下/抬起（拖拽/点击）、鼠标移动、键盘（TAB 热层、Esc 路由）
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton:
 		var mb: InputEventMouseButton = event
@@ -217,6 +220,7 @@ func _unhandled_input(event: InputEvent) -> void:
 				toggle_heat()
 
 
+## 坐标是否落在 HUD 区域内（点击排除用）
 func in_hud_region(x: float, y: float) -> bool:
 	if not hud_regions_provider.is_valid():
 		return false
@@ -288,16 +292,19 @@ func line_cells(a: Vector2i, b: Vector2i) -> Array:
 	return cells
 
 
+## 设置当前操作模式（墙/塔/挖矿/填/挖/拆/英雄）
 func set_mode(m: String) -> void:
 	mode = m
 	if hud != null:
 		hud.set_mode(m)
 
 
+## 在指定格执行当前模式对应的命令
 func apply_mode_at(m: String, x: int, y: int) -> void:
 	world.apply_command({ "kind": m, "x": x, "y": y })
 
 
+## 鼠标按下：记录拖拽起点（墙/塔）或立即执行单格操作（挖矿/填/挖/拆/英雄）
 func pointer_down(pos: Vector2) -> void:
 	mouse_pos = pos
 	if world == null or world.outcome != World.RUNNING or paused:
@@ -313,6 +320,7 @@ func pointer_down(pos: Vector2) -> void:
 		apply_mode_at(mode, cell.x, cell.y)
 
 
+## 鼠标抬起：拖拽模式沿 Bresenham 线批量执行；单格模式空转
 func pointer_up(pos: Vector2) -> void:
 	mouse_pos = pos
 	if paused:
