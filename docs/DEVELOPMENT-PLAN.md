@@ -261,7 +261,9 @@
 - 音频：`assets/audio/sfx/` 19 个 mp3（18 音效 + 1 BGM）
 - 模型：`assets/models/` 10 个 glb（zerg_worker / zerg_blade / zerg_king / gold_pile×4 /
   rubble×3）+ 配套 D/N 贴图
-- 字体：`assets/fonts/simhei.ttf`（**商用授权需自查**，提交前确认）
+- 字体：`assets/fonts/NotoSansSC-Regular.otf` + `OFL.txt`（**SIL OFL 1.1，已合规**。
+  2026-10-14 替换掉原 `simhei.ttf`——中易黑体是商业字体，授权不含随包再分发。
+  台账见 `CREDITS.md`，对外声明见 `THIRD-PARTY-NOTICES.txt`）
 - 截图：`shots/` 13 张（`game/heat/ghost/title/gameover/hud/asset_*/model_*/orient_cross/
   smoke_*`）→ **五图素材可直接从这批里选**
 

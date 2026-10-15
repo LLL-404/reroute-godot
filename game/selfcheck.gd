@@ -45,8 +45,15 @@ func run(main) -> int:
 		else:
 			_fail("音频缺失/不可解码：" + name)
 	_cmpi(loaded, ALL_MP3.size(), "19 个 mp3 打进包且可解码")
-	var font: FontFile = load("res://assets/fonts/simhei.ttf") as FontFile
-	_chk(font != null, "中文字体打进包")
+	# 原断言只查「能加载」——加载成功但字体缺 CJK 字形时会渲染成豆腐块，照样报绿。
+	# 改为实测关键字形存在性：Noto Sans SC（SIL OFL 1.1）覆盖常用汉字与标点。
+	var font: FontFile = load("res://assets/fonts/NotoSansSC-Regular.otf") as FontFile
+	var cjk_ok := font != null
+	if cjk_ok:
+		for c in "改道塔矿墙敌波金砂堆兽虫":
+			if not font.has_char(c.unicode_at(0)):
+				cjk_ok = false
+	_chk(cjk_ok, "中文字体打进包且关键字形存在（非豆腐块）")
 
 	# ---- 1b. 真实模型资产（glb）打进包 ----
 	var model_paths := [

@@ -102,9 +102,11 @@ func build(cb: Dictionary) -> void:
 		{ "key": "hero", "label": "英雄" },
 	]
 
-	# 字体主题（Godot 默认字体无 CJK 字形，必须装中文字体；发布前可换开源字体）
+	# 字体主题（Godot 默认字体无 CJK 字形，必须装中文字体）
+	# 用 Noto Sans SC（SIL OFL 1.1，许可证随包见 assets/fonts/OFL.txt）。
+	# 不可用 SimHei / 微软雅黑等系统商业字体：其授权不含随软件再分发。见 CREDITS.md R-1。
 	var theme := Theme.new()
-	var font: FontFile = load("res://assets/fonts/simhei.ttf")
+	var font: FontFile = load("res://assets/fonts/NotoSansSC-Regular.otf")
 	theme.default_font = font
 	theme.default_font_size = int(11 * S)
 	self.theme = theme
