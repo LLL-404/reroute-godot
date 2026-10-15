@@ -473,7 +473,11 @@ reroute-godot/
 │   └─ golden_baseline.gd   16 个黄金指纹（**冻结数据**）
 ├─ game/                    表现层（只读模拟状态）
 │   ├─ main.gd              主循环 / 输入分发 / 对局生命周期
-│   ├─ view.gd              3D 渲染 / 拾取 / 相机 / 实体同步 / 音频
+│   ├─ view.gd              3D 视图门面：_ready 组装 + 公共面转发（D5-1 拆分）
+│   ├─ view_core.gd         视图基建：格子坐标 / 相机取景 / 世界→屏幕
+│   ├─ view_terrain.gd      蓝图地貌：柱带 / 环带 / 热层 / 拾取
+│   ├─ view_entities.gd     实体视觉：单位 / 建筑 / 英雄 / 死亡 / 幽灵
+│   ├─ view_audio.gd        音频：SFX 池 / 环境音 / BGM
 │   ├─ models.gd            真实资产（glb）实例管理
 │   ├─ blueprint.gd         程序化地形蓝图（**视图种子与仿真隔离**）
 │   ├─ hud.gd               顶栏 / 模式列 / 技能 / 横幅 / 赏金浮字
@@ -501,14 +505,18 @@ game/  ←──  tests/probes/    （探针驱动表现层与整机）
 - `sim/` **禁止** `require`/`preload` 任何 `game/` 下的文件。
 - `game/` 只允许调用 `World` / `Grid` / `FlowField` / `Scenario` / `Sim` 的**只读**
   成员；唯一的写路径是 `main.gd` 调 `world.apply_command(...)`。
-- `view.gd` 的插值缓存（`unit_nodes` 里的 `px/py`、`death_fx`、`_height_rev` 等）
+- `view_entities.gd` 的插值缓存（`unit_nodes` 里的 `px/py`、`death_fx`、`_height_rev` 等）
   是**派生态**，绝不进指纹。
 
-### 4.3 各模块职责与规模（2026-10-14 实测行数）
+### 4.3 各模块职责与规模（2026-10-14 实测行数；`view*` 为 2026-10-15 D5-1 拆分后实测）
 
 | 文件 | 行数 | 职责 | 备注 |
 |---|---:|---|---|
-| `game/view.gd` | 960 | 渲染/拾取/相机/实体/音频 | ⚠️ 逼近拆分阈值，见 §7.9 D6-1 |
+| `game/view_entities.gd` | 418 | 单位/建筑/英雄/死亡/幽灵视觉同步 | D5-1 拆分（2026-10-15） |
+| `game/view_core.gd` | 246 | 格子坐标/相机取景/渲染基建 | D5-1 拆分（2026-10-15） |
+| `game/view_terrain.gd` | 243 | 蓝图/柱带/环带/热层/拾取 | D5-1 拆分（2026-10-15） |
+| `game/view.gd` | 206 | 视图门面：_ready 组装 + 公共面转发 | D5-1 拆分（2026-10-15） |
+| `game/view_audio.gd` | 116 | SFX 池/环境音/BGM | D5-1 拆分（2026-10-15） |
 | `game/hud.gd` | 581 | HUD 全部控件 | |
 | `sim/world.gd` | 576 | 世界状态机 | 核心，改动需最高谨慎 |
 | `tests/test_world.gd` | 481 | world 单测 35 例 | |
@@ -646,7 +654,7 @@ g.height_rev : int          # 仅高度版本（视图地面重建用）
 ### 6.3 表现层接口
 
 ```gdscript
-# view.gd（节点：Main/View）
+# view.gd（节点：Main/View；D5-1 拆分后为门面——组装 + 转发，实现见 view_core/_terrain/_entities/_audio）
 view.apply_blueprint(bp, seed)     # 换蓝图（每局一次）
 view.build_terrain(grid)           # 铺动态内容（每局一次）
 view.sync(world)                   # 每帧
@@ -727,7 +735,7 @@ shell.handle_key(keycode) -> bool  # 返回 true = 已消费
 | **D2**（10-16） | 双端可玩包 + 首次真人试玩 + **日志 ③** | ⏳ |
 | **D3**（10-17） | 数值定稿 + 缺陷全修（E/B/C）+ **一次性重录基线** + **日志 ④** | ⏳ |
 | **D4**（10-18） | **双端包提交**（官方建议点）+ **日志 ⑤** | ⏳ |
-| **D5**（10-19） | 结构整理（`view.gd` 拆分 / 探针规整） | ⏳ |
+| **D5**（10-19） | 结构整理（`view.gd` 拆分 / 探针规整） | ⏳（D5-1 ✅ 2026-10-15） |
 | **D6**（10-20） | 缺陷 A/D + 全闸重跑 + 终版包 | ⏳ |
 | **D7**（10-21） | 终版补传 + 投稿材料（视频/录屏/截图/AI 声明）+ 合规核对 | ⏳ |
 
@@ -904,7 +912,7 @@ HUD 全部控件、标题/暂停/结算三屏、三件套音频、真实 glb 资
 
 | 任务 | 范围 | 验收 |
 |---|---|---|
-| D5-1 `view.gd` 拆分 | 960 行 → `view_core`（坐标/相机/拾取）+ `view_terrain`（蓝图/柱带/环带/热层）+ `view_entities`（单位/建筑/英雄/死亡/幽灵）+ `view_audio`。**纯搬移，零行为变化** | 拆分前后 `probe_sync` 输出逐字节一致（1749 断言、`match=100`） |
+| D5-1 `view.gd` 拆分 | 972 行 → `view.gd` 门面 + `view_core`（坐标/相机/渲染基建）+ `view_terrain`（蓝图/柱带/环带/热层/拾取）+ `view_entities`（单位/建筑/英雄/死亡/幽灵）+ `view_audio`（SFX/BGM）。**纯搬移，零行为变化** | ✅ 2026-10-15 完成：拆分前后 `probe_sync` 输出逐字节一致（1749 断言、`match=100`、SHA256 一致）；全 19 闸 post 比照 pre 全绿 |
 | D5-2 探针规整 | 统一输出格式、抽公共夹具（`_chk`/`_cmp` 重复实现在 10+ 个文件里）、补文件头注释。**允许改断言，但每条改动必须在提交信息里写明「原断言为何是错的」**（规范见 §9.5） | 全闸绿；提交信息含逐条断言变更说明 |
 | D5-3 拖拽预览逐格绘制 | `view.show_ghost` 目前把首尾格画成**单个矩形**，斜线会覆盖非目标格 | `probe_sync` 增加斜线 ghost 断言；目视截图确认 |
 | D5-4 窗口缩放一致性 | HUD 的 `S` 只在 `build()` 算一次，窗口变化时 `_layout()` 只重排不重算比例 | 新增断言：改变视口尺寸后 `S` 与 `hit_regions()` 同步更新 |
@@ -936,7 +944,7 @@ HUD 全部控件、标题/暂停/结算三屏、三件套音频、真实 glb 资
 按此顺序放弃，**不要临时自行决定**：
 
 1. **探针规整（D5-2）** —— 不影响交付物，最先砍
-2. **`view.gd` 拆分（D5-1）** —— 同上
+2. **`view.gd` 拆分（D5-1）** —— 同上（**已完成 2026-10-15，本项失效**）
 3. **拖拽预览逐格（D5-3）/ 窗口缩放（D5-4）** —— 观感问题，不影响能否交
 4. **缺陷 A / D** —— 留档，但注意 A 影响基线的诚实性，能修尽量修
 5. **Android 整体** —— 退为单端 PC 提交（保住交付，**放弃双端奖 ¥80,000**）
@@ -1047,7 +1055,7 @@ HUD 全部控件、标题/暂停/结算三屏、三件套音频、真实 glb 资
 |---|---|
 | `sim/**` | 单测 + 全部 headless 探针 + `probe_golden` |
 | `game/main.gd` | `probe_input` + `probe_ui_flow` + `probe_smoke` + `probe_touch` |
-| `game/view.gd` | `probe_sync` + `probe_scene` + `probe_shots`/`check_shots` |
+| `game/view.gd` / `game/view_*.gd` | `probe_sync` + `probe_scene` + `probe_shots`/`check_shots` |
 | `game/hud.gd` / `screens.gd` | `probe_hud` + `probe_ui_flow` + `probe_touch`（触屏可点） |
 | `assets/**` | `probe_asset` + `probe_model` + `selfcheck` |
 | `tests/**` | 单测 |
@@ -1090,9 +1098,9 @@ Android 额外确认：
 
 | # | 问题 | 位置 | 修复 |
 |---|---|---|---|
-| 1 | 视图地面柱带不含 sim 高度，与 `ground_y` 口径不一致（单位「浮」在柱顶之上） | `view.gd _rebuild_field` | 柱高改为 `field_h + grid.get_h * H_STEP` |
-| 2 | 改高检测用「高度总和」，**等量反向改高（+1/−1）漏检**，地貌不刷新 | `view.gd sync` | 新增 `Grid.height_rev`，按版本号触发 |
-| 3 | 改高走 `build_terrain()` 全量重建，**清空单位/建筑视觉缓存** | `view.gd sync` | 只调 `_rebuild_field()` |
+| 1 | 视图地面柱带不含 sim 高度，与 `ground_y` 口径不一致（单位「浮」在柱顶之上） | `view_terrain.gd _rebuild_field` | 柱高改为 `field_h + grid.get_h * H_STEP` |
+| 2 | 改高检测用「高度总和」，**等量反向改高（+1/−1）漏检**，地貌不刷新 | `view_entities.gd sync` | 新增 `Grid.height_rev`，按版本号触发 |
+| 3 | 改高走 `build_terrain()` 全量重建，**清空单位/建筑视觉缓存** | `view_entities.gd sync` | 只调 `_rebuild_field()` |
 | 4 | 重开一局只重置 `heat_on` 标志，热层网格与 HUD 按钮不熄灭 | `main.gd new_game` | 补 `view.set_heat(false)` + `hud.set_heat_vis(false)` |
 | 5 | 建造预览（幽灵）不检查英雄占格，模拟层却拒建 → 预览显示绿色但点击无效 | `main.gd mode_valid` | 补英雄占格守卫 |
 | 6 | `set_mode` 有两条路径，HUD 高亮可能不同步 | `main.gd` | 统一走 `set_mode()` |
@@ -1376,7 +1384,7 @@ P="D:/G/game/games/reroute-godot"
 
 # 2. 读代码顺序
 sim/sim.gd → sim/scenario.gd → sim/grid.gd → sim/flowfield.gd → sim/world.gd
-→ game/main.gd → game/view.gd → game/hud.gd → game/screens.gd
+→ game/main.gd → game/view.gd → game/view_*.gd → game/hud.gd → game/screens.gd
 
 # 3. 改完再跑一遍第 1 步，外加受影响的闸（见 §9.3）
 ```

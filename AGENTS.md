@@ -13,7 +13,7 @@ Engineering 保真度极高：模拟核心是**确定性**的，有 16 指纹黄
 | 路径 | 管什么 |
 |---|---|
 | `sim/` | 模拟核心十模块，纯逻辑、**无浮点、无渲染**：`lua64`(语义 shim) / `canon` / `rng` / `grid` / `flowfield` / `scenario` / `sim`(数值表) / `world` / `verify` / `golden_baseline` |
-| `game/` | 表现层，只读模拟：`main`(主循环/输入) / `view`(3D) / `models` / `blueprint` / `hud` / `screens` / `selfcheck` |
+| `game/` | 表现层，只读模拟：`main`(主循环/输入) / `view`(3D 门面) + 组件 `view_core`/`view_terrain`/`view_entities`/`view_audio`（D5-1 拆分 2026-10-15） / `models` / `blueprint` / `hud` / `screens` / `selfcheck` |
 | `tests/` | 单测 83 例 + **17 个验收探针**（`tests/probes/`） |
 | `tools/` | Python 工具：`check_shots.py` / `convert_all.py` / `umd2_to_gltf.py` / `verify_glb.py` |
 | `assets/` | `audio/sfx`(19 mp3) / `fonts`(Noto Sans SC) / `models`(glb) |
@@ -30,8 +30,8 @@ game/  ←──  tests/probes/    （探针驱动表现层与整机）
 ```
 
 - `sim/` **禁止** `require`/`preload` 任何 `game/` 下的文件。
-- 唯一的写路径是 `main.gd` 调 `world.apply_command(...)`；`view.gd` 绝对不许回写模拟状态。
-- `view.gd` 的插值缓存（`unit_nodes` 的 `px/py`、`death_fx`、`_height_rev`）是派生态，**不进指纹**。
+- 唯一的写路径是 `main.gd` 调 `world.apply_command(...)`；`view.gd` 及其四组件绝对不许回写模拟状态。
+- `view_entities.gd` 的插值缓存（`unit_nodes` 的 `px/py`、`death_fx`、`_height_rev`）是派生态，**不进指纹**。
 - 白盒直写（`w.supply = ...`）只允许出现在 `tests/`，生产代码禁止。
 
 ## 三、跑闸（先读这个再动手）
@@ -109,10 +109,10 @@ python tools/check_shots.py    # 截图像素校验
 
 ## 九、已知待办
 
-- `view.gd` 960 行逼近拆分阈值。**拆分方案已设计但本次未执行**（发现它会打断 40 处探针字段
-  访问，需同步改探针路径）。若要拆：`view_core`(坐标/相机/拾取) + `view_terrain`
-  (蓝图/柱带/环带/热层) + `view_entities`(单位/建筑/英雄/死亡/幽灵) + `view_audio`，
-  并同步更新探针里 `view.xxx` 的访问路径。验收仍以 `probe_sync` 输出逐字节一致为准。
+- `view.gd` 拆分（D5-1）**已完成（2026-10-15）**：972 行 → 206 行门面（`_ready` 组装 + 公共面转发）
+  + 四组件 `view_core`(246) / `view_terrain`(243) / `view_entities`(418) / `view_audio`(116)。
+  机制 = 组合 + 转发属性，外部 `view.xxx` 访问零变化、探针无需改路径；验收 = 拆分前后
+  `probe_sync` 输出逐字节一致（已通过：SHA256 相同；全 19 闸 post 比照 pre 全绿）。
 - 历史审计报告（`docs/*-20261015.md`）按**快照原则保持原样**，不要顺着结构整理去改它们。
 
 ---
