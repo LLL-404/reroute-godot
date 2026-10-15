@@ -297,7 +297,7 @@
 
 | 编号 | 目标 | 判据 |
 |---|---|---|
-| G1 | 一局 4–6 分钟，20Hz 固定步长，全程确定性可复现 | 黄金回放 16 指纹逐位一致 |
+| G1 | 一局 4–6 分钟，20Hz 固定步长，全程确定性可复现 | 黄金回放 12 指纹逐位一致（2026-10-15 重录） |
 | G2 | 玩家所有状态变更只经 `World.apply_command` | 非法命令零副作用（指纹不变） |
 | G3 | 表现层只读模拟状态，绝不回写 | `probe_sync` 视图/世界逐位对拍 |
 | G4 | 导出包可自证（资源齐备 + 核心正确 + 场景可建） | `--headless --selfcheck` exit 0 |
@@ -314,7 +314,7 @@
 - ❌ 不参评「最佳 TapTap 制造奖」（本作非制造平台作品，无资格）
 - ❌ 不引入浮点进模拟层（sim/ 内禁 `float`/`sqrt`/三角函数，`FlowField` 纯整数）
 - ❌ 不让视图种子污染仿真种子（`blueprint.gd` 的种子必须与 `sim` 完全隔离）
-- ❌ 不擅自修改 `golden_baseline.gd` 的 16 个指纹值（见 §5.4 冻结纪律）
+- ❌ 不擅自修改 `golden_baseline.gd` 的 12 个指纹值（见 §5.4 冻结纪律）
 - ❌ 本轮不做 iOS / Web / Linux 导出
 - ❌ 本轮不做手柄支持（Android 只做触屏）
 
@@ -326,8 +326,8 @@
 
 | 项 | 证据 | 命令 |
 |---|---|---|
-| 单测 83 例全绿 | `[UNIT-DONE] passed=83 failed=0` + `[UNIT-ALL-GREEN]` | `<godot> --headless --path <P> -s res://tests/run_tests.gd` |
-| 黄金回放 16 指纹逐位一致 | `[GOLDEN] checks=2 bad=0` + `[GOLDEN] PASS` | `<godot> --headless --path <P> -s res://tests/probes/probe_golden.gd` |
+| 单测 88 例全绿 | `[UNIT-DONE] passed=88 failed=0` + `[UNIT-ALL-GREEN]` | `<godot> --headless --path <P> -s res://tests/run_tests.gd` |
+| 黄金回放 12 指纹逐位一致 | `[GOLDEN] checks=2 bad=0` + `[GOLDEN] PASS` | `<godot> --headless --path <P> -s res://tests/probes/probe_golden.gd` |
 | 主场景构建对拍 | `[SCENE] checks=6 bad=0` + `[SCENE] PASS`（field=2304 ring=4384 solids=338/338 covers=23/23 对拍） | `<godot> --headless --path <P> -s res://tests/probes/probe_scene.gd` |
 | 视觉同步逐位对拍 1773 断言 | `[SYNC] checks=1773 bad=0 moved=42 match=100` | `<godot> --path <P> -s res://tests/probes/probe_sync.gd`（**窗口模式**） |
 | 输入闭环 41 断言 | `[INPUT] checks=41 bad=0` | `<godot> --path <P> -s res://tests/probes/probe_input.gd`（**窗口模式**） |
@@ -470,7 +470,7 @@ reroute-godot/
 │   ├─ sim.gd               数值表（建筑/敌军/英雄/常量）
 │   ├─ world.gd             世界状态机（唯一变更入口）
 │   ├─ verify.gd            验证闸宿主（黄金回放 + 不变式看门狗 + 冻结自证）
-│   └─ golden_baseline.gd   16 个黄金指纹（**冻结数据**）
+│   └─ golden_baseline.gd   12 个黄金指纹（**冻结数据**）
 ├─ game/                    表现层（只读模拟状态）
 │   ├─ main.gd              主循环 / 输入分发 / 对局生命周期
 │   ├─ view.gd              3D 视图门面：_ready 组装 + 公共面转发（D5-1 拆分）
@@ -483,7 +483,7 @@ reroute-godot/
 │   ├─ hud.gd               顶栏 / 模式列 / 技能 / 横幅 / 赏金浮字
 │   ├─ screens.gd           标题 / 暂停 / 结算三屏
 │   └─ selfcheck.gd         导出包自证
-├─ tests/                   单测（83 例）+ 验收探针
+├─ tests/                   单测（88 例）+ 验收探针
 │   ├─ kit.gd               记录式断言框架
 │   ├─ run_tests.gd         入口
 │   ├─ stub_scenario.gd     小图夹具（行为断言用）
@@ -570,7 +570,7 @@ game/  ←──  tests/probes/    （探针驱动表现层与整机）
 
 | 冻结物 | 位置 | 改动流程 |
 |---|---|---|
-| 16 个黄金指纹 | `sim/golden_baseline.gd` | 先说明为何必须改 → 重跑 `probe_golden` 采集新值 → 同一次提交里更新 `golden_baseline.gd` 与决策记录 |
+| 12 个黄金指纹 | `sim/golden_baseline.gd` | 先说明为何必须改 → 重跑 `probe_golden` 采集新值 → 同一次提交里更新 `golden_baseline.gd` 与决策记录 |
 | 剧本指纹 `0x12715062` | `Scenario.fingerprint()` | 改地图/波次/高度夹具后必须换基线 |
 | `STATE_SCHEMA = 5` | `canon.gd` / `world.canonical_bytes()` | 改编码字段 = 升 schema 号 + 换基线 |
 
@@ -769,7 +769,7 @@ shell.handle_key(keycode) -> bool  # 返回 true = 已消费
 ### 7.2 S0–S2 已完成项（不要再重复实现）
 
 模拟核心：`lua64 / canon / rng / grid / flowfield / scenario / sim / world / verify /
-golden_baseline` 十模块 + 83 例单测。
+golden_baseline` 十模块 + 88 例单测。
 
 表现层：3D 视图与拾取、拖拽放墙（Bresenham，上限 12 格）、幽灵预览、威胁热层、
 HUD 全部控件、标题/暂停/结算三屏、三件套音频、真实 glb 资产接入（10 个模型）、
@@ -878,9 +878,9 @@ HUD 全部控件、标题/暂停/结算三屏、三件套音频、真实 glb 资
    或 WON 于 6400 tick 附近），`peak_units ≤ 60`；试玩者能复述核心规则。
    **定稿后即冻结，之后不允许再改 `sim/` 数值。**
 2. **缺陷全修**（§10.2）：按 E → B → C 顺序（最安全到最危险）。
-   A、D 若当天来不及，移到 D6。
+   A、D 若当天来不及，移到 D6。**（E 随 D5-4、A/B/C 已于 2026-10-15 提前修复并统一重录，见 §10.2 与 §11.5；D 留档。）**
 3. **一次性重录基线**：
-   - `sim/golden_baseline.gd` 的 16 指纹 → 用 `probe_golden` 采集新值
+   - `sim/golden_baseline.gd` 的黄金指纹（现 12 条）→ 用 `probe_golden` 采集新值
    - 剧本指纹（若地图/波次有改动）→ 用 `probe_scenario` 采集
    - `STATE_SCHEMA` 若编码字段有变 → 升号
 4. 更新所有依赖旧值的单测与探针断言。
@@ -1022,8 +1022,8 @@ HUD 全部控件、标题/暂停/结算三屏、三件套音频、真实 glb 资
 
 | 闸 | 命令 | 通过判据 | 需窗口 |
 |---|---|---|---|
-| 单测 | `run_tests.gd` | `passed=83 failed=0` + `[UNIT-ALL-GREEN]` | 否 |
-| 黄金回放 | `tests/probes/probe_golden.gd` | `[GOLDEN] checks=2 bad=0` + `PASS`（16 指纹） | 否 |
+| 单测 | `run_tests.gd` | `passed=88 failed=0` + `[UNIT-ALL-GREEN]` | 否 |
+| 黄金回放 | `tests/probes/probe_golden.gd` | `[GOLDEN] checks=2 bad=0` + `PASS`（12 指纹） | 否 |
 | 模拟模块 | `tests/probes/probe_{sim,grid,flow,scenario,world}.gd` | 各自 `[TAG] checks=N bad=0` + `PASS` | 否 |
 | 场景构建 | `tests/probes/probe_scene.gd` | `[SCENE] checks=6 bad=0` + `PASS`（field=2304 ring=4384 对拍） | 否 |
 | 视觉同步 | `tests/probes/probe_sync.gd` | `[SYNC] PASS match=100 bad=0` | **是** |
@@ -1112,16 +1112,18 @@ Android 额外确认：
 
 | # | 问题 | 位置 | 修法 |
 |---|---|---|---|
-| A | 黄金命令表**未按 tick 排序**：[1150..1195] 与 [30..461] 的条目排在 5600 之后，执行器只顺序消费 → 这些命令实际延后执行 | `verify.gd SCRIPT_COMMANDS` | ① 先补「命令实际执行 tick」测试；② 按 tick 稳定排序（同 tick 保持原相对序）；③ 重录 16 指纹 |
-| B | 流场距离上界 `max_d = 14*(w+h)+16 = 1360`，`push` 超界**静默丢弃**。蛇形长廊理论路径可达 `w*h*14 = 32256` | `flowfield.gd:44,130-132` | ① 加长廊单测暴露问题；② 上界改为可证明的值（或改可增长队列）；③ 若上界只增不减且现有地图未触及，指纹应不变——**必须实测确认** |
-| C | 摊销补场期间若再次改图，不会重新 `begin`，完成时却记录**最新** `grid.rev` → 可能把混合拓扑当已同步 | `world.gd:239-247` | 记录启动时的 rev；若中途 rev 变化则重启 `begin`。加「小预算连续改图」单测 |
-| D | 围攻目标与核心不连通时建筑评分保持 `INT64_MAX`，严格小于比较使邻接敌人选不到它（现有测试固定了「贴墙不啃」行为） | `world.gd:410-435` / `test_world.gd:233-254` | 先明确设计意图（敌人该不该啃全围死的建筑），再改评分与断言。**时间不够可砍（见 §7.11）** |
-| E | HUD 的 `S` 只在 `build()` 算一次，窗口缩放后比例不重算 | `hud.gd:91-92,300-306` | `_layout()` 内重算 `S` 并刷新字体/控件尺寸。纯表现层，**不影响指纹** |
+| A | 黄金命令表**未按 tick 排序**：[1150..1195] 与 [30..461] 的条目排在 5600 之后，执行器只顺序消费 → 这些命令实际延后执行 | `verify.gd SCRIPT_COMMANDS` | ✅ 2026-10-15 完成：①新增 verify 单测 3 例（稳定排序 / 乱序≡有序 + 参照实现对拍 / 金表非降序回归锁）；②`Verify.sorted_commands()` 稳定排序防御 + `SCRIPT_COMMANDS` 重排（81 条、校验和 112773 不变）；③重录：命令按声明 tick 生效后世界于 tick 4926 核心被毁判负（LOST），指纹 16→12（tick 800 一条未变）。负对照 negctl_old_verify.out（2 例 FAIL）。证据 `logs/gates-20261015-d6abc/` |
+| B | 流场距离上界 `max_d = 14*(w+h)+16 = 1360`，`push` 超界**静默丢弃**。蛇形长廊理论路径可达 `w*h*14 = 32256` | `flowfield.gd:44,130-132` | ✅ 2026-10-15 完成：①新增单测 snake-corridor-beyond-old-bound（8×8 蛇形走廊远端 340 > 旧上界 240，旧实现必红）；②上界改为可证明值 `14×w×h`（最短路径不重复经过任何格）；③实测确认：现有地图未触及 → 当时 16 指纹逐字节不变（fingerprints_bc_unchanged.out）。负对照 negctl_old_flowfield.out |
+| C | 摊销补场期间若再次改图，不会重新 `begin`，完成时却记录**最新** `grid.rev` → 可能把混合拓扑当已同步 | `world.gd:239-247` | ✅ 2026-10-15 完成：新增 `rebuild_rev` 记录本轮 begin 的 rev，中途改图则整轮重启 begin，完成时 `field_rev = rebuild_rev`；新增单测 amortized-rebuild-restarts-on-midchange（小预算连续改图 → 与全量重建逐格对照 + 变墙格 -1）；实测指纹不变。负对照 negctl_old_world.out |
+| D | 围攻目标与核心不连通时建筑评分保持 `INT64_MAX`，严格小于比较使邻接敌人选不到它（现有测试固定了「贴墙不啃」行为） | `world.gd:410-435` / `test_world.gd:233-254` | ⏸ 留档（2026-10-15）：需先定设计意图（敌人该不该啃全围死的建筑），未动代码；时间不够可砍（见 §7.11） |
+| E | HUD 的 `S` 只在 `build()` 算一次，窗口缩放后比例不重算 | `hud.gd:91-92,300-306` | ✅ 2026-10-15 完成（D5-4）：`_layout()` 开头重算 `S`，布局与 `hit_regions()` 恒同步（缩放后点击排除不再错位）；`probe_hud` +7 断言（56→63），负对照 bad=4 FAIL。注：字号/按钮像素尺寸的缩放刷新不在验收范围（观感项，未做）。证据 `logs/gates-20261015-d54/` |
 
 **修复顺序**：E（最安全）→ B（加测试 + 上界）→ C（加测试 + 修竞态）→ A（排序 + 重录）
-→ D（需先定意图）。
+→ D（需先定意图）。**（2026-10-15 执行：E 随 D5-4，B → C → A 按序完成并统一重录；D 留档。）**
 
 **重录纪律**：A 必然改变 16 指纹；B/C 可能改变。**一次修完再统一重录，不要边修边重录。**
+（2026-10-15 执行结果：A 实际改变——指纹 16→12，世界提前于 tick 4926 判负；B/C 实测未改变任何指纹。
+已按纪律一次修完再统一重录，决策记录见 §11.5。）
 提交信息必须写明：为何必须重录、新旧值对照、受影响断言清单。
 
 ---
@@ -1348,6 +1350,26 @@ docs/DEVELOPMENT-PLAN.md | 新增  本文
 
 ---
 
+### 11.5 缺陷 A/B/C 修复与基线重录（2026-10-15，D6 缺陷段）
+
+**背景**：§10.2「本轮必修」执行。E 随 D5-4 修完；本次按 B → C → A 顺序修复，一次性重录基线。
+
+| 缺陷 | 修复 | 测试/负对照 | 指纹影响（实测） |
+|---|---|---|---|
+| B 流场上界 | `max_d` 由 `14×(w+h)+16` 改为可证明值 `14×w×h`（最短路径不重复格） | 新单测 `snake-corridor-beyond-old-bound`（旧实现必红） | **不变**（现有地图未触及旧上界） |
+| C 摊销竞态 | 新增 `rebuild_rev`；补场中途改图则整轮重启 `begin` | 新单测 `amortized-rebuild-restarts-on-midchange`（与全量重建逐格对照） | **不变**（实测） |
+| A 命令排序 | `Verify.sorted_commands()` 稳定排序防御 + `SCRIPT_COMMANDS` 按 tick 重排（81 条不变） | 新单测 3 例（含「声明 tick 生效」参照实现对拍 + 金表有序性回归锁） | **改变**：世界于 tick 4926 核心被毁判负（LOST），指纹 **16→12**（400..4800；tick 800 一条未变） |
+
+**为何必须重录**：A 修复前 [1150..1195] 与 [30..461] 段命令实际延后到 ~5600 后才执行（数组序 ≠ tick 序），
+16 条指纹记录的是「错误时序」下的行为；修复后命令按声明 tick 生效，世界提前判负，旧 16 条基线不再可达。
+
+**受影响断言清单**：`golden_baseline.gd FPS`（16→12 条，头部注释含决策记录）、`probe_golden`（按 FPS.size() 逐条比对）、
+`selfcheck.gd` 文案、单测 83→88（新增 5 例）、其余 15 闸输出逐字节一致（`logs/gates-20261015-d6abc/_cmp-d54.txt`）。
+
+**证据**：`logs/gates-20261015-d6abc/`（post 全闸 19 绿 + 3 份负对照 + B/C 并跑指纹不变实测 + 重录原始输出）。
+
+---
+
 ## 12. AI 任务卡模板（派活时照抄）
 
 ```markdown
@@ -1359,7 +1381,7 @@ docs/DEVELOPMENT-PLAN.md | 新增  本文
             除非任务本身就是 D4 的重录>
 - 实现要求：<引用 §5 相关条款>
 - 验收命令（注意哪些必须窗口模式，见 §2.1）：
-    <godot> --headless --path <P> -s res://tests/run_tests.gd      # 期望 passed=83 failed=0
+    <godot> --headless --path <P> -s res://tests/run_tests.gd      # 期望 passed=88 failed=0
     <godot> --path <P> -s res://tests/probes/probe_xxx.gd                       # 期望 [XXX] PASS
 - 证据要求：stdout 原文 + exit code + （涉及画面时）截图且必须目视
 - 失败预案：<该任务在 §7.11 砍单顺序里的位置>

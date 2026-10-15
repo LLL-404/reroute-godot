@@ -1,7 +1,7 @@
 extends SceneTree
 
 # 单测入口（cwd=reroute-godot）：godot --headless -s res://tests/run_tests.gd
-# 保真闸（rng 向量 / FNV 锚点 / 流场语义）+ 六模块用例。exit 0 = 全绿。
+# 保真闸（rng 向量 / FNV 锚点 / 流场语义）+ 七模块用例。exit 0 = 全绿。
 func _initialize() -> void:
 	var kit := TestKit.new()
 
@@ -27,6 +27,7 @@ func _initialize() -> void:
 	preload("res://tests/test_flowfield.gd").new().register(kit)
 	preload("res://tests/test_scenario.gd").new().register(kit)
 	preload("res://tests/test_world.gd").new().register(kit)
+	preload("res://tests/test_verify.gd").new().register(kit)
 
 	var ok := kit.run()
 	quit(0 if ok else 1)

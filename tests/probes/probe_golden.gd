@@ -1,6 +1,6 @@
 extends ProbeKit
 
-# R7 验证探针：黄金回放（C3）——GDScript sim 核逐位复现引擎录制的 16 个基线指纹。
+# R7 验证探针：黄金回放（C3）——GDScript sim 核逐位复现引擎录制的黄金基线指纹（12 条）。
 # 判定：exit 0 + stdout 含 `[GOLDEN] PASS`。
 
 

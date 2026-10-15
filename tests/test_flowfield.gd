@@ -180,3 +180,22 @@ func register(kit: TestKit) -> void:
 		f.begin([Vector2i(2, 0)])
 		_run_full(f)
 		kit.eq(f.dist_at(0, 0), 20, "英雄场无视高度：翻崖可达"))
+
+	kit.test("snake-corridor-beyond-old-bound", func():
+		# 蛇形单宽长廊：8×8 图中 y=0/2/4/6 整行 + 连接格 (7,1) (0,3) (7,5) 可通行，其余实心。
+		# 全程无对角捷径 → 每步直行 10；路径 35 格 → 最远格 34×10 = 340。
+		# 回归锁：旧上界 14×(8+8)+16 = 240 被突破后 push 静默丢弃 → 远端 -1（本测试必红）。
+		var g := Grid.new(8, 8)
+		for y in 8:
+			if y % 2 == 1:
+				for x in 8:
+					g.set_cell(x, y, Grid.SOLID)
+		g.set_cell(7, 1, Grid.OPEN)
+		g.set_cell(0, 3, Grid.OPEN)
+		g.set_cell(7, 5, Grid.OPEN)
+		var f := FlowField.new(g)
+		f.begin([Vector2i(0, 0)])
+		_run_full(f)
+		kit.eq(f.dist_at(0, 6), 340, "长廊最远端 = 34 步 ×10")
+		kit.eq(f.dist_at(7, 0), 70, "长廊近端 7 步")
+		kit.eq(f.dist_at(1, 1), -1, "墙格不可达"))

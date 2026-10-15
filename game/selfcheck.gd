@@ -2,7 +2,7 @@ extends RefCounted
 
 # 导出包自证（C8）：`--headless --selfcheck` 触发（main.gd _ready 尾部调用）。
 # 断言链：引擎/构建模式 → 资源齐备（19 mp3 + CJK 字体打进包）→ sim 核心黄金回放
-# 16 指纹逐位一致（含不变式看门狗与终局冻结自证）→ 确定性复跑 → 主场景构建完整
+# 12 指纹逐位一致（含不变式看门狗与终局冻结自证）→ 确定性复跑 → 主场景构建完整
 # （地形/相机/HUD/壳/世界）→ 音频接口 → tick 推进冒烟。
 # 输出 `[SELFCHECK] PASS` + exit 0；任一失败 `[SELFCHECK] FAIL` + exit 1。
 const ALL_MP3 := [
@@ -86,7 +86,7 @@ func run(main) -> int:
 		_chk(has_player, "blade 含 AnimationPlayer（骨架动画管线）")
 		inst0.free()
 
-	# ---- 2. sim 核心：黄金回放 16 指纹（含不变式 + 冻结自证）+ 确定性复跑 ----
+	# ---- 2. sim 核心：黄金回放（12 指纹，含不变式 + 冻结自证）+ 确定性复跑 ----
 	var samples: Array = []
 	var golden_ok := false
 	var res: Array = Verify.run_world(Scenario.new(), GoldenBaseline.SEED, Verify.SCRIPT_COMMANDS, GoldenBaseline.EVERY, true)
@@ -103,7 +103,7 @@ func run(main) -> int:
 			if int(got[0]) != int(want[0]) or String(got[1]) != String(want[1]):
 				mism += 1
 				_fail("指纹失配 tick %d：得 %s 期 %s" % [int(want[0]), str(got[1]), str(want[1])])
-		_cmpi(mism, 0, "16 指纹逐位一致（引擎黄金基线）")
+		_cmpi(mism, 0, "黄金指纹逐位一致（引擎黄金基线）")
 	if golden_ok:
 		var res2: Array = Verify.run_world(Scenario.new(), GoldenBaseline.SEED, Verify.SCRIPT_COMMANDS, GoldenBaseline.EVERY, false)
 		if res2[1] != "":

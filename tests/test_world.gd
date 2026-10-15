@@ -479,3 +479,29 @@ func register(kit: TestKit) -> void:
 		kit.eq(w.units.size(), 2, "阵亡单位被清")
 		kit.eq(w.units[0]["id"], 1, "存活顺序 = id 升序")
 		kit.eq(w.units[1]["id"], 3, "存活顺序 = id 升序"))
+
+	kit.test("amortized-rebuild-restarts-on-midchange", func():
+		# 小预算摊销补场进行中连续改图：旧实现续用旧拓扑已定稿的距离，
+		# 完成时却把 field_rev 记成最新 rev（谎报已同步）。用「与全量重建逐格对照」锁死。
+		var w := World.new(StubScenario.new({ "size": 12 }), 7, 4)
+		w.supply = 999999
+		w.try_build(Sim.B_WALL, 7, 7) # 触发摊销（远离核心，不影响近端定稿区）
+		w.tick()
+		kit.ok(w.rebuilding, "小预算下摊销仍在进行")
+		w.try_build(Sim.B_WALL, 1, 0) # 中途改图：墙落进已定稿区（上 tick 已定稿 (0,0)(0,1)(1,0)(1,1)）
+		w.tick()
+		w.try_build(Sim.B_WALL, 0, 2) # 连续改图
+		while w.rebuilding:
+			w.tick()
+		kit.eq(w.field_rev, w.grid.rev, "完成后 field_rev = 当前 rev")
+		kit.eq(w.field.dist_at(1, 0), -1, "中途变墙的格不可达（旧实现残留 10）")
+		var ref := FlowField.new(w.grid)
+		ref.begin(w.field_goals)
+		while not ref.done():
+			ref.step(1 << 30)
+		var same := true
+		for i in ref.dist.size():
+			if ref.dist[i] != w.field.dist[i]:
+				same = false
+				break
+		kit.ok(same, "摊销结果与全量重建逐格一致"))

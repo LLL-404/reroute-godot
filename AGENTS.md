@@ -4,7 +4,7 @@
 > **速查表与红线**，不复制权威文档内容；冲突时以方案为准。
 
 48×48 塔防，核心机制「放墙改道」：敌人绕得越远、死时赏金越高（`reward + traveled>>3`）。
-Engineering 保真度极高：模拟核心是**确定性**的，有 16 指纹黄金基线锁死行为。
+Engineering 保真度极高：模拟核心是**确定性**的，有 12 指纹黄金基线锁死行为（2026-10-15 缺陷 A 重录）。
 
 ---
 
@@ -14,7 +14,7 @@ Engineering 保真度极高：模拟核心是**确定性**的，有 16 指纹黄
 |---|---|
 | `sim/` | 模拟核心十模块，纯逻辑、**无浮点、无渲染**：`lua64`(语义 shim) / `canon` / `rng` / `grid` / `flowfield` / `scenario` / `sim`(数值表) / `world` / `verify` / `golden_baseline` |
 | `game/` | 表现层，只读模拟：`main`(主循环/输入) / `view`(3D 门面) + 组件 `view_core`/`view_terrain`/`view_entities`/`view_audio`（D5-1 拆分 2026-10-15） / `models` / `blueprint` / `hud` / `screens` / `selfcheck` |
-| `tests/` | 单测 83 例 + **17 个验收探针**（`tests/probes/`，公共夹具 `probe_kit.gd`，D5-2 2026-10-15） |
+| `tests/` | 单测 88 例 + **17 个验收探针**（`tests/probes/`，公共夹具 `probe_kit.gd`，D5-2 2026-10-15） |
 | `tools/` | Python 工具：`check_shots.py` / `convert_all.py` / `umd2_to_gltf.py` / `verify_glb.py` |
 | `assets/` | `audio/sfx`(19 mp3) / `fonts`(Noto Sans SC) / `models`(glb) |
 | `docs/` | 开发方案（权威）、审计报告、`devlogs/` |
@@ -41,7 +41,7 @@ GODOT="D:/G/game/Godot_v4.7.2-stable_mono_win64/Godot_v4.7.2-stable_mono_win64_c
 P="D:/G/game/games/reroute-godot"
 
 # headless 安全：单测 + 模拟模块探针 + 场景构建
-"$GODOT" --headless --path "$P" -s res://tests/run_tests.gd                    # 83 单测
+"$GODOT" --headless --path "$P" -s res://tests/run_tests.gd                    # 88 单测
 for p in golden scene sim grid flow scenario world; do
   "$GODOT" --headless --path "$P" -s res://tests/probes/probe_$p.gd
 done
@@ -75,7 +75,7 @@ python tools/check_shots.py    # 截图像素校验
 
 | 冻结物 | 位置 |
 |---|---|
-| 16 个黄金指纹 | `sim/golden_baseline.gd` |
+| 12 个黄金指纹 | `sim/golden_baseline.gd` |
 | 剧本指纹 `0x12715062` | `Scenario.fingerprint()` |
 | `STATE_SCHEMA = 5` | `canon.gd` / `world.canonical_bytes()` |
 
@@ -125,6 +125,12 @@ python tools/check_shots.py    # 截图像素校验
 - 窗口缩放一致性（D5-4）**已完成（2026-10-15）**：`hud._layout()` 开头重算 `S`
   （布局与 `hit_regions()` 均取当前视口、恒同步，缩放后点击排除不再错位）；
   `probe_hud` 新增缩放断言 7 条（checks 56→63），负对照实跑（旧 hud + 新断言 = `bad=4 FAIL`）。
+- 缺陷 A/B/C 修复 + 基线重录（2026-10-15，D6 缺陷段）**已完成**：A=`verify.gd` 命令表按 tick
+  稳定排序（`sorted_commands` 防御 + `SCRIPT_COMMANDS` 重排，81 条不变）；B=`flowfield` 上界改
+  可证明值 `14×w×h`；C=`world` 摊销补场中途改图整轮重启（`rebuild_rev`）。新增单测 5 例（83→88）。
+  **重录结果：世界于 tick 4926 核心被毁判负，指纹 16→12；B/C 单独实测指纹不变。**
+  负对照 3 份 + 全 19 闸绿（证据 `logs/gates-20261015-d6abc/`，含 `_cmp-d54.txt`）；
+  决策记录 = `golden_baseline.gd` 头注释 + 方案 §11.5。缺陷 D（围攻评分）留档待设计意图。
 - 历史审计报告（`docs/*-20261015.md`）按**快照原则保持原样**，不要顺着结构整理去改它们。
 
 ---

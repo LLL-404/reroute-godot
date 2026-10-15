@@ -31,7 +31,7 @@ P="D:/G/game/games/reroute-godot"
 
 # 全部自动化闸（窗口模式的必须去掉 --headless）
 "$GODOT" --headless --path "$P" -s res://tests/run_tests.gd   # 83 单测
-"$GODOT" --headless --path "$P" -s res://tests/probes/probe_golden.gd      # 黄金回放 16 指纹
+"$GODOT" --headless --path "$P" -s res://tests/probes/probe_golden.gd      # 黄金回放 12 指纹
 "$GODOT" --headless --path "$P" -s res://tests/probes/probe_scene.gd       # 主场景构建
 "$GODOT" --path "$P" -s res://tests/probes/probe_sync.gd                   # 视觉同步对拍
 "$GODOT" --path "$P" -s res://tests/probes/probe_input.gd                  # 输入闭环
@@ -80,5 +80,5 @@ P="D:/G/game/games/reroute-godot"
 6. **语义 shim**（`sim/lua64.gd`）：`%` 截尾→`mod`（向下取整）、无 `//`→`idiv`、
    `>>` 算术移→`lshr`（逻辑移）。`*`/`+`/`<<`/位运算回绕与 Lua 一致，直译。
 7. **数组原地 compact**（`arr[i]=arr[j]` + `resize`）触发类型错误→建新数组。
-8. **基线冻结**：`sim/golden_baseline.gd` 的 16 指纹、剧本指纹 `0x12715062`、
+8. **基线冻结**：`sim/golden_baseline.gd` 的 12 指纹、剧本指纹 `0x12715062`、
    `STATE_SCHEMA=5` 都是判据。改动必须走「记录 + 重录」流程，**禁止为了修绿探针而改基线**。

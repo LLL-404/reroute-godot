@@ -41,7 +41,9 @@ func _init(pgrid: Grid, pignore_h: bool = false) -> void:
 	for i in pad_n:
 		dist.append(-1)
 		settled.append(0)
-	max_d = DIAGONAL * (grid.w + grid.h) + 16 # 距离上界：对角最大步数 ×14 + 余量
+	# 距离上界（可证明）：最短路径绝不重复经过任一格（边权恒正）→ 至多 w*h−1 步 ×14。
+	# 旧值 14×(w+h)+16 曾被蛇形长廊型地图突破而被 push 静默丢弃（见单测 snake-corridor）。
+	max_d = DIAGONAL * grid.w * grid.h
 	head = []
 	for d in max_d + 1:
 		head.append(-1)

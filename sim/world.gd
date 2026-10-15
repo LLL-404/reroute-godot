@@ -38,6 +38,7 @@ var field: FlowField
 var field_goals: Array
 var field_rev: int
 var rebuilding: bool
+var rebuild_rev: int # 本轮摊销 begin 时的 grid.rev（中途变则整轮重启）
 
 # 围攻场
 var siege: FlowField
@@ -97,6 +98,7 @@ func _rebuild_field_sync() -> void:
 	while not field.done():
 		field.step(1 << 30)
 	field_rev = grid.rev
+	rebuild_rev = grid.rev
 	rebuilding = false
 
 
@@ -244,15 +246,19 @@ func tick() -> void:
 		return
 	tick_count += 1
 
-	# ① 摊销补场
+	# ① 摊销补场：补场中途改图（rev 变化）则整轮重启 begin——
+	# 旧拓扑下已定稿的距离不能冒充当前拓扑的结果（否则完成时 field_rev 会谎报已同步）
+	if rebuilding and grid.rev != rebuild_rev:
+		rebuilding = false
 	if grid.rev != field_rev or rebuilding:
 		if not rebuilding:
 			field.begin(field_goals)
 			rebuilding = true
+			rebuild_rev = grid.rev
 		field.step(rebuild_budget) # 每 tick 固定预算，跨 tick 续跑
 		if field.done():
 			rebuilding = false
-			field_rev = grid.rev
+			field_rev = rebuild_rev
 
 	run_waves()
 	move_units()

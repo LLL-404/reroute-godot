@@ -130,7 +130,7 @@ OFL 的「保留字体名称（Reserved Font Name）」条款。
   | 闸 | 结果 |
   |---|---|
   | `tests/run_tests.gd` | 全绿 `[UNIT-ALL-GREEN]` |
-  | `tests/probes/probe_golden.gd` | 16 指纹 PASS |
+  | `tests/probes/probe_golden.gd` | 12 指纹 PASS |
   | `tests/probes/probe_scene.gd` | PASS `field=2304 ring=4384 solids=338/338 covers=23/23` |
   | `tests/probes/probe_hud.gd` | 56/56 PASS（HUD 排版断言全过） |
   | `tests/probes/probe_ui_flow.gd` | 39/39 PASS |
