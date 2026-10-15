@@ -4,7 +4,7 @@ extends SceneTree
 # 链路：19 个 mp3 导入齐全 → 池结构（4 轮换 + 环境 + BGM）→ 环境音自启动循环 →
 #      轮换/音量/缺失静默接口 → BGM 开关 → 真实事件触发链
 #      （开战 BGM 自动开 / 放塔落石 / 出怪号角 / 击杀死亡 / 挖矿金击 / 技能怒吼 / 回标题停 BGM）。
-# 跑法（cwd=reroute-godot）：godot -s res://probe_audio.gd
+# 跑法（cwd=reroute-godot）：godot -s res://tests/probes/probe_audio.gd
 const ALL_MP3 := [
 	"bgm_reroute.mp3",
 	"build_stone_place.mp3",

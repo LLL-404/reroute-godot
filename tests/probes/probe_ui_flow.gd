@@ -5,7 +5,7 @@ extends SceneTree
 #      → ESC → 暂停 →「继续」→ 对局 → ESC →「重开本局」→ 对局(新局)
 #      → 手动终局(胜) → 结算 → ESC 不响应 → 「回标题」→ 标题 → ESC 不响应
 #      →「开始对局」→ 对局 → 手动终局(负) → 结算(负) →「再来一局」→ 对局
-# 跑法（cwd=reroute-godot）：godot -s res://probe_ui_flow.gd
+# 跑法（cwd=reroute-godot）：godot -s res://tests/probes/probe_ui_flow.gd
 var checks := 0
 var bad := 0
 var fail_list: Array = []

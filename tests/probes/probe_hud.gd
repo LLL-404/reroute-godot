@@ -4,7 +4,7 @@ extends SceneTree
 # 断言组：hit_regions 数值口径 / 血条与文本跟随 / 波次文案与横幅调度 / 供给闪烁 /
 #         模式钮状态与真实点击链路 / 技能钮冷却文案 / 浮字池生命周期 / 整体显隐 /
 #         HUD 区域点击排除（含对照：战场点击有效）/ 界面截图（人眼复核中文渲染）。
-# 跑法（cwd=reroute-godot）：godot -s res://probe_hud.gd
+# 跑法（cwd=reroute-godot）：godot -s res://tests/probes/probe_hud.gd
 var checks := 0
 var bad := 0
 var fail_list: Array = []

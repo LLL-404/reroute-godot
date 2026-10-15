@@ -327,20 +327,20 @@
 | 项 | 证据 | 命令 |
 |---|---|---|
 | 单测 83 例全绿 | `[UNIT-DONE] passed=83 failed=0` + `[UNIT-ALL-GREEN]` | `<godot> --headless --path <P> -s res://tests/run_tests.gd` |
-| 黄金回放 16 指纹逐位一致 | `[R7-PROBE] PASS` | `<godot> --headless --path <P> -s res://probe_golden.gd` |
-| 主场景构建对拍 | `[SCENE] PASS field=2304 ring=4384 solids=338/338 covers=23/23` | `<godot> --headless --path <P> -s res://probe_scene.gd` |
-| 视觉同步逐位对拍 1749 断言 | `[SYNC] checks=1749 bad=0 moved=42 match=100` | `<godot> --path <P> -s res://probe_sync.gd`（**窗口模式**） |
-| 输入闭环 41 断言 | `[INPUT] checks=41 bad=0` | `<godot> --path <P> -s res://probe_input.gd`（**窗口模式**） |
-| 三屏流转 39 断言 | `[FLOW] checks=39 bad=0` | `<godot> --path <P> -s res://probe_ui_flow.gd`（**窗口模式**） |
-| HUD 56 断言 | `[HUD] checks=56 bad=0` | `<godot> --path <P> -s res://probe_hud.gd`（**窗口模式**） |
-| 全局冒烟一局到底 | `[SMOKE] PASS outcome=LOST tick=4139 kills=116 peak_units=28 towers=6 skills=4` | `<godot> --path <P> -s res://probe_smoke.gd`（**窗口模式**） |
-| 三张验收截图可出 | `[SHOT] done shots=3 misses=0` | `<godot> --path <P> -s res://probe_shots.gd`（**窗口模式**） |
+| 黄金回放 16 指纹逐位一致 | `[R7-PROBE] PASS` | `<godot> --headless --path <P> -s res://tests/probes/probe_golden.gd` |
+| 主场景构建对拍 | `[SCENE] PASS field=2304 ring=4384 solids=338/338 covers=23/23` | `<godot> --headless --path <P> -s res://tests/probes/probe_scene.gd` |
+| 视觉同步逐位对拍 1749 断言 | `[SYNC] checks=1749 bad=0 moved=42 match=100` | `<godot> --path <P> -s res://tests/probes/probe_sync.gd`（**窗口模式**） |
+| 输入闭环 41 断言 | `[INPUT] checks=41 bad=0` | `<godot> --path <P> -s res://tests/probes/probe_input.gd`（**窗口模式**） |
+| 三屏流转 39 断言 | `[FLOW] checks=39 bad=0` | `<godot> --path <P> -s res://tests/probes/probe_ui_flow.gd`（**窗口模式**） |
+| HUD 56 断言 | `[HUD] checks=56 bad=0` | `<godot> --path <P> -s res://tests/probes/probe_hud.gd`（**窗口模式**） |
+| 全局冒烟一局到底 | `[SMOKE] PASS outcome=LOST tick=4139 kills=116 peak_units=28 towers=6 skills=4` | `<godot> --path <P> -s res://tests/probes/probe_smoke.gd`（**窗口模式**） |
+| 三张验收截图可出 | `[SHOT] done shots=3 misses=0` | `<godot> --path <P> -s res://tests/probes/probe_shots.gd`（**窗口模式**） |
 | 截图像素校验 | `[SHOTS] checks=15 fail=0` `warm=751573 teal=2835 red=158640 green=3214` | `python tools/check_shots.py` |
-| 资产 57 断言 | `[ASSET] checks=57 bad=0` | `<godot> --path <P> -s res://probe_asset.gd`（**窗口模式**） |
-| 模型动画齐备 | `blade/worker/king anims: Attack/Crawl/Death/Hurt/Idle` | `<godot> --path <P> -s res://probe_model.gd`（**窗口模式**） |
-| 朝向截面图 | `[ORIENT] cross shot saved` | `<godot> --path <P> -s res://probe_orient.gd`（**窗口模式**） |
-| 音频 38 断言 | `[AUDIO] checks=38 bad=0` | `<godot> --path <P> -s res://probe_audio.gd`（**窗口模式**） |
-| 模拟模块 5 探针 | `[R2/R3/R4/R5/R6-PROBE] PASS` | `probe_sim/grid/flow/scenario/world.gd`（headless） |
+| 资产 57 断言 | `[ASSET] checks=57 bad=0` | `<godot> --path <P> -s res://tests/probes/probe_asset.gd`（**窗口模式**） |
+| 模型动画齐备 | `blade/worker/king anims: Attack/Crawl/Death/Hurt/Idle` | `<godot> --path <P> -s res://tests/probes/probe_model.gd`（**窗口模式**） |
+| 朝向截面图 | `[ORIENT] cross shot saved` | `<godot> --path <P> -s res://tests/probes/probe_orient.gd`（**窗口模式**） |
+| 音频 38 断言 | `[AUDIO] checks=38 bad=0` | `<godot> --path <P> -s res://tests/probes/probe_audio.gd`（**窗口模式**） |
+| 模拟模块 5 探针 | `[R2/R3/R4/R5/R6-PROBE] PASS` | `tests/probes/probe_{sim,grid,flow,scenario,world}.gd`（headless） |
 | Windows 导出可用 | exit 0，`export/game.exe` 109 MB + `game.pck` 72 MB | `<godot> --headless --path <P> --export-release "Windows Desktop" <P>/export/game.exe` |
 | 导出包自证 | `[SELFCHECK] checks=22 bad=0` + `[SELFCHECK] PASS` + exit 0 | `./export/game.exe --headless --selfcheck` |
 
@@ -479,12 +479,12 @@ reroute-godot/
 │   ├─ hud.gd               顶栏 / 模式列 / 技能 / 横幅 / 赏金浮字
 │   ├─ screens.gd           标题 / 暂停 / 结算三屏
 │   └─ selfcheck.gd         导出包自证
-├─ tests/                   单测（83 例）
+├─ tests/                   单测（83 例）+ 验收探针
 │   ├─ kit.gd               记录式断言框架
 │   ├─ run_tests.gd         入口
 │   ├─ stub_scenario.gd     小图夹具（行为断言用）
+│   ├─ probes/              17 个验收探针（见 §9）
 │   └─ test_{rng,canon,grid,flowfield,scenario,world}.gd
-├─ probe_*.gd               验收探针（见 §9）
 ├─ assets/{audio,fonts,models,image}
 ├─ shots/                   验收截图产物
 └─ tools/                   Python 工具（check_shots / umd2_to_gltf / verify_glb）
@@ -495,7 +495,7 @@ reroute-godot/
 ```
 sim/   ←──  game/            （表现层读模拟，模拟层不知道表现层存在）
 sim/   ←──  tests/           （单测驱动模拟）
-game/  ←──  probe_*.gd       （探针驱动表现层与整机）
+game/  ←──  tests/probes/    （探针驱动表现层与整机）
 ```
 
 - `sim/` **禁止** `require`/`preload` 任何 `game/` 下的文件。
@@ -513,7 +513,7 @@ game/  ←──  probe_*.gd       （探针驱动表现层与整机）
 | `sim/world.gd` | 576 | 世界状态机 | 核心，改动需最高谨慎 |
 | `tests/test_world.gd` | 481 | world 单测 35 例 | |
 | `game/main.gd` | 357 | 主循环/输入 | |
-| `probe_input.gd` | 350 | 输入验收 | |
+| `tests/probes/probe_input.gd` | 350 | 输入验收 | |
 | `game/screens.gd` | 298 | 三屏 | |
 | 其余 | <300 | | |
 
@@ -625,7 +625,7 @@ world.canonical_bytes() -> Canon.Buf
 - 所有命令字典必须有 `kind` 键（String）。坐标键 `x`/`y` 为 int。
 - 非法命令**不抛异常、不返回错误**，静默零副作用。调用方不得依赖返回值。
 - `units` / `buildings` 的顺序恒等于 `id` 升序（`compact()` 保证）。
-- 白盒直写（`w.supply = ...`）**只允许出现在 `tests/` 与 `probe_*.gd`**，生产代码禁止。
+- 白盒直写（`w.supply = ...`）**只允许出现在 `tests/`**（含 `tests/probes/`），生产代码禁止。
 
 ### 6.2 `Grid` 契约
 
@@ -852,7 +852,7 @@ HUD 全部控件、标题/暂停/结算三屏、三件套音频、真实 glb 资
 | 任务 | 范围 | 验收 |
 |---|---|---|
 | D2-1 双端包 | PC exe + Android APK 各出一份 | 两端各自能启动完成一局 |
-| D2-2 包体裁剪 | `export_presets.cfg` 设 `exclude_filter` 排除 `shots/*,tests/*,probe_*.gd,tools/*`（当前全被打进包，见 §7.12） | 包体下降，功能不受影响 |
+| D2-2 包体裁剪 | ✅ 已完成（见 §7.12）：`export_presets.cfg` 设 `exclude_filter="tests/*,shots/*,tools/*"` | 包体下降，功能不受影响 |
 | D2-3 真人试玩 | **至少 2 人各玩 2 局**，记录：卡在哪、什么时候看不懂、哪一步最无聊、第一局结局 | 书面记录（这决定 D3 的全部内容） |
 | D2-4 引导复核 | 确认左下提示徽章与标题屏「玩法说明」是否足够；试玩者是否 5 秒内看懂「放墙改道」 | 试玩记录里的原话 |
 | D2-5 **详情页素材** | 按 §7.4b 生成头图 + 宣传图；实机图从 `shots/` 选 5 张 | 五图素材齐备（官方硬要求） |
@@ -951,10 +951,10 @@ HUD 全部控件、标题/暂停/结算三屏、三件套音频、真实 glb 资
 
 - 指标：PC 1280×720 稳定 60fps；Android 中端机可玩（不设硬帧率门槛，但不得卡到无法操作）。
 - `probe_smoke` 全程无卡顿（`stalled == 0` 已有断言）。
-- **包体**：当前 PC `export/game.exe` 109 MB + `game.pck` 72 MB。`export_presets.cfg` 的
+- **包体**：原 PC `export/game.pck` 72 MB。原 `export_presets.cfg` 的
   `export_filter="all_resources"` 且 `exclude_filter=""`，导致 **`shots/` 的 15 张截图、
-  `tests/`、`probe_*.gd` 全被打进包**。设 `exclude_filter` 排除
-  `shots/*,tests/*,probe_*.gd,tools/*`，预计可省 10 MB+。Android 侧尤其重要。
+  `tests/`（含 17 个探针）全被打进包**。已设 `exclude_filter="tests/*,shots/*,tools/*"`
+  排除全部非运行资源。Android 侧尤其重要。
 - 手段（按性价比）：排除非运行资源 → 纹理压缩（`s3tc_bptc` 已开）→ 音频流化 → MultiMesh 合并。
 
 ---
@@ -970,7 +970,7 @@ HUD 全部控件、标题/暂停/结算三屏、三件套音频、真实 glb 资
 | 常量 | `UPPER_SNAKE` | `const H_STEP := 1.2` |
 | 变量/函数 | `snake_case` | `func apply_command(cmd)` |
 | 私有成员 | 前缀 `_` | `var _height_rev := -1` |
-| 探针 | `probe_<领域>.gd`，根目录 | `probe_input.gd` |
+| 探针 | `probe_<领域>.gd`，`tests/probes/` | `tests/probes/probe_input.gd` |
 | 单测 | `test_<模块>.gd`，`tests/` | `test_world.gd` |
 
 ### 8.2 格式
@@ -1015,19 +1015,19 @@ HUD 全部控件、标题/暂停/结算三屏、三件套音频、真实 glb 资
 | 闸 | 命令 | 通过判据 | 需窗口 |
 |---|---|---|---|
 | 单测 | `run_tests.gd` | `passed=83 failed=0` + `[UNIT-ALL-GREEN]` | 否 |
-| 黄金回放 | `probe_golden.gd` | `[R7-PROBE] PASS`（16 指纹） | 否 |
-| 模拟模块 | `probe_sim/grid/flow/scenario/world.gd` | 各自 `PASS` | 否 |
-| 场景构建 | `probe_scene.gd` | `[SCENE] PASS field=2304 ring=4384` | 否 |
-| 视觉同步 | `probe_sync.gd` | `[SYNC] PASS match=100 bad=0` | **是** |
-| 输入闭环 | `probe_input.gd` | `[INPUT] PASS bad=0` | **是** |
-| HUD | `probe_hud.gd` | `[HUD] PASS bad=0` | **是** |
-| 三屏流转 | `probe_ui_flow.gd` | `[FLOW] PASS bad=0` | **是** |
-| 全局冒烟 | `probe_smoke.gd` | `[SMOKE] PASS` | **是** |
-| 资产/模型 | `probe_asset.gd` / `probe_model.gd` / `probe_orient.gd` | 各自 PASS（后两者出图） | **是** |
-| 音频 | `probe_audio.gd` | `[AUDIO] PASS bad=0` | **是** |
-| 截图像素 | `probe_shots.gd` + `python tools/check_shots.py` | `[SHOTS] PASS` | **是** |
+| 黄金回放 | `tests/probes/probe_golden.gd` | `[R7-PROBE] PASS`（16 指纹） | 否 |
+| 模拟模块 | `tests/probes/probe_{sim,grid,flow,scenario,world}.gd` | 各自 `PASS` | 否 |
+| 场景构建 | `tests/probes/probe_scene.gd` | `[SCENE] PASS field=2304 ring=4384` | 否 |
+| 视觉同步 | `tests/probes/probe_sync.gd` | `[SYNC] PASS match=100 bad=0` | **是** |
+| 输入闭环 | `tests/probes/probe_input.gd` | `[INPUT] PASS bad=0` | **是** |
+| HUD | `tests/probes/probe_hud.gd` | `[HUD] PASS bad=0` | **是** |
+| 三屏流转 | `tests/probes/probe_ui_flow.gd` | `[FLOW] PASS bad=0` | **是** |
+| 全局冒烟 | `tests/probes/probe_smoke.gd` | `[SMOKE] PASS` | **是** |
+| 资产/模型 | `tests/probes/probe_{asset,model,orient}.gd` | 各自 PASS（后两者出图） | **是** |
+| 音频 | `tests/probes/probe_audio.gd` | `[AUDIO] PASS bad=0` | **是** |
+| 截图像素 | `tests/probes/probe_shots.gd` + `python tools/check_shots.py` | `[SHOTS] PASS` | **是** |
 | 导出自证 | `export/game.exe --headless --selfcheck` | `[SELFCHECK] PASS` + exit 0 | 否 |
-| **触屏闭环** | `probe_touch.gd`（D1 新建） | 触摸路径与鼠标路径世界状态逐项一致 | **是** |
+| **触屏闭环** | `tests/probes/probe_touch.gd`（D1 新建） | 触摸路径与鼠标路径世界状态逐项一致 | **是** |
 | **Android 可玩** | `adb install` + 启动 + 手动完成一局 | 无崩溃、`adb logcat` 无 ERROR、7 个模式钮 + 技能 + 暂停 + 热层全部可点 | 真机/模拟器 |
 | **Android 自证（自动）** | `adb shell am start ... --es -- --selfcheck` 或 logcat 抓 `[SELFCHECK] PASS` | `[SELFCHECK] PASS` + exit 0 | — |
 
@@ -1352,7 +1352,7 @@ docs/DEVELOPMENT-PLAN.md | 新增  本文
 - 实现要求：<引用 §5 相关条款>
 - 验收命令（注意哪些必须窗口模式，见 §2.1）：
     <godot> --headless --path <P> -s res://tests/run_tests.gd      # 期望 passed=83 failed=0
-    <godot> --path <P> -s res://probe_xxx.gd                       # 期望 [XXX] PASS
+    <godot> --path <P> -s res://tests/probes/probe_xxx.gd                       # 期望 [XXX] PASS
 - 证据要求：stdout 原文 + exit code + （涉及画面时）截图且必须目视
 - 失败预案：<该任务在 §7.11 砍单顺序里的位置>
 - 完成后：更新源文件头部注释 + 本文对应章节 + 立即提交
@@ -1369,10 +1369,10 @@ P="D:/G/game/games/reroute-godot"
 
 # 1. 建立基线（全绿才动手）
 "$GODOT" --headless --path "$P" -s res://tests/run_tests.gd
-"$GODOT" --headless --path "$P" -s res://probe_golden.gd
-"$GODOT" --headless --path "$P" -s res://probe_scene.gd
-"$GODOT" --path "$P" -s res://probe_sync.gd        # 窗口模式！
-"$GODOT" --path "$P" -s res://probe_input.gd       # 窗口模式！
+"$GODOT" --headless --path "$P" -s res://tests/probes/probe_golden.gd
+"$GODOT" --headless --path "$P" -s res://tests/probes/probe_scene.gd
+"$GODOT" --path "$P" -s res://tests/probes/probe_sync.gd        # 窗口模式！
+"$GODOT" --path "$P" -s res://tests/probes/probe_input.gd       # 窗口模式！
 
 # 2. 读代码顺序
 sim/sim.gd → sim/scenario.gd → sim/grid.gd → sim/flowfield.gd → sim/world.gd

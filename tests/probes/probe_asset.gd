@@ -1,7 +1,7 @@
 extends SceneTree
 
 # 资产接入探针：真实模型（单位/金堆/瓦砾）在游戏中的装载、缩放校准、动画状态机、渲染。
-# 跑法（cwd=reroute-godot，窗口模式）：godot -s res://probe_asset.gd
+# 跑法（cwd=reroute-godot，窗口模式）：godot -s res://tests/probes/probe_asset.gd
 #
 # 判定：exit 0 + `[ASSET] PASS`；stderr 无 ERROR（外层校验）。
 # 证据：shots/asset_game.png（对局全景）+ shots/asset_close.png（单位特写）。

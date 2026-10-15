@@ -5,7 +5,7 @@ extends SceneTree
 #   shots/game.png   对局全景（含地形/建筑/单位/核心）
 #   shots/heat.png   威胁热层开启
 #   shots/ghost.png  放墙预览幽灵（绿板）
-# 跑法（cwd=reroute-godot）：godot -s res://probe_shots.gd   （窗口模式，勿加 --headless）
+# 跑法（cwd=reroute-godot）：godot -s res://tests/probes/probe_shots.gd   （窗口模式，勿加 --headless）
 # 判定：exit 0 + 3 张 PNG 存在，交给 tools/check_shots.py 做像素校验（[SHOTS] PASS）。
 var checks := 0
 var misses := 0

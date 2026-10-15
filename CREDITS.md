@@ -130,11 +130,11 @@ OFL 的「保留字体名称（Reserved Font Name）」条款。
   | 闸 | 结果 |
   |---|---|
   | `tests/run_tests.gd` | 全绿 `[UNIT-ALL-GREEN]` |
-  | `probe_golden.gd` | 16 指纹 PASS |
-  | `probe_scene.gd` | PASS `field=2304 ring=4384 solids=338/338 covers=23/23` |
-  | `probe_hud.gd` | 56/56 PASS（HUD 排版断言全过） |
-  | `probe_ui_flow.gd` | 39/39 PASS |
-  | `probe_smoke.gd` | 31/31 PASS，`mismatch=0` |
+  | `tests/probes/probe_golden.gd` | 16 指纹 PASS |
+  | `tests/probes/probe_scene.gd` | PASS `field=2304 ring=4384 solids=338/338 covers=23/23` |
+  | `tests/probes/probe_hud.gd` | 56/56 PASS（HUD 排版断言全过） |
+  | `tests/probes/probe_ui_flow.gd` | 39/39 PASS |
+  | `tests/probes/probe_smoke.gd` | 31/31 PASS，`mismatch=0` |
   | 导出包 `--selfcheck` | **22 项 PASS**（项数未变） |
   | pck 内 `simhei` 残留 | **0 处** |
   | `shots/hud.png` 与改动前逐像素对比 | 排版零位移（字号 / 按钮位置 / 横幅 / 浮动数字全对齐） |
@@ -152,11 +152,11 @@ OFL 的「保留字体名称（Reserved Font Name）」条款。
 倒排只剩 4 天（10-18 提交），引入任何需要读 EULA、需要署名落点、需要风格适配的
 外部素材，都是负收益。
 
-### R-4 🟡 低 · `export_filter` 过宽（非本台账职责，仅登记）
+### R-4 ✅ 已解决 · `export_filter` 过宽
 
-`export_presets.cfg` 为 `export_filter="all_resources"` 且 `exclude_filter=""`，
-把 `shots/`（13 张截图）、`tests/`、`probe_*.gd` 全打进 pck（当前 74 MB）。
-这是最直接的包体优化项，但**改动会影响交付物构成**，须单独裁定，不随本台账顺手改。
+原 `export_presets.cfg` 为 `export_filter="all_resources"` 且 `exclude_filter=""`，
+把 `shots/`（13 张截图）、`tests/`、`probe_*.gd`（现 `tests/probes/`）全打进 pck（原 74 MB）。
+已设 `exclude_filter="tests/*,shots/*,tools/*"`，非运行资源不再进包。见提交 2 的结构整理。
 
 ---
 

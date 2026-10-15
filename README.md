@@ -31,13 +31,13 @@ P="D:/G/game/games/reroute-godot"
 
 # 全部自动化闸（窗口模式的必须去掉 --headless）
 "$GODOT" --headless --path "$P" -s res://tests/run_tests.gd   # 83 单测
-"$GODOT" --headless --path "$P" -s res://probe_golden.gd      # 黄金回放 16 指纹
-"$GODOT" --headless --path "$P" -s res://probe_scene.gd       # 主场景构建
-"$GODOT" --path "$P" -s res://probe_sync.gd                   # 视觉同步对拍
-"$GODOT" --path "$P" -s res://probe_input.gd                  # 输入闭环
-"$GODOT" --path "$P" -s res://probe_hud.gd                    # HUD
-"$GODOT" --path "$P" -s res://probe_ui_flow.gd                # 三屏流转
-"$GODOT" --path "$P" -s res://probe_smoke.gd                  # 全局冒烟（跑完整一局）
+"$GODOT" --headless --path "$P" -s res://tests/probes/probe_golden.gd      # 黄金回放 16 指纹
+"$GODOT" --headless --path "$P" -s res://tests/probes/probe_scene.gd       # 主场景构建
+"$GODOT" --path "$P" -s res://tests/probes/probe_sync.gd                   # 视觉同步对拍
+"$GODOT" --path "$P" -s res://tests/probes/probe_input.gd                  # 输入闭环
+"$GODOT" --path "$P" -s res://tests/probes/probe_hud.gd                    # HUD
+"$GODOT" --path "$P" -s res://tests/probes/probe_ui_flow.gd                # 三屏流转
+"$GODOT" --path "$P" -s res://tests/probes/probe_smoke.gd                  # 全局冒烟（跑完整一局）
 ```
 
 ### ⚠️ 两条必须记住的规矩
@@ -54,8 +54,7 @@ P="D:/G/game/games/reroute-godot"
 |---|---|
 | `sim/` | 模拟核心十模块：`lua64`(语义 shim) / `canon` / `rng` / `grid` / `flowfield` / `scenario` / `sim`(数值表) / `world` / `verify` / `golden_baseline`。纯逻辑、无渲染、无浮点 |
 | `game/` | 表现层：`main`(主循环/输入) / `view`(3D) / `models`(资产) / `blueprint`(程序化地形) / `hud` / `screens` / `selfcheck` |
-| `tests/` | 单测套件：`kit.gd`(记录式断言) + `run_tests.gd`(入口) + 6 模块用例 + `stub_scenario` 夹具 |
-| `probe_*.gd` | 验收探针，同时是全链路冒烟入口 |
+| `tests/` | 单测套件 + 验收探针：`kit.gd`(记录式断言) + `run_tests.gd`(入口) + 6 模块用例 + `stub_scenario` 夹具；`tests/probes/` = 17 个验收探针，同时是全链路冒烟入口 |
 | `assets/` | 音频 19 个 mp3、中文字体、10 个 glb 模型 |
 | `tools/` | Python 工具：`check_shots.py`(截图像素校验) / `umd2_to_gltf.py` / `verify_glb.py` |
 | `docs/` | 开发方案（权威） |

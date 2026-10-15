@@ -4,7 +4,7 @@ extends SceneTree
 # 通过 Window.push_input 注入真实鼠标/键盘事件，断言 world 状态按预期变化：
 #   单击放墙 / 拖拽放墙线 / 挖矿(矿+25) / 放塔(施工压扁) / 拆除(退 50%) /
 #   英雄移动 / 原地目标被拒 / TAB 热层开关 / SOLID 格零副作用 / 暂停中零副作用。
-# 跑法（cwd=reroute-godot）：godot --headless -s res://probe_input.gd
+# 跑法（cwd=reroute-godot，窗口模式）：godot -s res://tests/probes/probe_input.gd
 var checks := 0
 var bad := 0
 var first_bad := ""

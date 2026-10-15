@@ -4,7 +4,7 @@ extends SceneTree
 # 做法：接管主循环（关 main._process），逐 tick 推进 + view.sync，
 # 按母版（view3d.lua）插值口径重算全部实体期望值，与节点实测对拍：
 #   单位位置/缩放/受击脉冲、建筑位置/施工压扁、英雄位置/起伏、死亡消散、震荡环、幽灵、热层。
-# 跑法（cwd=reroute-godot）：godot --headless -s res://probe_sync.gd
+# 跑法（cwd=reroute-godot，窗口模式）：godot -s res://tests/probes/probe_sync.gd
 # 判定：exit 0 + stdout 含 [SYNC] match=100 + stderr 无 ERROR。
 var checks := 0
 var bad := 0

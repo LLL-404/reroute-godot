@@ -1,7 +1,7 @@
 extends SceneTree
 
 # C1 判定：主场景 headless 加载 + 地形构建对拍。
-# 跑法（cwd=reroute-godot）：godot --headless -s res://probe_scene.gd
+# 跑法（cwd=reroute-godot）：godot --headless -s res://tests/probes/probe_scene.gd
 # 判定：exit 0 + stdout 含 [SCENE] PASS + stderr 无 ERROR。
 func _initialize() -> void:
 	var t0 := Time.get_ticks_msec()
