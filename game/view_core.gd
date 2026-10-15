@@ -1,7 +1,8 @@
 extends RefCounted
 
 # 《改道》视图层 · 坐标与基建（D5-1 拆分自 view.gd）：48² 坐标映射、盒体/材质工具、
-# 相机取景与屏幕投影。零 sim 引用（只被 terrain/entities 当几何底座）；节点挂点统一走 host。
+# 相机取景与屏幕投影、相机操控（WASD 平移 / 右键拖拽 / QE 旋转）。
+# 零 sim 引用（只被 terrain/entities 当几何底座）；节点挂点统一走 host。
 
 const CELL_N := 48
 const HALF := 24.0
@@ -43,6 +44,10 @@ var env: Environment
 var sun: DirectionalLight3D
 
 var camera: Camera3D
+var focus := Vector3.ZERO # 相机注视的地面点（y=0；平移/旋转围绕它）
+var yaw := 0.0 # 水平旋转（绕 Y，正 = 左旋；QE 修改）
+var _pitch := 0.0 # 基准俯角（rad，取景时定；操控不改）
+var _dist := 0.0 # 相机到 focus 的距离（取景时定；操控不改）
 var _fit: Dictionary = {}
 var _fit_w := 0.0
 var _fit_h := 0.0
@@ -161,6 +166,7 @@ func _ensure_camera() -> void:
 
 ## 取景：把 48² 地图撑满可交互区（上让 60px、右让 170px、下让提示行；口径同母版闭式推导）。
 ## 二分俯角找"宽、深同时贴边"的平衡点（夹在 [35°,50°]），再解视距与竖向平移。
+## 注意：取景会重置平移/旋转（窗口尺寸变化时由 sync 触发，回到默认北向全图视角）。
 func fit_camera() -> void:
 	_ensure_camera()
 	var vp := host.get_viewport().get_visible_rect().size
@@ -213,34 +219,119 @@ func fit_camera() -> void:
 	var yf := yc2 / (zf2 * t45)
 	var off := t45 * ((yn + yf) / 2.0 - bc) * 2.0 / (1.0 / zn2 + 1.0 / zf2)
 
-	camera.position = Vector3(0.0, s * sr + off * cr, s * cr - off * sr)
-	camera.look_at(camera.position + Vector3(0.0, -sr * 100.0, -cr * 100.0))
-	_fit = {
-		"px": 0.0,
-		"py": s * sr + off * cr,
-		"pz": s * cr - off * sr,
-		"fy": -sr,
-		"fz": -cr,
-		"uy": cr,
-		"uz": -sr,
-		"t45": t45,
-		"a": aspect,
-	}
+	var cam_y := s * sr + off * cr
+	var cam_z := s * cr - off * sr
+	_pitch = p
+	_dist = cam_y / sr
+	focus = Vector3(0.0, 0.0, cam_z - cr * _dist)
+	yaw = 0.0
+	_apply_cam()
 	_fit_w = W
 	_fit_h = H
 
 
+## 由 (focus, yaw, 基准俯角/距离) 沉降相机位姿，并刷新投影缓存。
+func _apply_cam() -> void:
+	var sr := sin(_pitch)
+	var cr := cos(_pitch)
+	var f := Vector3(0.0, -sr, -cr).rotated(Vector3.UP, yaw)
+	var u := Vector3(0.0, cr, -sr).rotated(Vector3.UP, yaw)
+	camera.position = focus - f * _dist
+	camera.look_at(camera.position + f * 100.0, u)
+	_update_fit_cache()
+
+
+## 从相机当前位姿刷新投影缓存（world_to_screen 闭式解用；旋转/平移后必须刷新）。
+func _update_fit_cache() -> void:
+	var xf := camera.global_transform
+	var r := xf.basis.x
+	var u := xf.basis.y
+	var f := -xf.basis.z
+	var vp := host.get_viewport().get_visible_rect().size
+	var W := vp.x
+	var H := vp.y
+	if W <= 0.0 or H <= 0.0:
+		W = 1280.0
+		H = 720.0
+	_fit = {
+		"px": xf.origin.x,
+		"py": xf.origin.y,
+		"pz": xf.origin.z,
+		"rx": r.x,
+		"ry": r.y,
+		"rz": r.z,
+		"ux": u.x,
+		"uy": u.y,
+		"uz": u.z,
+		"fx": f.x,
+		"fy": f.y,
+		"fz": f.z,
+		"t45": tan(deg_to_rad(camera.fov) / 2.0),
+		"a": W / H,
+	}
+
+
+## 水平前向（屏幕上方对应的地面方向；yaw=0 时为世界 -Z）。
+func _flat_forward() -> Vector3:
+	var f := Vector3(0.0, -sin(_pitch), -cos(_pitch)).rotated(Vector3.UP, yaw)
+	return Vector3(f.x, 0.0, f.z).normalized()
+
+
+## 平移焦点并夹在地图邻域内（防止把地图推出视野找不回来）。
+func _move_focus(v: Vector3) -> void:
+	var limit := HALF + 6.0
+	focus += v
+	focus.x = clampf(focus.x, -limit, limit)
+	focus.z = clampf(focus.z, -limit, limit)
+	_apply_cam()
+
+
+# ---- 相机操控（纯表现层；不进模拟、不进指纹）----
+
+## WASD 平移：dir_x 右为正（D 键），dir_y 前为正（W 键），dist 为世界单位。
+func pan_world(dir_x: float, dir_y: float, dist: float) -> void:
+	if camera == null or _dist <= 0.0:
+		return
+	var fh := _flat_forward()
+	var rt := Vector3(-fh.z, 0.0, fh.x)
+	_move_focus((rt * dir_x + fh * dir_y) * dist)
+
+
+## 右键拖拽：像素位移 → 地面平移（抓取感：内容跟手）。
+func pan_pixels(dx: float, dy: float) -> void:
+	if camera == null or _dist <= 0.0 or _fit.is_empty():
+		return
+	var vp := host.get_viewport().get_visible_rect().size
+	if vp.x <= 0.0 or vp.y <= 0.0:
+		return
+	var upp := 2.0 * _dist * float(_fit["t45"]) / vp.y # 焦平面处：世界单位/像素
+	var fh := _flat_forward()
+	var rt := Vector3(-fh.z, 0.0, fh.x)
+	_move_focus(fh * (dy * upp) - rt * (dx * upp))
+
+
+## Q/E 旋转（绕 focus；正 = 左旋）。
+func rotate_y(delta: float) -> void:
+	if camera == null:
+		return
+	yaw += delta
+	_apply_cam()
+
+
 ## 世界坐标 → 屏幕像素（赏金浮字用）。视轴后方返回 Vector2(-1, -1)。
+## 用相机完整基（右/上/前向量）投影，平移旋转后同样成立。
 func world_to_screen(wx: float, wy: float, wz: float) -> Vector2:
 	if _fit.is_empty():
 		return Vector2(-1, -1)
 	var dx := wx - float(_fit["px"])
 	var dy := wy - float(_fit["py"])
 	var dz := wz - float(_fit["pz"])
-	var depth := dy * float(_fit["fy"]) + dz * float(_fit["fz"])
+	var depth := dx * float(_fit["fx"]) + dy * float(_fit["fy"]) + dz * float(_fit["fz"])
 	if depth <= 0.1:
 		return Vector2(-1, -1)
-	var nx := dx / (depth * float(_fit["t45"]) * float(_fit["a"]))
-	var ny := (dy * float(_fit["uy"]) + dz * float(_fit["uz"])) / (depth * float(_fit["t45"]))
+	var hx := dx * float(_fit["rx"]) + dy * float(_fit["ry"]) + dz * float(_fit["rz"])
+	var hy := dx * float(_fit["ux"]) + dy * float(_fit["uy"]) + dz * float(_fit["uz"])
+	var nx := hx / (depth * float(_fit["t45"]) * float(_fit["a"]))
+	var ny := hy / (depth * float(_fit["t45"]))
 	var vp := host.get_viewport().get_visible_rect().size
 	return Vector2((nx + 1.0) * 0.5 * vp.x, (1.0 - ny) * 0.5 * vp.y)

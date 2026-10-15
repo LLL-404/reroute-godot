@@ -75,6 +75,21 @@ func world_to_screen(wx: float, wy: float, wz: float) -> Vector2:
 	return core.world_to_screen(wx, wy, wz)
 
 
+## 相机平移（WASD；世界单位；→ view_core）
+func camera_pan(dir_x: float, dir_y: float, dist: float) -> void:
+	core.pan_world(dir_x, dir_y, dist)
+
+
+## 相机像素平移（右键拖拽；→ view_core）
+func camera_pan_pixels(dx: float, dy: float) -> void:
+	core.pan_pixels(dx, dy)
+
+
+## 相机水平旋转（QE；正 = 左旋；→ view_core）
+func camera_rotate(delta: float) -> void:
+	core.rotate_y(delta)
+
+
 ## 应用蓝图（→ view_terrain）
 func apply_blueprint(bp: Dictionary, seed: int) -> void:
 	terrain.apply_blueprint(bp, seed)

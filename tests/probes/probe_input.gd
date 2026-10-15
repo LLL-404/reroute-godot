@@ -3,7 +3,8 @@ extends ProbeKit
 # C4 判定：输入闭环端到端。
 # 通过 Window.push_input 注入真实鼠标/键盘事件，断言 world 状态按预期变化：
 #   单击放墙 / 拖拽放墙线 / 挖矿(矿+25) / 放塔(施工压扁) / 拆除(退 50%) /
-#   英雄移动 / 原地目标被拒 / TAB 热层开关 / SOLID 格零副作用 / 暂停中零副作用。
+#   英雄移动 / 原地目标被拒 / TAB 热层开关 / SOLID 格零副作用 / 暂停中零副作用 /
+#   相机操控（WASD 平移 / QE 旋转 / 右键拖拽跟手 / 拾取回环 + 投影一致）。
 # 跑法（cwd=reroute-godot，窗口模式）：godot -s res://tests/probes/probe_input.gd
 # 判定：exit 0 + stdout 含 `[INPUT] PASS`。
 var vp_size := Vector2(1280.0, 720.0)
@@ -174,6 +175,53 @@ func _initialize() -> void:
 	check(not view.heat_enabled() and not main.heat_on, "重开后热层关闭")
 	var heat_style: StyleBoxFlat = main.hud.heat_btn.get_meta("sb_normal")
 	check(heat_style.bg_color == main.hud.DARK["btn"], "重开后 HUD 热层钮熄灭")
+
+	# ---- 14. 相机操控（WASD 平移 / QE 旋转 / 右键拖拽；纯表现层）----
+	main.set_process(true) # 相机推进在 _process；本段恢复主循环（允许 tick 推进）
+	var cam: Camera3D = view.camera
+	await _frames(6)
+	var sup_cam: int = world.supply
+	var buildings_cam: int = world.buildings.size()
+
+	var p0: Vector3 = cam.global_position
+	await _hold_key(KEY_W, 14)
+	var p1: Vector3 = cam.global_position
+	check(p1.z < p0.z - 0.2, "W 前移（z %.2f→%.2f）" % [p0.z, p1.z])
+
+	await _hold_key(KEY_D, 10)
+	var p2: Vector3 = cam.global_position
+	check(p2.x > p1.x + 0.15, "D 右移（x %.2f→%.2f）" % [p1.x, p2.x])
+
+	var bz0: float = cam.global_transform.basis.z.x
+	await _hold_key(KEY_Q, 10)
+	var bz1: float = cam.global_transform.basis.z.x
+	check(bz1 > bz0 + 0.02, "Q 左旋（bz.x %.3f→%.3f）" % [bz0, bz1])
+
+	await _hold_key(KEY_E, 10)
+	var bz2: float = cam.global_transform.basis.z.x
+	check(bz2 < bz1 - 0.02, "E 右旋（bz.x %.3f→%.3f）" % [bz1, bz2])
+
+	for c2 in [Vector2i(24, 24), Vector2i(30, 20)]:
+		var w2: Vector3 = view.cell_to_world(c2.x, c2.y)
+		var gy2: float = view.ground_y(c2.x, c2.y)
+		var a2: Vector2 = view.world_to_screen(w2.x, gy2, w2.z)
+		var b2: Vector2 = cam.unproject_position(Vector3(w2.x, gy2, w2.z))
+		check(a2.x >= 0.0 and a2.distance_to(b2) < 1.0, "旋转后 world_to_screen 一致 %s (a=%s b=%s)" % [str(c2), str(a2), str(b2)])
+
+	var wc: Vector3 = view.cell_to_world(24, 24)
+	var gyc: float = view.ground_y(24, 24)
+	var s0: Vector2 = view.world_to_screen(wc.x, gyc, wc.z)
+	await _rmb_drag(vp_size * 0.5, Vector2(80.0, 0.0))
+	var s1: Vector2 = view.world_to_screen(wc.x, gyc, wc.z)
+	check(absf((s1.x - s0.x) - 80.0) < 25.0, "右键拖拽内容跟手（Δx=%.1f）" % (s1.x - s0.x))
+
+	cmp_int(world.supply, sup_cam, "相机操控不影响供给")
+	cmp_int(world.buildings.size(), buildings_cam, "相机操控不影响建筑数")
+
+	var sp24 := _sp_of(view, Vector2i(24, 24))
+	if sp24.x >= 0.0 and sp24.x < vp_size.x and sp24.y >= 0.0 and sp24.y < vp_size.y:
+		var back24: Vector2i = view.pick_cell(sp24.x, sp24.y)
+		check(back24 == Vector2i(24, 24), "新视角下拾取回环 %s" % str(back24))
 	finish("INPUT", 15)
 
 
@@ -240,6 +288,47 @@ func _key(code: Key) -> void:
 	ev.keycode = code
 	ev.pressed = true
 	get_root().push_input(ev)
+	await process_frame
+
+
+## 等 n 帧（相机推进在 _process 里，需要真实帧时间累积）。
+func _frames(n: int) -> void:
+	for _i in n:
+		await process_frame
+
+
+## 按住某键 n 帧再松开（相机 WASD/QE 为「按住持续」语义）。
+func _hold_key(code: Key, frames: int) -> void:
+	var down := InputEventKey.new()
+	down.keycode = code
+	down.pressed = true
+	get_root().push_input(down)
+	await _frames(frames)
+	var up := InputEventKey.new()
+	up.keycode = code
+	up.pressed = false
+	get_root().push_input(up)
+	await process_frame
+
+
+## 右键拖拽：按下 → 移动 delta → 松开（与真实鼠标路径一致）。
+func _rmb_drag(from: Vector2, delta: Vector2) -> void:
+	var down := InputEventMouseButton.new()
+	down.button_index = MOUSE_BUTTON_RIGHT
+	down.pressed = true
+	down.position = from
+	get_root().push_input(down)
+	await process_frame
+	var mv := InputEventMouseMotion.new()
+	mv.position = from + delta
+	mv.relative = delta
+	get_root().push_input(mv)
+	await process_frame
+	var up := InputEventMouseButton.new()
+	up.button_index = MOUSE_BUTTON_RIGHT
+	up.pressed = false
+	up.position = from + delta
+	get_root().push_input(up)
 	await process_frame
 
 

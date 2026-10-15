@@ -9,6 +9,9 @@ const Selfcheck = preload("res://game/selfcheck.gd")
 const TICK_DT := 1.0 / 20.0
 const MAX_CATCHUP := 5 # 单帧最多补的 tick 数（追平上限，超出丢弃积压）
 const BASE_SEED := 20261003
+const CAM_PAN_SPEED := 24.0 # WASD 平移速度（世界单位/秒）
+const CAM_ROT_SPEED := 1.5 # Q/E 旋转速度（rad/s）
+const CAM_KEYS := [KEY_W, KEY_A, KEY_S, KEY_D, KEY_Q, KEY_E] # 相机键（不参与对局操作）
 
 var view = null # View（preload 脚本实例）；动态引用
 var world: World = null
@@ -27,6 +30,9 @@ var mode := "wall"
 var drag_start := Vector2i(-1, -1) # 拖拽起始格
 var mouse_pos := Vector2(-1.0, -1.0)
 var heat_on := false
+var cam_keys := {} # 按下的相机键（WASD/QE；事件驱动，无 OS 轮询）
+var rmb_panning := false # 右键拖拽平移中
+var rmb_last := Vector2.ZERO # 右键拖拽上一帧位置（用位置差算位移，不依赖 relative）
 ## HUD 命中区提供者（R5 注入；未注入 = 无 HUD 区域）
 var hud_regions_provider: Callable
 
@@ -192,14 +198,42 @@ func _process(dt: float) -> void:
 		shell.open_gameover(world.outcome == World.WON, world)
 	view.sync(world)
 	update_ghost()
+	_update_camera(dt)
 	if not paused or shell.current_page() == "pause":
 		hud.update(world) # 暂停时仍刷（面板静置）；标题/结算下 HUD 已整体隐藏
 	shell.update()
 
 
+## 相机操控：WASD 平移 / QE 旋转（右键拖拽在 _unhandled_input 里直接跟手）。
+## 纯表现层（不进模拟/指纹）；标题、暂停、结算下冻结视角。
+func _update_camera(dt: float) -> void:
+	if paused or (shell != null and shell.current_page() != ""):
+		return
+	var mvx := 0.0
+	var mvy := 0.0
+	if cam_keys.has(KEY_D):
+		mvx += 1.0
+	if cam_keys.has(KEY_A):
+		mvx -= 1.0
+	if cam_keys.has(KEY_W):
+		mvy += 1.0
+	if cam_keys.has(KEY_S):
+		mvy -= 1.0
+	if mvx != 0.0 or mvy != 0.0:
+		view.camera_pan(mvx, mvy, CAM_PAN_SPEED * dt)
+	var rot := 0.0
+	if cam_keys.has(KEY_Q):
+		rot += 1.0
+	if cam_keys.has(KEY_E):
+		rot -= 1.0
+	if rot != 0.0:
+		view.camera_rotate(rot * CAM_ROT_SPEED * dt)
+
+
 # ---------------- 输入（移植 main.lua：拖拽放墙/塔、点覆盖层挖矿、点建筑拆除） ----------------
 
-## 输入分发：鼠标按下/抬起（拖拽/点击）、鼠标移动、键盘（TAB 热层、Esc 路由）
+## 输入分发：鼠标按下/抬起（拖拽/点击/右键平移）、鼠标移动、键盘（TAB 热层、
+## WASD/QE 相机、Esc 路由）。
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton:
 		var mb: InputEventMouseButton = event
@@ -208,16 +242,31 @@ func _unhandled_input(event: InputEvent) -> void:
 				pointer_down(mb.position)
 			else:
 				pointer_up(mb.position)
+		elif mb.button_index == MOUSE_BUTTON_RIGHT:
+			rmb_panning = mb.pressed and not in_hud_region(mb.position.x, mb.position.y)
+			rmb_last = mb.position
 	elif event is InputEventMouseMotion:
 		var mm: InputEventMouseMotion = event
 		mouse_pos = mm.position
+		if rmb_panning:
+			var d := mm.position - rmb_last
+			rmb_last = mm.position
+			if d != Vector2.ZERO:
+				view.camera_pan_pixels(d.x, d.y)
 	elif event is InputEventKey:
 		var mk: InputEventKey = event
-		if mk.pressed and not mk.echo:
-			if shell != null and shell.handle_key(mk.keycode):
-				return
-			if mk.keycode == KEY_TAB:
-				toggle_heat()
+		if mk.echo:
+			return
+		if not mk.pressed:
+			cam_keys.erase(mk.keycode)
+			return
+		if shell != null and shell.handle_key(mk.keycode):
+			return
+		if mk.keycode == KEY_TAB:
+			toggle_heat()
+			return
+		if CAM_KEYS.has(mk.keycode):
+			cam_keys[mk.keycode] = true
 
 
 ## 坐标是否落在 HUD 区域内（点击排除用）
