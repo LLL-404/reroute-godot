@@ -3,7 +3,7 @@ extends Control
 # HUD（移植 reroute/scripts/hud.lua）：顶栏（核心血条/波次倒计时/供给/热层钮/暂停钮）
 # + 右下操作模式列 + 技能钮 + 波次横幅 + 击杀赏金浮字池。
 # 纯展示层：只读模拟状态；按钮回调由 main 注入。布局为绝对像素（S 缩放口径同母版），
-# 窗口尺寸变化时 _layout() 重排；hit_regions() 是点击排除的唯一来源（main 消费）。
+# 窗口尺寸变化时 _layout() 重算 S 并重排；hit_regions() 是点击排除的唯一来源（main 消费）。
 
 var S := 1.0
 
@@ -300,11 +300,13 @@ func _build_floats() -> void:
 
 # ---------------- 布局（绝对像素，S 缩放） ----------------
 
-## 重排所有控件（窗口尺寸变化时调用；绝对像素布局）
+## 重排所有控件（窗口尺寸变化时调用；绝对像素布局）。S 在此重算，
+## 保证布局与 hit_regions() 始终跟随当前视口（build() 里的初值只服务构造）。
 func _layout() -> void:
 	if top_bar == null:
 		return
 	var win := get_viewport().get_visible_rect().size
+	S = clampf(win.y / 816.0, 1.0, 1.6)
 	# 顶栏
 	top_bar.position = Vector2.ZERO
 	top_bar.size = Vector2(win.x, TOP_H * S)

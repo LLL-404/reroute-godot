@@ -3,7 +3,8 @@ extends ProbeKit
 # C6 判定：HUD 机械断言（窗口模式运行）。
 # 断言组：hit_regions 数值口径 / 血条与文本跟随 / 波次文案与横幅调度 / 供给闪烁 /
 #         模式钮状态与真实点击链路 / 技能钮冷却文案 / 浮字池生命周期 / 整体显隐 /
-#         HUD 区域点击排除（含对照：战场点击有效）/ 界面截图（人眼复核中文渲染）。
+#         HUD 区域点击排除（含对照：战场点击有效）/ 窗口缩放一致性（S 与 hit_regions 重算）/
+#         界面截图（人眼复核中文渲染）。
 # 跑法（cwd=reroute-godot）：godot -s res://tests/probes/probe_hud.gd
 # 判定：exit 0 + stdout 含 `[HUD] PASS`。
 var vp_size := Vector2(1280.0, 720.0)
@@ -186,6 +187,27 @@ func _initialize() -> void:
 	var img := root.get_texture().get_image()
 	img.save_png("res://shots/hud.png")
 	print("[HUD] shot saved ", img.get_width(), "x", img.get_height())
+
+	# ---- 12. 窗口缩放一致性（D5-4：S 与 hit_regions 随视口重算）----
+	var s0: float = hud.S
+	root.size = Vector2i(1024, 960)
+	for _i in 3:
+		await process_frame
+	var nwin: Vector2 = get_root().get_visible_rect().size
+	check(nwin.y >= 850.0, "视口已放大（得 %s）" % str(nwin))
+	var want_s := clampf(nwin.y / 816.0, 1.0, 1.6)
+	cmp_approx(hud.S, want_s, "缩放后 S")
+	cmp_approx(hud.top_bar.size.y, hud.TOP_H * want_s, "缩放后顶栏高随 S")
+	var wregions: Array = hud.hit_regions()
+	cmp_rect(wregions[0], Rect2(0, 0, nwin.x, floorf(hud.TOP_STRIP_H * want_s)), "缩放后命中区·顶栏条")
+	var cw := floorf(hud.CORNER_W * want_s)
+	var ch := floorf(hud.CORNER_H * want_s)
+	cmp_rect(wregions[1], Rect2(nwin.x - cw, nwin.y - ch, cw, ch), "缩放后命中区·右下钮簇")
+	root.size = Vector2i(1280, 720)
+	for _i in 3:
+		await process_frame
+	cmp_approx(hud.S, s0, "还原后 S")
+	cmp_rect(hud.hit_regions()[0], Rect2(0, 0, 1280, 64), "还原后命中区·顶栏条")
 
 	# ---- 汇总 ----
 	finish("HUD", 30)
