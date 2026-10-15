@@ -123,10 +123,10 @@ func run(main) -> int:
 	# ---- 3. 主场景构建完整 ----
 	var view = main.view
 	var st: Dictionary = view.debug_stats()
-	_cmpi(int(st["field"]), 2304, "地形柱带 field=2304")
-	_cmpi(int(st["ring"]), 4384, "环带 ring=4384")
+	_cmpi(int(st["field"]), 4096, "地面网格 field=4096")
+	_cmpi(int(st["plain"]), 39312, "场外旷野 plain=39312")
 	_chk(st["cam"] == true, "相机就绪")
-	_cmpi(int(st["covers"]), 23, "覆盖层 covers=23")
+	_cmpi(int(st["covers"]), 25, "覆盖层 covers=25")
 	var gsolid := 0
 	var g0 = main.world.grid
 	for i in g0.cells.size():

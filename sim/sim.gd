@@ -2,7 +2,7 @@ class_name Sim
 extends RefCounted
 
 # 数值表：照搬 warden/Warden.Core/Defs.cs 与 SPEC-slice1 §4（合同镜像），
-# 按 GAMEJAM-2026-PLAN D6–D9 裁定收缩：128²→48²、敌 3→2 原型、一局 4–6 分钟。
+# 按 GAMEJAM-2026-PLAN D6–D9 裁定收缩：128²→64²（2026-10-16 世界重做）、敌 3→2 原型、一局 4–6 分钟。
 const TICK_HZ := 20
 const ORE_YIELD := 25 # 挖开一个矿格 +供给
 const START_SUPPLY := 300

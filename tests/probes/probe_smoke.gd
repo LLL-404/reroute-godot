@@ -19,12 +19,12 @@ const MAX_FRAMES := 700 # 14000 tick 预算（一局硬上限 8800）
 const TOWER_COST := 60
 ## 塔位候选（核心南侧主通道，自西向东自近及远）；非法点自动跳过。
 const TOWER_SPOTS := [
-	Vector2i(24, 9),
-	Vector2i(24, 12),
-	Vector2i(22, 12),
-	Vector2i(26, 12),
-	Vector2i(21, 10),
-	Vector2i(27, 10),
+	Vector2i(32, 9),
+	Vector2i(32, 12),
+	Vector2i(30, 12),
+	Vector2i(34, 12),
+	Vector2i(29, 10),
+	Vector2i(35, 10),
 ]
 
 var tower_cursor := 0

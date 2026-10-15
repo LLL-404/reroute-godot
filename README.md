@@ -30,8 +30,8 @@ P="D:/G/game/games/reroute-godot"
 "$GODOT" --path "$P"
 
 # 全部自动化闸（窗口模式的必须去掉 --headless）
-"$GODOT" --headless --path "$P" -s res://tests/run_tests.gd   # 83 单测
-"$GODOT" --headless --path "$P" -s res://tests/probes/probe_golden.gd      # 黄金回放 12 指纹
+"$GODOT" --headless --path "$P" -s res://tests/run_tests.gd   # 88 单测
+"$GODOT" --headless --path "$P" -s res://tests/probes/probe_golden.gd      # 黄金回放 16 指纹
 "$GODOT" --headless --path "$P" -s res://tests/probes/probe_scene.gd       # 主场景构建
 "$GODOT" --path "$P" -s res://tests/probes/probe_sync.gd                   # 视觉同步对拍
 "$GODOT" --path "$P" -s res://tests/probes/probe_input.gd                  # 输入闭环
@@ -62,12 +62,12 @@ P="D:/G/game/games/reroute-godot"
 
 ## 三、玩法一句话
 
-48×48 塔防，核心机制「放墙改道」：用墙/塔/地形改造把敌人推上更长的路，
+64×64 塔防，核心机制「放墙改道」：用墙/塔/地形改造把敌人推上更长的路，
 绕行越远赏金越高（`reward + traveled>>3`）。挖开西南盆地插口能拿到矿，
 但也会打开第三个出怪口。撑到 6400 tick 且场上清空即胜。
 
-相机：`WASD` 平移、鼠标右键拖拽平移（跟手）、`Q/E` 旋转；`TAB` 热层；
-`Esc` 暂停。窗口缩放会取景回默认北向视角（平移/旋转重置）。
+相机：`WASD` 平移、鼠标右键拖拽平移（跟手）、`Q/E` 旋转、滚轮缩放（0.6–1.8×）；`TAB` 热层；
+`Esc` 暂停。窗口缩放会取景回默认北向视角（平移/旋转/缩放重置）。
 
 ## 四、移植纪律（全部从踩坑中来，改代码前必读）
 
@@ -83,5 +83,5 @@ P="D:/G/game/games/reroute-godot"
 6. **语义 shim**（`sim/lua64.gd`）：`%` 截尾→`mod`（向下取整）、无 `//`→`idiv`、
    `>>` 算术移→`lshr`（逻辑移）。`*`/`+`/`<<`/位运算回绕与 Lua 一致，直译。
 7. **数组原地 compact**（`arr[i]=arr[j]` + `resize`）触发类型错误→建新数组。
-8. **基线冻结**：`sim/golden_baseline.gd` 的 12 指纹、剧本指纹 `0x12715062`、
+8. **基线冻结**：`sim/golden_baseline.gd` 的 16 指纹、剧本指纹 `0x02d81d2a`、
    `STATE_SCHEMA=5` 都是判据。改动必须走「记录 + 重录」流程，**禁止为了修绿探针而改基线**。

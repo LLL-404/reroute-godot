@@ -1,6 +1,6 @@
 extends Node3D
 
-# 3D 视图层门面（移植 reroute/scripts/view3d.lua；D5-1 拆分）：48² 战场渲染 + 拾取 + 相机取景
+# 3D 视图层门面（移植 reroute/scripts/view3d.lua；D5-1 拆分）：64² 战场渲染 + 拾取 + 相机取景
 # + 蓝图配色/雾 + 实体视觉同步（单位插值/建筑剪影/英雄/死亡消散/震荡环/幽灵/热层）。
 # 实现拆入四组件：view_core（坐标/相机/基建）/ view_terrain（蓝图/柱带/环带/热层/拾取）/
 # view_entities（单位/建筑/英雄/死亡/幽灵）/ view_audio（SFX/环境音/BGM）。
@@ -88,6 +88,11 @@ func camera_pan_pixels(dx: float, dy: float) -> void:
 ## 相机水平旋转（QE；正 = 左旋；→ view_core）
 func camera_rotate(delta: float) -> void:
 	core.rotate_y(delta)
+
+
+## 相机滚轮缩放（倍率因子；夹在 [0.6, 1.8]；→ view_core）
+func camera_zoom(factor: float) -> void:
+	core.zoom_by(factor)
 
 
 ## 应用蓝图（→ view_terrain）

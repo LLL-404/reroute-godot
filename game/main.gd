@@ -207,7 +207,7 @@ func _process(dt: float) -> void:
 ## 相机操控：WASD 平移 / QE 旋转（右键拖拽在 _unhandled_input 里直接跟手）。
 ## 纯表现层（不进模拟/指纹）；标题、暂停、结算下冻结视角。
 func _update_camera(dt: float) -> void:
-	if paused or (shell != null and shell.current_page() != ""):
+	if not _camera_free():
 		return
 	var mvx := 0.0
 	var mvy := 0.0
@@ -232,7 +232,7 @@ func _update_camera(dt: float) -> void:
 
 # ---------------- 输入（移植 main.lua：拖拽放墙/塔、点覆盖层挖矿、点建筑拆除） ----------------
 
-## 输入分发：鼠标按下/抬起（拖拽/点击/右键平移）、鼠标移动、键盘（TAB 热层、
+## 输入分发：鼠标按下/抬起（拖拽/点击/右键平移/滚轮缩放）、鼠标移动、键盘（TAB 热层、
 ## WASD/QE 相机、Esc 路由）。
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton:
@@ -245,6 +245,9 @@ func _unhandled_input(event: InputEvent) -> void:
 		elif mb.button_index == MOUSE_BUTTON_RIGHT:
 			rmb_panning = mb.pressed and not in_hud_region(mb.position.x, mb.position.y)
 			rmb_last = mb.position
+		elif (mb.button_index == MOUSE_BUTTON_WHEEL_UP or mb.button_index == MOUSE_BUTTON_WHEEL_DOWN) and mb.pressed:
+			if _camera_free() and not in_hud_region(mb.position.x, mb.position.y):
+				view.camera_zoom(0.9 if mb.button_index == MOUSE_BUTTON_WHEEL_UP else 1.1)
 	elif event is InputEventMouseMotion:
 		var mm: InputEventMouseMotion = event
 		mouse_pos = mm.position
@@ -267,6 +270,11 @@ func _unhandled_input(event: InputEvent) -> void:
 			return
 		if CAM_KEYS.has(mk.keycode):
 			cam_keys[mk.keycode] = true
+
+
+## 相机操控是否可用（标题/暂停/结算冻结；滚轮缩放与 WASD 同口径）
+func _camera_free() -> bool:
+	return not paused and (shell == null or shell.current_page() == "")
 
 
 ## 坐标是否落在 HUD 区域内（点击排除用）

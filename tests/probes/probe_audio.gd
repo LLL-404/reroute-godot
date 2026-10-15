@@ -112,7 +112,7 @@ func _initialize() -> void:
 
 	# 放塔 → build_stone_place（母版 view3d L705）
 	var c0: int = _cnt(view, "build_stone_place.mp3")
-	var tower_cell: Vector2i = _find_open(w, 0, 0, 47, 47)
+	var tower_cell: Vector2i = _find_open(w, 0, 0, 63, 63)
 	check(tower_cell.x >= 0, "塔格扫描")
 	if tower_cell.x >= 0:
 		w.apply_command({ "kind": "tower", "x": tower_cell.x, "y": tower_cell.y })
@@ -178,7 +178,7 @@ func _find_open(world, x0: int, y0: int, x1: int, y1: int) -> Vector2i:
 
 
 func _find_ore_cover(view, world) -> Vector2i:
-	var rects := [[4, 40, 6, 43], [22, 20, 26, 20]]
+	var rects := [[4, 56, 6, 59], [30, 20, 34, 20]]
 	for r in rects:
 		for y in range(int(r[1]), int(r[3]) + 1):
 			for x in range(int(r[0]), int(r[2]) + 1):

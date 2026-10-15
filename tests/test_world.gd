@@ -1,7 +1,7 @@
 extends RefCounted
 
 # world 单测（移植自 reroute/tests/test_world.lua）。
-# 方法：真实 48² 场景管结构断言；行为断言用 StubScenario 小图把变量压到最少。
+# 方法：真实 64² 场景管结构断言；行为断言用 StubScenario 小图把变量压到最少。
 # 白盒仅用于制造边界（供给/血量/tick 直写），行为断言一律走 apply_command/tick。
 
 
@@ -34,9 +34,9 @@ func register(kit: TestKit) -> void:
 
 	kit.test("dig-ore-and-cover", func():
 		var w := World.new(Scenario.new(), 1)
-		w.apply_command({ "kind": "dig", "x": 22, "y": 20 })
+		w.apply_command({ "kind": "dig", "x": 30, "y": 20 })
 		kit.eq(w.supply, Sim.START_SUPPLY + Sim.ORE_YIELD, "挖矿 +25")
-		kit.eq(w.grid.at(22, 20), Grid.OPEN, "矿格挖开")
+		kit.eq(w.grid.at(30, 20), Grid.OPEN, "矿格挖开")
 		w.apply_command({ "kind": "dig", "x": 4, "y": 17 })
 		kit.eq(w.supply, Sim.START_SUPPLY + Sim.ORE_YIELD, "非矿覆盖无收益")
 		kit.eq(w.grid.at(4, 17), Grid.OPEN, "表土挖开"))
@@ -44,52 +44,52 @@ func register(kit: TestKit) -> void:
 	kit.test("dig-plug-opens-route", func():
 		var w := World.new(Scenario.new(), 1)
 		kit.eq(w.route_opened, false, "开局未开门")
-		w.apply_command({ "kind": "dig", "x": 5, "y": 37 })
+		w.apply_command({ "kind": "dig", "x": 5, "y": 53 })
 		kit.eq(w.route_opened, true, "挖插口开门")
 		kit.eq(w.supply, Sim.START_SUPPLY, "插口无矿收益"))
 
 	kit.test("dig-rejections", func():
 		var w := World.new(Scenario.new(), 1)
 		var fp0 := w.fingerprint()
-		w.apply_command({ "kind": "dig", "x": 24, "y": 6 })
+		w.apply_command({ "kind": "dig", "x": 32, "y": 6 })
 		w.apply_command({ "kind": "dig", "x": -5, "y": 12 })
 		w.apply_command({ "kind": "dig", "x": 99, "y": 99 })
-		w.apply_command({ "kind": "dig", "x": 24, "y": 8 })
+		w.apply_command({ "kind": "dig", "x": 32, "y": 8 })
 		kit.eq(w.supply, Sim.START_SUPPLY, "拒绝的挖凿零供给副作用")
 		kit.eq(w.fingerprint(), fp0, "拒绝的挖凿零指纹副作用"))
 
 	kit.test("wall-build-and-reject", func():
 		var w := World.new(Scenario.new(), 1)
-		w.apply_command({ "kind": "wall", "x": 11, "y": 29 })
+		w.apply_command({ "kind": "wall", "x": 19, "y": 39 })
 		kit.eq(w.supply, Sim.START_SUPPLY - 10, "墙费 10")
-		kit.eq(w.grid.at(11, 29), Grid.SOLID, "墙落地挡路")
-		kit.ok(w.by_cell.get(w.grid.idx(11, 29)) != null, "墙登记 by_cell")
+		kit.eq(w.grid.at(19, 39), Grid.SOLID, "墙落地挡路")
+		kit.ok(w.by_cell.get(w.grid.idx(19, 39)) != null, "墙登记 by_cell")
 		var s := w.supply
-		w.apply_command({ "kind": "wall", "x": 24, "y": 6 })
+		w.apply_command({ "kind": "wall", "x": 32, "y": 6 })
 		w.apply_command({ "kind": "wall", "x": -1, "y": 0 })
-		w.apply_command({ "kind": "wall", "x": 26, "y": 20 })
-		w.apply_command({ "kind": "wall", "x": 11, "y": 29 })
+		w.apply_command({ "kind": "wall", "x": 34, "y": 20 })
+		w.apply_command({ "kind": "wall", "x": 19, "y": 39 })
 		kit.eq(w.supply, s, "拒绝的建造零扣费")
 		kit.eq(w.buildings.size(), 2, "只有核心 + 一面墙"))
 
 	kit.test("spawn-and-tick", func():
 		var w := World.new(Scenario.new(), 1)
-		w.apply_command({ "kind": "spawn", "x": 12, "y": 40 })
+		w.apply_command({ "kind": "spawn", "x": 20, "y": 56 })
 		kit.eq(w.units.size(), 1, "单位入表")
 		kit.eq(w.units[0]["speed_ticks"], Sim.ENEMIES[Sim.E_SWARM - 1]["speed_ticks"], "speed=0 取默认")
 		kit.eq(w.units[0]["hp"], 30, "swarm hp")
 		kit.eq(w.units[0]["kind"], Sim.E_SWARM, "kind")
-		w.apply_command({ "kind": "spawn", "x": 24, "y": 6 })
+		w.apply_command({ "kind": "spawn", "x": 32, "y": 6 })
 		kit.eq(w.units.size(), 1, "阻挡格拒收")
 		_run(w, 1)
 		kit.eq(w.tick_count, 1, "tick 计数"))
 
 	kit.test("tower-build-halving", func():
 		var w := World.new(Scenario.new(), 1)
-		w.apply_command({ "kind": "tower", "x": 11, "y": 29 })
+		w.apply_command({ "kind": "tower", "x": 19, "y": 39 })
 		kit.eq(w.buildings[1]["build_left"], 60, "首波前施工减半 120//2")
 		w.tick_count = 60 # 白盒：越过 waves[1][1]
-		w.apply_command({ "kind": "tower", "x": 12, "y": 29 })
+		w.apply_command({ "kind": "tower", "x": 20, "y": 39 })
 		kit.eq(w.buildings[2]["build_left"], 120, "首波后不减半"))
 
 	# ---------------- 经济：拆除退款 ----------------

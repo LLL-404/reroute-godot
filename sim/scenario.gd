@@ -1,10 +1,11 @@
 class_name Scenario
 extends RefCounted
 
-# 数值表 + 48² 手搓夹具地图 + 压缩波次表。照搬 reroute/scripts/sim/scenario.lua：
-# 核心在北岸中上；岩脊横贯 y=30..32，两个咽喉口；南岸双出怪口；
+# 数值表 + 64² 手搓夹具地图 + 压缩波次表（2026-10-16 世界重做：48²→64²）。
+# 核心在北岸中上；岩脊横贯 y=40..42，两个咽喉口；南岸双出怪口；
 # 西南盆地密闭岩环（插口是唯一覆盖格，内部藏矿）= 开门陷阱；中场安全矿。
-# 波次：细流教学开局 → 5 波递进 → 末波双口开闸（dam break）。20Hz；终局 5'20"。
+# 平移口径：中心系坐标 x+8（对称轴 24→32），y 按区带 +10/+16（烘化保留母版不对称）；
+# 盆地系贴西南角（x 不变，y+16）。波次表原样保留（路径变长，节奏待 D3 试玩定稿）。
 
 var w: int
 var h: int
@@ -21,19 +22,19 @@ var wave_scale_pct: int
 
 
 func _init() -> void:
-	w = 48
-	h = 48
-	core = Vector2i(24, 6)
-	hero_spawn = Vector2i(24, 8) # 核心门前两格（build_grid 强制 OPEN）
-	spawns = [Vector2i(12, 40), Vector2i(36, 40), Vector2i(5, 41)]
-	basin_plug = Vector2i(5, 37)
+	w = 64
+	h = 64
+	core = Vector2i(32, 6)
+	hero_spawn = Vector2i(32, 8) # 核心门前两格（build_grid 强制 OPEN）
+	spawns = [Vector2i(20, 56), Vector2i(44, 56), Vector2i(5, 57)]
+	basin_plug = Vector2i(5, 53)
 	ore_cells = []
 	# 盆地内矿（诱饵：挖插口才够得着）
 	for x in range(4, 7):
-		for y in range(40, 44):
+		for y in range(56, 60):
 			ore_cells.append(Vector2i(x, y))
 	# 中场矿（安全保底，北岸）
-	for x in range(22, 27):
+	for x in range(30, 35):
 		ore_cells.append(Vector2i(x, 20))
 	# 同波多条目错开 15~30 tick：怪列成"流"而不是团（总量 ~220 只）
 	waves = [
@@ -70,25 +71,25 @@ func _init() -> void:
 
 
 static func _is_choke(x: int) -> bool:
-	return (x >= 10 and x <= 12) or (x >= 35 and x <= 37)
+	return (x >= 18 and x <= 20) or (x >= 43 and x <= 45)
 
 
-## 高度夹具：北岸台地 h1；核心山头 h3 + 南向两级台阶（h2）；双咽喉谷口 y30 爬出 h1；
+## 高度夹具：北岸台地 h1；核心山头 h3 + 南向两级台阶（h2）；双咽喉谷口 y40 爬出 h1；
 ## 南岸低地/咽喉谷道/盆地坑 h0。与岩脊 SOLID 叠加成"峡谷+高原"。
 func height_at(x: int, y: int) -> int:
-	if y <= 9 and x >= 21 and x <= 27:
+	if y <= 9 and x >= 29 and x <= 35:
 		return 3
-	if y <= 12 and x >= 22 and x <= 26:
+	if y <= 12 and x >= 30 and x <= 34:
 		return 2
-	if y <= 29:
+	if y <= 39:
 		return 1
-	if y == 30 and Scenario._is_choke(x):
+	if y == 40 and Scenario._is_choke(x):
 		return 1
 	return 0
 
 
 static func _is_ridge(x: int, y: int) -> bool:
-	return y >= 30 and y <= 32 and x >= 1 and x <= 46
+	return y >= 40 and y <= 42 and x >= 1 and x <= 62
 
 
 ## 初始地形：三态一次性写入（命令层之后才登场）。
@@ -105,9 +106,9 @@ func build_grid() -> Grid:
 				g.set_cell(x, y, Grid.COVER) # 矿格先于岩脊判定，否则会被写成不可挖的实心
 			elif Scenario._is_ridge(x, y) and not Scenario._is_choke(x):
 				g.set_cell(x, y, Grid.SOLID)
-			elif x >= 2 and x <= 9 and y >= 37 and y <= 45:
+			elif x >= 2 and x <= 9 and y >= 53 and y <= 61:
 				# 盆地：密闭岩环（只有插口是覆盖层），内部空腔藏矿与第三出怪口
-				var ring := x == 2 or x == 9 or y == 37 or y == 45
+				var ring := x == 2 or x == 9 or y == 53 or y == 61
 				if ring:
 					g.set_cell(x, y, Grid.COVER if (x == basin_plug.x and y == basin_plug.y) else Grid.SOLID)
 			elif y > 12 and y < 26 and x % 9 == 4 and y % 11 == 6:
@@ -131,7 +132,7 @@ func is_ore(x: int, y: int) -> bool:
 
 
 ## 剧本指纹：静态数据的 FNV-1a（换剧本必须换 baseline 的守门数据）。
-## 字段定序与 Lua 版逐行对齐；引擎侧现值 scenario_fp=0x12715062（可对拍）。
+## 字段定序与 Lua 版逐行对齐；引擎侧现值 scenario_fp=0x02d81d2a（64² 重排后，2026-10-16）。
 func fingerprint(canon: Canon) -> int:
 	var b := canon.buffer()
 	b.put_i32(w)

@@ -3,8 +3,8 @@
 > **权威文档永远是 [`docs/DEVELOPMENT-PLAN.md`](docs/DEVELOPMENT-PLAN.md)**。本文件只是给 AI 的
 > **速查表与红线**，不复制权威文档内容；冲突时以方案为准。
 
-48×48 塔防，核心机制「放墙改道」：敌人绕得越远、死时赏金越高（`reward + traveled>>3`）。
-Engineering 保真度极高：模拟核心是**确定性**的，有 12 指纹黄金基线锁死行为（2026-10-15 缺陷 A 重录）。
+64×64 塔防，核心机制「放墙改道」：敌人绕得越远、死时赏金越高（`reward + traveled>>3`）。
+Engineering 保真度极高：模拟核心是**确定性**的，有 16 指纹黄金基线锁死行为（2026-10-16 世界 64² 重录）。
 
 ---
 
@@ -75,8 +75,8 @@ python tools/check_shots.py    # 截图像素校验
 
 | 冻结物 | 位置 |
 |---|---|
-| 12 个黄金指纹 | `sim/golden_baseline.gd` |
-| 剧本指纹 `0x12715062` | `Scenario.fingerprint()` |
+| 16 个黄金指纹 | `sim/golden_baseline.gd` |
+| 剧本指纹 `0x02d81d2a` | `Scenario.fingerprint()` |
 | `STATE_SCHEMA = 5` | `canon.gd` / `world.canonical_bytes()` |
 
 漂移了先怀疑**实现**，不是怀疑基线。真要改：先说明为何必须改 → 重跑 `probe_golden` 采新值
@@ -135,6 +135,14 @@ python tools/check_shots.py    # 截图像素校验
   纯表现层（`view_core` 的 `focus/yaw` 口径 + `main._update_camera`），标题/暂停/结算冻结，
   窗口缩放取景会重置平移旋转；`world_to_screen` 泛化为相机基投影（旋转后浮字仍准）。
   `probe_input` 断言 41→51；负对照实跑 `bad=5 FAIL`；全 19 闸绿（证据 `logs/gates-20261015-cam/`）。
+- 世界 64² 重做（2026-10-16）**已完成**：玩法图 48²→64²（`Scenario` 重排：核心 (32,6)、
+  三出怪口、盆地环 + 插口、岩脊 y40..42、咽喉双通道、中场矿 y20）；视觉去「包围圈」——
+  `view_terrain` 重写为**单张水密顶点色网格**（场内 0.5m 细格邻格 max-blend 柱顶，
+  场外渐进格距旷野 P(i)=32+i+0.06i²，外圈台阶柱带全删）；`blueprint` 场外改 slope 门控缓降坡；
+  相机 scale 放宽 + 滚轮缩放（0.6–1.8×，HUD 区/暂停冻结）；Solid 融入地面（岩石色 + 1.6m）。
+  **基线第二次重录：世界由 LOST@4926 变 WON@6400（核心余 784），指纹 12→16（400..6400）。**
+  全 19 闸绿 + 负对照 2 份（证据 `logs/gates-20261016-world64/`）；`probe_scene`/`probe_input`
+  新增结构/缩放断言；决策记录 = 方案 §11.7。
 - 历史审计报告（`docs/*-20261015.md`）按**快照原则保持原样**，不要顺着结构整理去改它们。
 
 ---

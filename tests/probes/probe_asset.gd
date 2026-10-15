@@ -143,7 +143,7 @@ func _initialize() -> void:
 		else:
 			n_rubble += 1
 			rub_nodes.append(cv["node"])
-	cmp_int(n_ore + n_rubble, 23, "覆盖层总数")
+	cmp_int(n_ore + n_rubble, 25, "覆盖层总数")
 	check(n_ore >= 4 and n_rubble >= 4, "矿 %d / 瓦砾 %d 双类共存" % [n_ore, n_rubble])
 	if ore_nodes.size() > 0:
 		var gn: Node3D = ore_nodes[0]

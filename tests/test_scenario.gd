@@ -1,7 +1,7 @@
 extends RefCounted
 
-# scenario 单测（移植自 reroute/tests/test_scenario.lua）：数值表合同、48² 夹具结构、
-# 高度夹具、剧本指纹确定性与负对照（含引擎现值对拍 0x12715062）。
+# scenario 单测（移植自 reroute/tests/test_scenario.lua）：数值表合同、64² 夹具结构、
+# 高度夹具、剧本指纹确定性与负对照（含引擎现值对拍 0x02d81d2a）。
 
 
 func register(kit: TestKit) -> void:
@@ -63,13 +63,13 @@ func register(kit: TestKit) -> void:
 
 	kit.test("layout-anchors", func():
 		var sc := Scenario.new()
-		kit.eq(sc.w, 48, "w")
-		kit.eq(sc.h, 48, "h")
-		kit.eq(sc.core, Vector2i(24, 6), "core")
-		kit.eq(sc.hero_spawn, Vector2i(24, 8), "hero_spawn")
+		kit.eq(sc.w, 64, "w")
+		kit.eq(sc.h, 64, "h")
+		kit.eq(sc.core, Vector2i(32, 6), "core")
+		kit.eq(sc.hero_spawn, Vector2i(32, 8), "hero_spawn")
 		kit.eq(sc.spawns.size(), 3, "spawns 数")
-		kit.eq(sc.spawns[2], Vector2i(5, 41), "盆地口")
-		kit.eq(sc.basin_plug, Vector2i(5, 37), "plug")
+		kit.eq(sc.spawns[2], Vector2i(5, 57), "盆地口")
+		kit.eq(sc.basin_plug, Vector2i(5, 53), "plug")
 		kit.eq(sc.end_tick, 6400, "end_tick")
 		kit.eq(sc.hard_cap_tick, 8800, "hard_cap_tick")
 		kit.eq(sc.trickle_every, 300, "trickle_every")
@@ -101,53 +101,53 @@ func register(kit: TestKit) -> void:
 
 	kit.test("height-fixture", func():
 		var sc := Scenario.new()
-		kit.eq(sc.height_at(24, 6), 3, "核心山头 h3")
-		kit.eq(sc.height_at(24, 12), 2, "山头南台阶 h2")
-		kit.eq(sc.height_at(26, 12), 2, "台阶右缘 h2")
-		kit.eq(sc.height_at(27, 12), 1, "台阶外落 h1")
-		kit.eq(sc.height_at(24, 20), 1, "北岸台地 h1")
-		kit.eq(sc.height_at(11, 30), 1, "咽喉谷口 y30 h1")
-		kit.eq(sc.height_at(24, 30), 0, "y30 非谷口 h0")
-		kit.eq(sc.height_at(24, 31), 0, "岩脊线南 h0")
-		kit.eq(sc.height_at(24, 40), 0, "南岸低地 h0")
+		kit.eq(sc.height_at(32, 6), 3, "核心山头 h3")
+		kit.eq(sc.height_at(32, 12), 2, "山头南台阶 h2")
+		kit.eq(sc.height_at(34, 12), 2, "台阶右缘 h2")
+		kit.eq(sc.height_at(35, 12), 1, "台阶外落 h1")
+		kit.eq(sc.height_at(32, 20), 1, "北岸台地 h1")
+		kit.eq(sc.height_at(19, 40), 1, "咽喉谷口 y40 h1")
+		kit.eq(sc.height_at(32, 40), 0, "y40 非谷口 h0")
+		kit.eq(sc.height_at(32, 41), 0, "岩脊线南 h0")
+		kit.eq(sc.height_at(32, 56), 0, "南岸低地 h0")
 		kit.eq(sc.height_at(0, 0), 1, "西北角 h1"))
 
 	kit.test("build-grid-structure", func():
 		var sc := Scenario.new()
 		var g := sc.build_grid()
 		kit.eq(g.at(0, 0), Grid.SOLID, "西北角边境")
-		kit.eq(g.at(24, 0), Grid.SOLID, "北边境")
-		kit.eq(g.at(47, 47), Grid.SOLID, "东南角边境")
+		kit.eq(g.at(32, 0), Grid.SOLID, "北边境")
+		kit.eq(g.at(63, 63), Grid.SOLID, "东南角边境")
 		kit.eq(g.at(sc.core.x, sc.core.y), Grid.SOLID, "核心占地")
 		kit.eq(g.at(sc.hero_spawn.x, sc.hero_spawn.y), Grid.OPEN, "英雄落位格恒通行")
 		kit.eq(g.at(sc.spawns[0].x, sc.spawns[0].y), Grid.OPEN, "主出怪口 1 通行")
 		kit.eq(g.at(sc.spawns[1].x, sc.spawns[1].y), Grid.OPEN, "主出怪口 2 通行")
 		kit.eq(g.at(sc.spawns[2].x, sc.spawns[2].y), Grid.COVER, "盆地口压在矿格上")
-		kit.eq(g.at(20, 31), Grid.SOLID, "岩脊实心")
-		kit.eq(g.at(11, 31), Grid.OPEN, "西咽喉口")
-		kit.eq(g.at(36, 32), Grid.OPEN, "东咽喉口")
-		kit.eq(g.at(13, 31), Grid.SOLID, "咽喉间岩脊")
-		kit.eq(g.at(2, 37), Grid.SOLID, "盆地岩环")
-		kit.eq(g.at(9, 45), Grid.SOLID, "盆地岩环角")
+		kit.eq(g.at(28, 41), Grid.SOLID, "岩脊实心")
+		kit.eq(g.at(19, 41), Grid.OPEN, "西咽喉口")
+		kit.eq(g.at(44, 42), Grid.OPEN, "东咽喉口")
+		kit.eq(g.at(21, 41), Grid.SOLID, "咽喉间岩脊")
+		kit.eq(g.at(2, 53), Grid.SOLID, "盆地岩环")
+		kit.eq(g.at(9, 61), Grid.SOLID, "盆地岩环角")
 		kit.eq(g.at(sc.basin_plug.x, sc.basin_plug.y), Grid.COVER, "插口是唯一覆盖格")
-		kit.eq(g.at(7, 44), Grid.OPEN, "盆地内腔非矿格通行")
-		kit.eq(g.at(22, 20), Grid.COVER, "中场矿")
-		kit.eq(g.at(26, 20), Grid.COVER, "中场矿右缘")
-		kit.eq(g.at(21, 20), Grid.OPEN, "矿带外通行")
+		kit.eq(g.at(7, 60), Grid.OPEN, "盆地内腔非矿格通行")
+		kit.eq(g.at(30, 20), Grid.COVER, "中场矿")
+		kit.eq(g.at(34, 20), Grid.COVER, "中场矿右缘")
+		kit.eq(g.at(29, 20), Grid.OPEN, "矿带外通行")
 		kit.eq(g.at(4, 17), Grid.COVER, "稀疏表土（可挖不给矿）")
 		kit.ok(g.rev > 0, "建图有实心/覆盖写入")
-		kit.eq(g.get_h(24, 6), 3, "高度落盘：核心山头")
-		kit.eq(g.get_h(24, 12), 2, "高度落盘：台阶")
-		kit.eq(g.get_h(11, 30), 1, "高度落盘：谷口")
-		kit.eq(g.get_h(24, 31), 0, "高度落盘：脊南"))
+		kit.eq(g.get_h(32, 6), 3, "高度落盘：核心山头")
+		kit.eq(g.get_h(32, 12), 2, "高度落盘：台阶")
+		kit.eq(g.get_h(19, 40), 1, "高度落盘：谷口")
+		kit.eq(g.get_h(32, 41), 0, "高度落盘：脊南"))
 
 	kit.test("is-ore", func():
 		var sc := Scenario.new()
-		kit.ok(sc.is_ore(22, 20), "中场矿是矿")
-		kit.ok(sc.is_ore(23, 20), "中场矿带内含 x23")
-		kit.ok(sc.is_ore(4, 42), "盆地矿是矿")
-		kit.ok(not sc.is_ore(5, 37), "插口不是矿")
-		kit.ok(not sc.is_ore(21, 20), "矿带缝隙不是矿")
+		kit.ok(sc.is_ore(30, 20), "中场矿是矿")
+		kit.ok(sc.is_ore(31, 20), "中场矿带内含 x31")
+		kit.ok(sc.is_ore(4, 58), "盆地矿是矿")
+		kit.ok(not sc.is_ore(5, 53), "插口不是矿")
+		kit.ok(not sc.is_ore(29, 20), "矿带缝隙不是矿")
 		kit.ok(not sc.is_ore(0, 0), "边境不是矿"))
 
 	kit.test("fingerprint-determinism", func():
@@ -155,7 +155,7 @@ func register(kit: TestKit) -> void:
 		var a := Scenario.new()
 		var b := Scenario.new()
 		kit.eq(a.fingerprint(canon), b.fingerprint(canon), "同剧本两次指纹不一致")
-		kit.eq(a.fingerprint(canon), 309416034, "指纹 vs 引擎现值 0x12715062")
+		kit.eq(a.fingerprint(canon), 47717674, "指纹 vs 引擎现值 0x02d81d2a")
 		var mutated := Scenario.new()
 		mutated.wave_scale_pct = 90
 		kit.ok(a.fingerprint(canon) != mutated.fingerprint(canon), "改 wave_scale_pct 指纹没变")

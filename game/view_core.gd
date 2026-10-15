@@ -1,17 +1,17 @@
 extends RefCounted
 
-# 《改道》视图层 · 坐标与基建（D5-1 拆分自 view.gd）：48² 坐标映射、盒体/材质工具、
-# 相机取景与屏幕投影、相机操控（WASD 平移 / 右键拖拽 / QE 旋转）。
+# 《改道》视图层 · 坐标与基建（D5-1 拆分自 view.gd）：64² 坐标映射、盒体/材质工具、
+# 相机取景与屏幕投影、相机操控（WASD 平移 / 右键拖拽 / QE 旋转 / 滚轮缩放）。
 # 零 sim 引用（只被 terrain/entities 当几何底座）；节点挂点统一走 host。
 
-const CELL_N := 48
-const HALF := 24.0
+const CELL_N := 64
+const HALF := 32.0
 const H_STEP := 1.2 # sim 高度层 1.2m/级
 
-# 取景留边（px 基准）：上让顶栏、右让按钮带、下让提示行（同母版口径）
-const RESERVE_TOP := 60.0
-const RESERVE_RIGHT := 170.0
-const RESERVE_BOTTOM := 28.0
+# 取景留边（px 基准）：上让顶栏（实高 56）、右让按钮带（列宽 160）、下让提示余量（同母版口径）
+const RESERVE_TOP := 56.0
+const RESERVE_RIGHT := 160.0
+const RESERVE_BOTTOM := 22.0
 
 # 色板（albedo）。ground_lo/ground/ground_hi/rock 每局被蓝图 palette 覆盖；
 # gold/rubble 为占位块色（真实资产后续轮替换）。
@@ -47,7 +47,8 @@ var camera: Camera3D
 var focus := Vector3.ZERO # 相机注视的地面点（y=0；平移/旋转围绕它）
 var yaw := 0.0 # 水平旋转（绕 Y，正 = 左旋；QE 修改）
 var _pitch := 0.0 # 基准俯角（rad，取景时定；操控不改）
-var _dist := 0.0 # 相机到 focus 的距离（取景时定；操控不改）
+var _dist := 0.0 # 相机到 focus 的基准距离（取景时定；滚轮缩放叠乘 _zoom）
+var _zoom := 1.0 # 滚轮缩放倍率（0.6–1.8；取景重置 1.0）
 var _fit: Dictionary = {}
 var _fit_w := 0.0
 var _fit_h := 0.0
@@ -164,9 +165,9 @@ func _ensure_camera() -> void:
 	host.add_child(camera)
 
 
-## 取景：把 48² 地图撑满可交互区（上让 60px、右让 170px、下让提示行；口径同母版闭式推导）。
+## 取景：把 64² 地图撑满可交互区（上让顶栏、右让按钮带、下让余量；口径同母版闭式推导）。
 ## 二分俯角找"宽、深同时贴边"的平衡点（夹在 [35°,50°]），再解视距与竖向平移。
-## 注意：取景会重置平移/旋转（窗口尺寸变化时由 sync 触发，回到默认北向全图视角）。
+## 注意：取景会重置平移/旋转/缩放（窗口尺寸变化时由 sync 触发，回到默认北向全图视角）。
 func fit_camera() -> void:
 	_ensure_camera()
 	var vp := host.get_viewport().get_visible_rect().size
@@ -225,18 +226,20 @@ func fit_camera() -> void:
 	_dist = cam_y / sr
 	focus = Vector3(0.0, 0.0, cam_z - cr * _dist)
 	yaw = 0.0
+	_zoom = 1.0
 	_apply_cam()
 	_fit_w = W
 	_fit_h = H
 
 
-## 由 (focus, yaw, 基准俯角/距离) 沉降相机位姿，并刷新投影缓存。
+## 由 (focus, yaw, 基准俯角/距离, 缩放) 沉降相机位姿，并刷新投影缓存。
 func _apply_cam() -> void:
 	var sr := sin(_pitch)
 	var cr := cos(_pitch)
 	var f := Vector3(0.0, -sr, -cr).rotated(Vector3.UP, yaw)
 	var u := Vector3(0.0, cr, -sr).rotated(Vector3.UP, yaw)
-	camera.position = focus - f * _dist
+	var d := _dist * _zoom
+	camera.position = focus - f * d
 	camera.look_at(camera.position + f * 100.0, u)
 	_update_fit_cache()
 
@@ -277,9 +280,9 @@ func _flat_forward() -> Vector3:
 	return Vector3(f.x, 0.0, f.z).normalized()
 
 
-## 平移焦点并夹在地图邻域内（防止把地图推出视野找不回来）。
+## 平移焦点并夹在地图邻域内（防止把地图推出视野找不回来；缩放后允许的外圈更大）。
 func _move_focus(v: Vector3) -> void:
-	var limit := HALF + 6.0
+	var limit := HALF + 24.0
 	focus += v
 	focus.x = clampf(focus.x, -limit, limit)
 	focus.z = clampf(focus.z, -limit, limit)
@@ -304,10 +307,18 @@ func pan_pixels(dx: float, dy: float) -> void:
 	var vp := host.get_viewport().get_visible_rect().size
 	if vp.x <= 0.0 or vp.y <= 0.0:
 		return
-	var upp := 2.0 * _dist * float(_fit["t45"]) / vp.y # 焦平面处：世界单位/像素
+	var upp := 2.0 * (_dist * _zoom) * float(_fit["t45"]) / vp.y # 焦平面处：世界单位/像素
 	var fh := _flat_forward()
 	var rt := Vector3(-fh.z, 0.0, fh.x)
 	_move_focus(fh * (dy * upp) - rt * (dx * upp))
+
+
+## 滚轮缩放（绕 focus 拉近/拉远；倍率夹在 [0.6, 1.8]；纯表现层，不进模拟/指纹）。
+func zoom_by(factor: float) -> void:
+	if camera == null or _dist <= 0.0:
+		return
+	_zoom = clampf(_zoom * factor, 0.6, 1.8)
+	_apply_cam()
 
 
 ## Q/E 旋转（绕 focus；正 = 左旋）。

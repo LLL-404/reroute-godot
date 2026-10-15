@@ -26,7 +26,6 @@ var dyn: Node3D = null
 var tiles: Node3D
 var unit_root: Node3D
 var building_root: Node3D
-var solids_mmi: MultiMeshInstance3D
 
 var cover_nodes: Dictionary = {} # cellkey -> { node, x, y }
 var building_nodes: Dictionary = {} # id -> { node, kind }
@@ -61,11 +60,11 @@ func _init(p_host: Node3D, p_core: ViewCoreScript, p_terrain: ViewTerrainScript,
 
 # ---- 对局装载 ----
 
-## 铺一局的动态内容：覆盖层、Solid 与实体容器；仅换局时整体重建。
+## 铺一局的动态内容：覆盖层、实体容器；Solid 视觉已融入连续地面网格（仅计数）。
 func build_terrain(pgrid: Grid) -> void:
 	terrain.grid = pgrid
 	_height_rev = pgrid.height_rev
-	terrain._rebuild_field() # 战场柱顶与单位 ground_y 使用同一份模拟高度
+	terrain._rebuild_field() # 地面网格与单位 ground_y 使用同一份模拟高度
 
 	if dyn != null:
 		dyn.free()
@@ -94,21 +93,15 @@ func build_terrain(pgrid: Grid) -> void:
 	_units_n = 0
 	_horn_tick = -999
 
-	var solid_insts: Array = []
+	var n_solid := 0
 	for y in pgrid.h:
 		for x in pgrid.w:
 			var c := pgrid.at(x, y)
 			if c == Grid.SOLID:
-				var w := core.cell_to_world(x, y)
-				var gy := terrain.ground_y(x, y)
-				solid_insts.append([Vector3(w.x, gy + 0.8, w.z), Vector3(1.0, 1.6, 1.0)])
+				n_solid += 1 # SOLID 视觉融入连续地面网格：岩石色 + 1.6m 抬升
 			elif c == Grid.COVER:
 				_make_cover(x, y)
-
-	solids_mmi = core._make_multimesh(solid_insts, core.mats["solid"])
-	solids_mmi.name = "Solids"
-	dyn.add_child(solids_mmi)
-	_stat_solids = solid_insts.size()
+	_stat_solids = n_solid
 
 
 ## 覆盖层（真实资产）：矿格 = 砂金堆满档（挖开即随覆盖层移除）；
@@ -166,7 +159,7 @@ func show_ghost(cells: Array, bad: bool = false) -> void:
 
 ## 每帧同步：地形高度变化重建、热层刷新、覆盖层消失、建筑/英雄/单位/死亡消散/震荡环/相机取景
 func sync(world: World) -> void:
-	# 仅重建地面柱带；高度增减总和相同也必须刷新，实体缓存不得被清掉。
+	# 仅重建地面网格；高度增减总和相同也必须刷新，实体缓存不得被清掉。
 	if terrain.grid != null and terrain.grid.height_rev != _height_rev:
 		_height_rev = terrain.grid.height_rev
 		terrain._rebuild_field()
@@ -408,7 +401,7 @@ func _float_bounty(scr: Vector2, text: String) -> void:
 func debug_stats() -> Dictionary:
 	return {
 		"field": terrain._stat_field,
-		"ring": terrain._stat_ring,
+		"plain": terrain._stat_plain,
 		"solids": _stat_solids,
 		"covers": cover_nodes.size(),
 		"cam": core.camera != null,

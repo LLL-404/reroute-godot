@@ -4,8 +4,9 @@ extends RefCounted
 # 视图层按配方组装地形高度与配色。积木全部是显式 seed 的纯函数。
 # 隔离纪律：本系统的视图种子绝不进 sim/；战场高度对仿真与黄金指纹不存在。
 # 本文件不使用 class_name；调用方以 preload 引用（规避 class_name 自引用类风险）。
+# 2026-10-16 世界重做：去「距场越远山越高」的包围圈层，场外 = 缓降坡 + 起伏 + 极缓远降。
 
-const HALF := 24.0 # 与 view.CELL_N/2 同源；蓝图地标用格子坐标，composer 换算世界坐标
+const HALF := 32.0 # 与 view.CELL_N/2 同源；蓝图地标用格子坐标，composer 换算世界坐标
 
 # ============ 积木库（纯函数） ============
 
@@ -60,23 +61,24 @@ static func smooth01(t: float) -> float:
 
 ## 返回 [h_fn: Callable(wx, wz) -> float, palette: Dictionary]。
 ## 地标用格子坐标换算：wz_c = y - HALF + 0.5。
+## 场外不再叠「环山」：slope_w 门控的缓降坡 + 中频起伏 + 极缓远降，与场内无缝衔接。
 static func compose(bp: Dictionary, seed: int) -> Array:
 	var world: Dictionary = bp["world"]
 	var micro: Dictionary = bp["micro"]
-	var warp: Dictionary = world["warp"]
-	var shape: Dictionary = world["shape"]
 	var landmarks: Array = bp["landmarks"]
-	var exponent := float(world.get("exponent", 1.0))
 	var h_fn := func(wx: float, wz: float) -> float:
 		var d := maxf(absf(wx), absf(wz)) - (HALF - 0.5)
-		var t := smooth01(d / float(micro["reach"]))
-		# 山体：距离场经噪声扭曲（破方形容差）后隆起
-		var dw := d + float(warp["amp"]) * (fbm(wx * float(warp["freq"]) + float(warp["offset"][0]), wz * float(warp["freq"]) + float(warp["offset"][1]), int(warp["oct"]), seed + 11) - 0.5) * 2.0
-		var mountain := pow(smooth01(dw / float(world["reach"])), exponent) * (float(shape["base"]) + float(shape["span"]) * fbm(wx * float(world["freq"]), wz * float(world["freq"]), int(world["oct"]), seed + 31))
+		var g := smooth01(d / float(world["slope_w"])) # 场外门控：0=场内 1=场外完全过渡
 		# 地表肌理：场内高频小起伏，向场外压低
-		var m := (fbm(wx * float(micro["freq"]) + float(micro["offset"][0]), wz * float(micro["freq"]) + float(micro["offset"][1]), 2, seed + 53) - 0.5) * (float(micro["amp_field"]) + (float(micro["amp_edge"]) - float(micro["amp_field"])) * t)
+		var m := (fbm(wx * float(micro["freq"]) + float(micro["offset"][0]), wz * float(micro["freq"]) + float(micro["offset"][1]), 2, seed + 53) - 0.5) * (float(micro["amp_field"]) + (float(micro["amp_edge"]) - float(micro["amp_field"])) * g)
+		var h := m
+		if g > 0.0:
+			# 场外三件套（全部由 g 渐入）：缓降坡 / 中频起伏 / 极缓远降
+			h -= float(world["depth"]) * g
+			h += (fbm(wx * float(world["und_freq"]), wz * float(world["und_freq"]), int(world["und_oct"]), seed + 31) - 0.5) * float(world["und_amp"]) * g
+			if d > 0.0:
+				h -= float(world["far_drop"]) * d * g
 		# 战场地标（位置固定保玩法可读，幅度由蓝图定）
-		var h := mountain + m
 		for lm in landmarks:
 			if lm["kind"] == "peak":
 				var dx := wx - (float(lm["x"]) - HALF + 0.5)
@@ -96,19 +98,19 @@ const PRESETS := {
 		"schema": 1,
 		"name": "canyon",
 		"landmarks": [
-			{ "kind": "ridge", "y": 31, "sigma": 2.6, "amp": 1.15 },
-			{ "kind": "basin", "y": 40.5, "sigma": 3.6, "amp": -0.9 },
-			{ "kind": "peak", "x": 24, "y": 6, "sigma": 5.0, "amp": 0.75 },
+			{ "kind": "ridge", "y": 41, "sigma": 2.6, "amp": 1.15 },
+			{ "kind": "basin", "y": 57.5, "sigma": 3.6, "amp": -0.9 },
+			{ "kind": "peak", "x": 32, "y": 6, "sigma": 5.0, "amp": 0.75 },
 		],
 		"world": {
-			"reach": 42.0,
-			"exponent": 1.35,
-			"warp": { "freq": 0.045, "amp": 14.0, "oct": 2, "offset": [5.2, -1.3] },
-			"shape": { "base": 5.0, "span": 30.0 },
-			"freq": 0.021,
-			"oct": 3,
+			"slope_w": 16.0,
+			"depth": 2.2,
+			"far_drop": 0.02,
+			"und_amp": 1.6,
+			"und_freq": 0.045,
+			"und_oct": 3,
 		},
-		"micro": { "freq": 0.17, "reach": 34.0, "amp_field": 0.45, "amp_edge": 0.17, "offset": [-3.7, 9.1] },
+		"micro": { "freq": 0.17, "amp_field": 0.45, "amp_edge": 0.17, "offset": [-3.7, 9.1] },
 		"palette": {
 			"ground_lo": [0.150, 0.140, 0.115],
 			"ground": [0.215, 0.205, 0.170],
@@ -125,19 +127,19 @@ const PRESETS := {
 		"schema": 1,
 		"name": "shale",
 		"landmarks": [
-			{ "kind": "ridge", "y": 31, "sigma": 3.2, "amp": 0.9 },
-			{ "kind": "basin", "y": 40.5, "sigma": 4.0, "amp": -0.7 },
-			{ "kind": "peak", "x": 24, "y": 6, "sigma": 5.5, "amp": 0.6 },
+			{ "kind": "ridge", "y": 41, "sigma": 3.2, "amp": 0.9 },
+			{ "kind": "basin", "y": 57.5, "sigma": 4.0, "amp": -0.7 },
+			{ "kind": "peak", "x": 32, "y": 6, "sigma": 5.5, "amp": 0.6 },
 		],
 		"world": {
-			"reach": 50.0,
-			"exponent": 1.2,
-			"warp": { "freq": 0.038, "amp": 18.0, "oct": 2, "offset": [1.9, 7.4] },
-			"shape": { "base": 4.0, "span": 22.0 },
-			"freq": 0.016,
-			"oct": 3,
+			"slope_w": 20.0,
+			"depth": 1.6,
+			"far_drop": 0.018,
+			"und_amp": 2.0,
+			"und_freq": 0.035,
+			"und_oct": 3,
 		},
-		"micro": { "freq": 0.13, "reach": 34.0, "amp_field": 0.35, "amp_edge": 0.12, "offset": [8.8, -2.6] },
+		"micro": { "freq": 0.13, "amp_field": 0.35, "amp_edge": 0.12, "offset": [8.8, -2.6] },
 		"palette": {
 			"ground_lo": [0.125, 0.130, 0.145],
 			"ground": [0.185, 0.195, 0.215],
@@ -154,19 +156,19 @@ const PRESETS := {
 		"schema": 1,
 		"name": "ember",
 		"landmarks": [
-			{ "kind": "ridge", "y": 31, "sigma": 2.0, "amp": 1.4 },
-			{ "kind": "basin", "y": 40.5, "sigma": 3.2, "amp": -1.0 },
-			{ "kind": "peak", "x": 24, "y": 6, "sigma": 4.5, "amp": 0.85 },
+			{ "kind": "ridge", "y": 41, "sigma": 2.0, "amp": 1.4 },
+			{ "kind": "basin", "y": 57.5, "sigma": 3.2, "amp": -1.0 },
+			{ "kind": "peak", "x": 32, "y": 6, "sigma": 4.5, "amp": 0.85 },
 		],
 		"world": {
-			"reach": 38.0,
-			"exponent": 1.2,
-			"warp": { "freq": 0.052, "amp": 12.0, "oct": 2, "offset": [-6.1, 3.3] },
-			"shape": { "base": 7.0, "span": 34.0 },
-			"freq": 0.028,
-			"oct": 3,
+			"slope_w": 13.0,
+			"depth": 2.6,
+			"far_drop": 0.025,
+			"und_amp": 1.3,
+			"und_freq": 0.055,
+			"und_oct": 4,
 		},
-		"micro": { "freq": 0.21, "reach": 34.0, "amp_field": 0.5, "amp_edge": 0.2, "offset": [2.4, 11.7] },
+		"micro": { "freq": 0.21, "amp_field": 0.5, "amp_edge": 0.2, "offset": [2.4, 11.7] },
 		"palette": {
 			"ground_lo": [0.160, 0.115, 0.090],
 			"ground": [0.240, 0.180, 0.140],

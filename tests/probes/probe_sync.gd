@@ -24,15 +24,15 @@ func _initialize() -> void:
 	var world = main.world
 
 	# 锚点：坐标映射的独立字面量检查（其余对拍以此为基）
-	cmp_v3(view.cell_to_world(0, 0), Vector3(-23.5, 0.0, -23.5), "cell_to_world(0,0)")
-	cmp_v3(view.cell_to_world(47, 47), Vector3(23.5, 0.0, 23.5), "cell_to_world(47,47)")
+	cmp_v3(view.cell_to_world(0, 0), Vector3(-31.5, 0.0, -31.5), "cell_to_world(0,0)")
+	cmp_v3(view.cell_to_world(63, 63), Vector3(31.5, 0.0, 31.5), "cell_to_world(63,63)")
 
 	# ---- 布置：2 单位 + 墙 + 塔（远处）+ 英雄移动 ----
-	var spawn_a := _find_free(world, 16, 8, 32, 16, [])
-	var spawn_b := _find_free(world, 16, 8, 32, 16, [spawn_a])
-	var wall_cell := _find_free(world, 16, 8, 32, 16, [spawn_a, spawn_b])
-	var tower_cell := _find_free(world, 0, 0, 47, 47, [], Vector2i(24, 8), 900)
-	var hero_target := _find_free(world, 18, 20, 30, 34, [])
+	var spawn_a := _find_free(world, 24, 8, 40, 16, [])
+	var spawn_b := _find_free(world, 24, 8, 40, 16, [spawn_a])
+	var wall_cell := _find_free(world, 24, 8, 40, 16, [spawn_a, spawn_b])
+	var tower_cell := _find_free(world, 0, 0, 63, 63, [], Vector2i(32, 8), 900)
+	var hero_target := _find_free(world, 26, 20, 38, 34, [])
 	check(spawn_a.x >= 0 and spawn_b.x >= 0, "出生格扫描")
 	check(wall_cell.x >= 0, "墙格扫描")
 	check(tower_cell.x >= 0, "塔格扫描（距英雄出生 >30 格）")
@@ -159,18 +159,18 @@ func _initialize() -> void:
 	var exp_total := 0
 	var maxd := 0
 	var dists := []
-	dists.resize(48 * 48)
-	for y in 48:
-		for x in 48:
+	dists.resize(64 * 64)
+	for y in 64:
+		for x in 64:
 			var d: int = world.field.dist_at(x, y)
 			if d > maxd:
 				maxd = d
-			dists[y * 48 + x] = d
+			dists[y * 64 + x] = d
 			if d >= 0:
 				exp_total += 1
 	cmp_int(int(view.debug_stats()["heat"]), exp_total, "热层实例数")
 	var band_counts := [0, 0, 0, 0, 0, 0]
-	for i in 48 * 48:
+	for i in 64 * 64:
 		var d2: int = dists[i]
 		if d2 >= 0:
 			var band: int = mini(6, 1 + (d2 * 6) / (maxd + 1))

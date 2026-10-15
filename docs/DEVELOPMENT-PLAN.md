@@ -3,7 +3,8 @@
 > 本文是 **reroute-godot** 的唯一开发权威。任何 AI 或人类接手开发，先读本文，再读
 > `README.md`（项目速览）与各源文件头部注释。
 >
-> 文档版本：v2.3（2026-10-15：新增 §7.4b 制造积分使用——活动积分 95,175 于
+> 文档版本：v2.4（2026-10-16：世界 64² 重做 + 基线第二次重录（WON@6400），见 §11.7。
+> v2.3 为 10-15 新增 §7.4b 制造积分使用——活动积分 95,175 于
 > **10-21 12:00 到期**，含生成清单与纪律。v2.2 为 10-14 晚恢复全程参与奖赛道并
 > 修正「试玩次数时间窗」推断错误，见 §0.3 D 与 §11.2b）
 > 对应代码状态：`master` 分支，当日整理改动**已提交**（见 §11 变更台账）
@@ -285,9 +286,10 @@
 
 ## 0. 一句话定义
 
-48×48 网格塔防，核心机制是**「放墙改道」**：玩家不靠堆输出，而是用墙、塔、地形改造
+64×64 网格塔防，核心机制是**「放墙改道」**：玩家不靠堆输出，而是用墙、塔、地形改造
 把敌人推上更长的路；敌人绕行越远，被击杀时赏金越高（`reward + traveled>>3`）。地图自带
 一个「暗门陷阱」——挖开西南盆地的插口会拿到矿，但也会打开第三个出怪口。
+（2026-10-16 世界重做由 48² 升至 64²，见 §11.7。）
 
 ---
 
@@ -297,7 +299,7 @@
 
 | 编号 | 目标 | 判据 |
 |---|---|---|
-| G1 | 一局 4–6 分钟，20Hz 固定步长，全程确定性可复现 | 黄金回放 12 指纹逐位一致（2026-10-15 重录） |
+| G1 | 一局 4–6 分钟，20Hz 固定步长，全程确定性可复现 | 黄金回放 16 指纹逐位一致（2026-10-16 重录） |
 | G2 | 玩家所有状态变更只经 `World.apply_command` | 非法命令零副作用（指纹不变） |
 | G3 | 表现层只读模拟状态，绝不回写 | `probe_sync` 视图/世界逐位对拍 |
 | G4 | 导出包可自证（资源齐备 + 核心正确 + 场景可建） | `--headless --selfcheck` exit 0 |
@@ -314,7 +316,7 @@
 - ❌ 不参评「最佳 TapTap 制造奖」（本作非制造平台作品，无资格）
 - ❌ 不引入浮点进模拟层（sim/ 内禁 `float`/`sqrt`/三角函数，`FlowField` 纯整数）
 - ❌ 不让视图种子污染仿真种子（`blueprint.gd` 的种子必须与 `sim` 完全隔离）
-- ❌ 不擅自修改 `golden_baseline.gd` 的 12 个指纹值（见 §5.4 冻结纪律）
+- ❌ 不擅自修改 `golden_baseline.gd` 的 16 个指纹值（见 §5.4 冻结纪律）
 - ❌ 本轮不做 iOS / Web / Linux 导出
 - ❌ 本轮不做手柄支持（Android 只做触屏）
 
@@ -327,8 +329,8 @@
 | 项 | 证据 | 命令 |
 |---|---|---|
 | 单测 88 例全绿 | `[UNIT-DONE] passed=88 failed=0` + `[UNIT-ALL-GREEN]` | `<godot> --headless --path <P> -s res://tests/run_tests.gd` |
-| 黄金回放 12 指纹逐位一致 | `[GOLDEN] checks=2 bad=0` + `[GOLDEN] PASS` | `<godot> --headless --path <P> -s res://tests/probes/probe_golden.gd` |
-| 主场景构建对拍 | `[SCENE] checks=6 bad=0` + `[SCENE] PASS`（field=2304 ring=4384 solids=338/338 covers=23/23 对拍） | `<godot> --headless --path <P> -s res://tests/probes/probe_scene.gd` |
+| 黄金回放 16 指纹逐位一致 | `[GOLDEN] checks=2 bad=0` + `[GOLDEN] PASS` | `<godot> --headless --path <P> -s res://tests/probes/probe_golden.gd` |
+| 主场景构建对拍 | `[SCENE] checks=11 bad=0` + `[SCENE] PASS`（field=4096 / plain=39312 / solids·covers 对拍 + 单地面网格 56169 顶点 / 334176 索引 / 连续性抽检） | `<godot> --headless --path <P> -s res://tests/probes/probe_scene.gd` |
 | 视觉同步逐位对拍 1773 断言 | `[SYNC] checks=1773 bad=0 moved=42 match=100` | `<godot> --path <P> -s res://tests/probes/probe_sync.gd`（**窗口模式**） |
 | 输入闭环 41 断言 | `[INPUT] checks=41 bad=0` | `<godot> --path <P> -s res://tests/probes/probe_input.gd`（**窗口模式**） |
 | 三屏流转 39 断言 | `[UI_FLOW] checks=39 bad=0` | `<godot> --path <P> -s res://tests/probes/probe_ui_flow.gd`（**窗口模式**） |
@@ -372,7 +374,7 @@
 
 ### 3.1 棋盘与地形
 
-- 网格 `48×48`（`Scenario.w/h`），格子三态：`OPEN=0`（通行）/ `COVER=1`（覆盖层，
+- 网格 `64×64`（`Scenario.w/h`；2026-10-16 由 48² 重做，见 §11.7），格子三态：`OPEN=0`（通行）/ `COVER=1`（覆盖层，
   不可通行、**可挖开**）/ `SOLID=2`（实心，不可挖）。
 - 高度层 `0..5` 整数（`Sim.H_MIN/H_MAX`）。单位跨边规则：**爬升 ≤1、下降任意**
   （单向崖）；英雄无视高度。视觉换算 `H_STEP = 1.2 m/级`。
@@ -470,12 +472,12 @@ reroute-godot/
 │   ├─ sim.gd               数值表（建筑/敌军/英雄/常量）
 │   ├─ world.gd             世界状态机（唯一变更入口）
 │   ├─ verify.gd            验证闸宿主（黄金回放 + 不变式看门狗 + 冻结自证）
-│   └─ golden_baseline.gd   12 个黄金指纹（**冻结数据**）
+│   └─ golden_baseline.gd   16 个黄金指纹（**冻结数据**；2026-10-16 世界 64² 重录）
 ├─ game/                    表现层（只读模拟状态）
 │   ├─ main.gd              主循环 / 输入分发 / 对局生命周期
 │   ├─ view.gd              3D 视图门面：_ready 组装 + 公共面转发（D5-1 拆分）
 │   ├─ view_core.gd         视图基建：格子坐标 / 相机取景 / 世界→屏幕
-│   ├─ view_terrain.gd      蓝图地貌：柱带 / 环带 / 热层 / 拾取
+│   ├─ view_terrain.gd      蓝图地貌：连续地面网格（场内 0.5m / 场外旷野）/ 热层 / 拾取
 │   ├─ view_entities.gd     实体视觉：单位 / 建筑 / 英雄 / 死亡 / 幽灵
 │   ├─ view_audio.gd        音频：SFX 池 / 环境音 / BGM
 │   ├─ models.gd            真实资产（glb）实例管理
@@ -514,7 +516,7 @@ game/  ←──  tests/probes/    （探针驱动表现层与整机）
 |---|---:|---|---|
 | `game/view_entities.gd` | 418 | 单位/建筑/英雄/死亡/幽灵视觉同步 | D5-1 拆分（2026-10-15） |
 | `game/view_core.gd` | 246 | 格子坐标/相机取景/渲染基建 | D5-1 拆分（2026-10-15） |
-| `game/view_terrain.gd` | 243 | 蓝图/柱带/环带/热层/拾取 | D5-1 拆分（2026-10-15） |
+| `game/view_terrain.gd` | 422 | 蓝图地貌/地面网格/热层/拾取 | D5-1 拆分；2026-10-16 世界重做重写 |
 | `game/view.gd` | 206 | 视图门面：_ready 组装 + 公共面转发 | D5-1 拆分（2026-10-15） |
 | `game/view_audio.gd` | 116 | SFX 池/环境音/BGM | D5-1 拆分（2026-10-15） |
 | `game/hud.gd` | 581 | HUD 全部控件 | |
@@ -570,8 +572,8 @@ game/  ←──  tests/probes/    （探针驱动表现层与整机）
 
 | 冻结物 | 位置 | 改动流程 |
 |---|---|---|
-| 12 个黄金指纹 | `sim/golden_baseline.gd` | 先说明为何必须改 → 重跑 `probe_golden` 采集新值 → 同一次提交里更新 `golden_baseline.gd` 与决策记录 |
-| 剧本指纹 `0x12715062` | `Scenario.fingerprint()` | 改地图/波次/高度夹具后必须换基线 |
+| 16 个黄金指纹 | `sim/golden_baseline.gd` | 先说明为何必须改 → 重跑 `probe_golden` 采集新值 → 同一次提交里更新 `golden_baseline.gd` 与决策记录 |
+| 剧本指纹 `0x02d81d2a` | `Scenario.fingerprint()` | 改地图/波次/高度夹具后必须换基线 |
 | `STATE_SCHEMA = 5` | `canon.gd` / `world.canonical_bytes()` | 改编码字段 = 升 schema 号 + 换基线 |
 
 **禁止**为了让某个探针变绿而修改基线值。探针失败优先怀疑实现。
@@ -583,7 +585,7 @@ game/  ←──  tests/probes/    （探针驱动表现层与整机）
 - 单位插值：`frac = (tick + uid) % speed_ticks / speed_ticks`，在 `prev` 格与当前格之间
   线性插值（`probe_sync` 逐位对拍此公式）。
 - 建筑施工期视觉压扁 `scale.y = 0.35`；竣工 `1.0`。
-- 地形柱带的重建触发条件 = `grid.height_rev` 变化（**不是**高度总和，见 §10.1）。
+- 地面网格的重建触发条件 = `grid.height_rev` 变化（**不是**高度总和，见 §10.1）。
 - 热层按 `grid.rev` 变化重建。
 
 ### 5.6 音频
@@ -880,7 +882,7 @@ HUD 全部控件、标题/暂停/结算三屏、三件套音频、真实 glb 资
 2. **缺陷全修**（§10.2）：按 E → B → C 顺序（最安全到最危险）。
    A、D 若当天来不及，移到 D6。**（E 随 D5-4、A/B/C 已于 2026-10-15 提前修复并统一重录，见 §10.2 与 §11.5；D 留档。）**
 3. **一次性重录基线**：
-   - `sim/golden_baseline.gd` 的黄金指纹（现 12 条）→ 用 `probe_golden` 采集新值
+   - `sim/golden_baseline.gd` 的黄金指纹（现 16 条）→ 用 `probe_golden` 采集新值
    - 剧本指纹（若地图/波次有改动）→ 用 `probe_scenario` 采集
    - `STATE_SCHEMA` 若编码字段有变 → 升号
 4. 更新所有依赖旧值的单测与探针断言。
@@ -1023,9 +1025,9 @@ HUD 全部控件、标题/暂停/结算三屏、三件套音频、真实 glb 资
 | 闸 | 命令 | 通过判据 | 需窗口 |
 |---|---|---|---|
 | 单测 | `run_tests.gd` | `passed=88 failed=0` + `[UNIT-ALL-GREEN]` | 否 |
-| 黄金回放 | `tests/probes/probe_golden.gd` | `[GOLDEN] checks=2 bad=0` + `PASS`（12 指纹） | 否 |
+| 黄金回放 | `tests/probes/probe_golden.gd` | `[GOLDEN] checks=2 bad=0` + `PASS`（16 指纹） | 否 |
 | 模拟模块 | `tests/probes/probe_{sim,grid,flow,scenario,world}.gd` | 各自 `[TAG] checks=N bad=0` + `PASS` | 否 |
-| 场景构建 | `tests/probes/probe_scene.gd` | `[SCENE] checks=6 bad=0` + `PASS`（field=2304 ring=4384 对拍） | 否 |
+| 场景构建 | `tests/probes/probe_scene.gd` | `[SCENE] checks=11 bad=0` + `PASS`（field=4096 / plain=39312 / 单地面网格对拍） | 否 |
 | 视觉同步 | `tests/probes/probe_sync.gd` | `[SYNC] PASS match=100 bad=0` | **是** |
 | 输入闭环 | `tests/probes/probe_input.gd` | `[INPUT] PASS bad=0` | **是** |
 | HUD | `tests/probes/probe_hud.gd` | `[HUD] PASS bad=0` | **是** |
@@ -1392,6 +1394,48 @@ exit 1（`logs/gates-20261015-cam/negctl_old_impl_cam.out`）。
 
 **证据**：`logs/gates-20261015-cam/`（全 19 闸绿；vs d6abc 仅 3 个 .out 变化——
 probe_input 按设计 +10、probe_scene ms 噪声、check_shots ±4 像素阈值内，其余 16 个逐字节一致）。
+
+---
+
+### 11.7 世界 64² 重做 + 基线第二次重录（2026-10-16）
+
+**需求（用户直令）**：「地图太小」（①外圈扩展/相机放宽 ②滚轮缩放 ③默认取景更满
+④玩法图真变大）、「地形不连续」（场外台阶环 + 整体方块感）、**「不应该有包围圈」**；
+约束：64×64、场内也要平滑、一次做完。用户不看中途截图，由 AI 目视 `shots/` 确认。
+
+**sim 侧**：`Scenario` 48²→64² 重排——核心 (32,6)、英雄点 (32,8)、出怪口
+(20,56)/(44,56)/(5,57)、盆地插口 (5,53)、盆地矿 x4..6×y56..59、中场矿 x30..34×y20、
+岩脊 y40..42、咽喉 x18..20/43..45、盆地环 x2..9×y53..61；稀疏表土保留 7 格。
+指纹 `0x12715062`→**`0x02d81d2a`**（covers=25、subsolids=450）；`SCRIPT_COMMANDS`
+81 条按新坐标平移；单测/探针全量随动（`run_tests` 88 例全绿）。
+
+**视图侧**：`view_terrain` 重写为**单张水密顶点色地面网格**——采样线 = 场外渐进格距
+`P(i)=HALF+i+0.06i²`（i=1..54，至 ±260.96）+ 场内 `-32..32` 步 0.5（237 线）；
+格中心顶点=本格柱顶、整数坐标顶点=四邻 max（挖坑见底、填高平整）；
+顶点 237²=56169、索引 334176；**外圈台阶柱带与 SOLID 独立 MultiMesh 全删**
+（实心融入网格：岩石色 + 1.6m）；热层/拾取改走同一网格顶点。`blueprint` 场外改
+slope 门控缓降坡（无环山）+ 中频起伏 + 远降；相机 `_zoom` 0.6–1.8×（滚轮 0.9/1.1
+级进、取景重置）、平移限位 ±56、HUD 预留区 TOP56/RIGHT160/BOTTOM22；`main` 滚轮
+分发（暂停/标题/结算与 HUD 区冻结，`_camera_free` 同口径）。
+
+**基线第二次重录（本次裁定）**：剧本与地图是**同一契约的两半**，地图重排 → 旧脚本
+可达的 12 条基线整体失效，按冻结纪律一次重录：**16 条（400..6400）**，结局由
+LOST@4926 变 **WON@6400（核心余 784）**。原因：出怪口（南岸）→ 核心（北岸）路径
+延长 ~50%，同脚本防守转胜，属**真实行为变更**而非实现漂移；当前脚本局偏易，
+D3 数值定稿时结合本轮回试玩一并评估。
+
+**测试**：`probe_scene` 新增 5 条（单地面 mesh / 单 surface / 56169 顶点 /
+334176 索引 / 连续性行检）+ 计数换 `field=4096`/`plain=39312`（checks 6→11）；
+`probe_input` 新增滚轮 6 条（拉近/还原/限位 0.6/限位 1.8/暂停冻结/HUD 冻结）、
+`_terrain_top` 改读地面网格顶点（checks 51→57）；`selfcheck` 计数随动。
+负对照实跑（旧 game/ 五个视图文件 + 新断言）：`probe_scene` = `debug_stats` 取
+`plain` 键运行时报错中止 → 无 PASS（`negctl_scene.out/.err`）；`probe_input` =
+`bad=5 FAIL`（网格缺格中心顶点 ×3、填高/挖低无响应、滚轮无响应 ×3；
+`negctl_input.out/.err`）。
+
+**证据**：`logs/gates-20261016-world64/`（全 19 闸绿 + 2 份负对照；世界级重做，
+不逐字节比对旧 post）；`shots/*` 全部重出并目视确认——外圈=连续旷野缓坡（无台阶
+圈）、岩脊/盆地/插口可辨、核心下「暗色椭圆」经排查为集结的 blade 敌（非网格瑕疵）。
 
 ---
 

@@ -1,8 +1,14 @@
 extends RefCounted
 
 # 《改道》视图层 · 地形域（D5-1 拆分自 view.gd）：蓝图配色/雾、场内高表（ground_h/ground_y）、
-# 战场柱带、外围环带、威胁热层、屏幕拾取。只读模拟（grid 高度/rev 仅取用）；
+# 连续地面网格（单网格水密：场内 0.5m 细格 + 场外渐进格距；无包围圈、无方块缝）、
+# 威胁热层、屏幕拾取。只读模拟（grid 高度/rev 仅取用）；
 # 几何工具借 core；节点挂点统一走 host。
+# 2026-10-16 世界重做：旧「柱带 + 环带」方块拼装（_rebuild_field 柱体 / _rebuild_ring /
+# _collect_ring）已删除；SOLID 抬升融入同一网格（岩石色 + 1.6m）。
+# 顶点高规则：场内采样点 = 邻接格顶高的 max（格顶 = 蓝图高 + 模拟层 1.2m/级 + SOLID 抬升），
+# 场外采样点 = 蓝图高度函数直取；网格一次建成（场外数据蓝图期内静态），
+# 高度变化（挖/填/落墙）只重算场内区并与静态区合并重建 surface。
 
 const ViewCoreScript = preload("res://game/view_core.gd")
 const Blueprint = preload("res://game/blueprint.gd")
@@ -18,11 +24,15 @@ const HEAT_COLORS := [
 	[0.16, 0.28, 0.45],
 ]
 
+# 地面网格参数：场内 0.5m 细格（64² 格 → 129 条采样线）；场外渐进格距 P(i)=32+i+0.06i²
+const FINE_STEP := 0.5
+const OUT_RINGS := 54 # i=1..54 → 最远 ±260.96
+const SOLID_BUMP := 1.6 # SOLID 格在网格内的抬升（原柱体口径：顶 = ground_y + 1.6）
+
 var host: Node3D
 var core: ViewCoreScript
 
 var field_root: Node3D
-var world_root: Node3D
 
 var grid: Grid = null
 var field_h: PackedFloat64Array
@@ -35,8 +45,28 @@ var heat_rev := -1
 var heat_mats: Array = []
 
 var _stat_field := 0
-var _stat_ring := 0
+var _stat_plain := 0
 var _stat_heat := 0
+
+# —— 地面网格数据（_heights：场外区由蓝图期静态写入，场内区每次重建覆写）——
+var _lattice := PackedFloat64Array() # 每轴采样坐标（升序；场外渐进 + 场内 0.5m）
+var _ln := 0 # 每轴采样线数
+var _i0 := 0 # 场内采样线起始下标（= -HALF 线）
+var _i1 := 0 # 场内采样线结束下标（= +HALF 线）
+var _cell_top := PackedFloat64Array() # 每格视觉顶（蓝图高 + 模拟层 + SOLID 抬升）
+var _heights := PackedFloat64Array()
+var _positions := PackedVector3Array()
+var _normals := PackedVector3Array()
+var _colors := PackedColorArray()
+var _indices := PackedInt32Array()
+var _ground: MeshInstance3D = null
+var _ground_mat: StandardMaterial3D = null
+var _col_lo := Color()
+var _col_mid := Color()
+var _col_hi := Color()
+var _col_rock := Color()
+var _band_lo := 0.0
+var _band_hi := 0.0
 
 
 func _init(p_host: Node3D, p_core: ViewCoreScript) -> void:
@@ -44,17 +74,14 @@ func _init(p_host: Node3D, p_core: ViewCoreScript) -> void:
 	core = p_core
 
 
-## 场地根容器（原 view._ready 中段）：Field 柱带 / WorldRing 环带。
+## 场地根容器（原 view._ready 中段）：整个连续地面网格挂 Field 下。
 func setup_roots() -> void:
 	field_root = Node3D.new()
 	field_root.name = "Field"
 	host.add_child(field_root)
-	world_root = Node3D.new()
-	world_root.name = "WorldRing"
-	host.add_child(world_root)
 
 
-## 世界坐标 → 视觉地面高度（连续；只在建柱/环带时用；逐帧贴地走 ground_y 查表）
+## 世界坐标 → 视觉地面高度（连续；只在建网格时用；逐帧贴地走 ground_y 查表）
 func ground_h(wx: float, wz: float) -> float:
 	if height_fn.is_null():
 		return 0.0
@@ -73,13 +100,13 @@ func ground_y(x: int, y: int) -> float:
 
 # ---- 蓝图 / 地形 ----
 
-## 应用蓝图：换高度函数与场内高表、重建地形柱带与环带、重刷配色与雾。（R1 一次 + 每局一次）
+## 应用蓝图：换高度函数与场内高表、重建地面网格、重刷配色与雾。（R1 一次 + 每局一次）
 func apply_blueprint(bp: Dictionary, seed: int) -> void:
 	var composed: Array = Blueprint.compose(bp, seed)
 	height_fn = composed[0]
 	cur_palette = composed[1]
 
-	# 场内 48² 格高表：单位/建筑/幽灵/拾取的贴地全走这里
+	# 场内 64² 格高表：单位/建筑/幽灵/拾取的贴地全走这里
 	field_h = PackedFloat64Array()
 	field_h.resize(core.CELL_N * core.CELL_N)
 	for y in core.CELL_N:
@@ -91,6 +118,21 @@ func apply_blueprint(bp: Dictionary, seed: int) -> void:
 	for k in ["ground_lo", "ground", "ground_hi", "rock"]:
 		var c: Array = cur_palette[k]
 		core.mats[k] = core.make_material(c[0], c[1], c[2])
+	var clo: Array = cur_palette["ground_lo"]
+	var cmid: Array = cur_palette["ground"]
+	var chi: Array = cur_palette["ground_hi"]
+	var crock: Array = cur_palette["rock"]
+	_col_lo = Color(clo[0], clo[1], clo[2])
+	_col_mid = Color(cmid[0], cmid[1], cmid[2])
+	_col_hi = Color(chi[0], chi[1], chi[2])
+	_col_rock = Color(crock[0], crock[1], crock[2])
+	_band_lo = float(cur_palette["band_lo_at"])
+	_band_hi = float(cur_palette["band_hi_at"])
+	if _ground_mat == null:
+		_ground_mat = StandardMaterial3D.new()
+		_ground_mat.roughness = 0.65
+		_ground_mat.metallic = 0.0
+		_ground_mat.vertex_color_use_as_albedo = true
 
 	if core.env != null:
 		var fog: Array = cur_palette["fog"]
@@ -99,59 +141,196 @@ func apply_blueprint(bp: Dictionary, seed: int) -> void:
 		core.env.fog_depth_end = float(cur_palette["fog_end"])
 		core.env.background_color = Color(fog[0] * 0.80, fog[1] * 0.80, fog[2] * 0.84)
 
-	_rebuild_field()
-	_rebuild_ring()
+	_build_lattice()
+	_build_ground()
 
 
-## 重建战场柱带（三档高程分色）+ 外围环带（同一高度函数保证衔接）。
-func _rebuild_field() -> void:
-	for c in field_root.get_children():
-		c.free()
-	var bands := { "ground_lo": [], "ground": [], "ground_hi": [] }
-	var lo_at: float = float(cur_palette["band_lo_at"])
-	var hi_at: float = float(cur_palette["band_hi_at"])
-	for y in core.CELL_N:
-		for x in core.CELL_N:
-			var h := field_h[y * core.CELL_N + x]
+## 场外渐进格距坐标：P(i) = HALF + i + 0.06·i²（i=1..54；至 ±260.96）
+func _out_pos(i: int) -> float:
+	var fi := float(i)
+	return core.HALF + fi + 0.06 * fi * fi
+
+
+## 采样线表与索引表（常量格距，一生一次）
+func _build_lattice() -> void:
+	if _ln > 0:
+		return
+	_lattice = PackedFloat64Array()
+	for i in range(OUT_RINGS, 0, -1):
+		_lattice.append(-_out_pos(i))
+	var n_fine := core.CELL_N * 2 + 1
+	for k in n_fine:
+		_lattice.append(-core.HALF + float(k) * FINE_STEP)
+	for i in range(1, OUT_RINGS + 1):
+		_lattice.append(_out_pos(i))
+	_ln = _lattice.size()
+	_i0 = OUT_RINGS
+	_i1 = OUT_RINGS + n_fine - 1
+	_stat_field = core.CELL_N * core.CELL_N
+	_stat_plain = (_ln - 1) * (_ln - 1) - core.CELL_N * core.CELL_N * 4
+	_build_indices()
+
+
+## 全场三角索引（规则网格；顶点一律共享 → 水密无裂缝）
+func _build_indices() -> void:
+	if not _indices.is_empty():
+		return
+	var e := _ln - 1
+	_indices.resize(e * e * 6)
+	var w := 0
+	for lj in e:
+		var row := lj * _ln
+		var row1 := row + _ln
+		for li in e:
+			var a := row + li
+			var b := a + 1
+			var d := row1 + li
+			var c := d + 1
+			_indices[w] = a
+			_indices[w + 1] = c
+			_indices[w + 2] = b
+			_indices[w + 3] = a
+			_indices[w + 4] = d
+			_indices[w + 5] = c
+			w += 6
+
+
+## 整网格构建（每局一次）：场外顶点静态全量 + 场内区 + 法线 + surface。
+func _build_ground() -> void:
+	var n2 := _ln * _ln
+	if _heights.size() != n2:
+		_heights.resize(n2)
+		_positions.resize(n2)
+		_normals.resize(n2)
+		_colors.resize(n2)
+	for lj in _ln:
+		var pz := _lattice[lj]
+		var row := lj * _ln
+		for li in _ln:
+			if li >= _i0 and li <= _i1 and lj >= _i0 and lj <= _i1:
+				continue # 场内区由 _fill_field_region 负责
+			var px := _lattice[li]
+			var h := 0.0
+			if not height_fn.is_null():
+				h = height_fn.call(px, pz)
+			_heights[row + li] = h
+			_positions[row + li] = Vector3(px, h, pz)
+			_colors[row + li] = _outside_color(px, pz)
+	_fill_field_region()
+	_recompute_normals(0, _ln - 1)
+	if _ground == null:
+		_ground = MeshInstance3D.new()
+		_ground.name = "Ground"
+		_ground.material_override = _ground_mat
+		field_root.add_child(_ground)
+	_apply_mesh()
+
+
+## 场内区顶点（高 = 邻接格顶 max，色 = 胜出格分带/岩石色）；挖填/落墙后由 _rebuild_field 复跑。
+func _fill_field_region() -> void:
+	if field_h.is_empty():
+		return
+	var n := core.CELL_N
+	if _cell_top.size() != n * n:
+		_cell_top.resize(n * n)
+	for y in n:
+		for x in n:
+			var t := field_h[y * n + x]
 			if grid != null:
-				h += float(grid.get_h(x, y)) * core.H_STEP
-			var band := "ground"
-			if h < lo_at:
-				band = "ground_lo"
-			elif h > hi_at:
-				band = "ground_hi"
-			var w := core.cell_to_world(x, y)
-			bands[band].append([Vector3(w.x, (h - 2.5) / 2.0, w.z), Vector3(1.0, h + 2.5, 1.0)])
-	var total := 0
-	for band in ["ground_lo", "ground", "ground_hi"]:
-		var arr: Array = bands[band]
-		var mmi := core._make_multimesh(arr, core.mats[band])
-		mmi.name = "Band_" + band
-		field_root.add_child(mmi)
-		total += arr.size()
-	_stat_field = total
+				t += float(grid.get_h(x, y)) * core.H_STEP
+				if grid.at(x, y) == Grid.SOLID:
+					t += SOLID_BUMP
+			_cell_top[y * n + x] = t
+	for lj in range(_i0, _i1 + 1):
+		var pz := _lattice[lj]
+		var row := lj * _ln
+		var fz := pz + float(n) * 0.5
+		var cy0 := int(floor(fz))
+		var z_mid := absf(fz - float(cy0)) > 1e-6 # 采样线在格中心（非整数坐标）→ 只邻接本格
+		for li in range(_i0, _i1 + 1):
+			var px := _lattice[li]
+			var fx := px + float(n) * 0.5
+			var cx0 := int(floor(fx))
+			var x_mid := absf(fx - float(cx0)) > 1e-6
+			var best := -1.0e9
+			var best_solid := false
+			for dz in 2:
+				var cy := cy0 - dz
+				if dz == 1 and z_mid:
+					continue
+				if cy < 0 or cy >= n:
+					continue
+				for dx in 2:
+					var cx := cx0 - dx
+					if dx == 1 and x_mid:
+						continue
+					if cx < 0 or cx >= n:
+						continue
+					var t := _cell_top[cy * n + cx]
+					if t > best:
+						best = t
+						best_solid = grid != null and grid.at(cx, cy) == Grid.SOLID
+			if best < -1.0e8:
+				best = ground_h(px, pz) # 理论到不了（场内必有邻格）；兜底防 NaN
+			_heights[row + li] = best
+			_positions[row + li] = Vector3(px, best, pz)
+			_colors[row + li] = _field_color(best, best_solid)
 
 
-## 重建外围环带（两圈：近圈贴战场边缘、远圈延展地平线）
-func _rebuild_ring() -> void:
-	for c in world_root.get_children():
-		c.free()
-	var insts: Array = []
-	_collect_ring(insts, -50, 50, 2, core.HALF - 0.5)
-	_collect_ring(insts, -150, 150, 6, 50.0)
-	var mmi := core._make_multimesh(insts, core.mats["rock"])
-	mmi.name = "Ring"
-	world_root.add_child(mmi)
-	_stat_ring = insts.size()
+func _field_color(h: float, solid: bool) -> Color:
+	if solid:
+		return _col_rock
+	if h < _band_lo:
+		return _col_lo
+	if h > _band_hi:
+		return _col_hi
+	return _col_mid
 
 
-## 收集环带方块实例（界外距离 > inner 的格位）
-func _collect_ring(out: Array, lo: int, hi: int, step: int, inner: float) -> void:
-	for wz in range(lo, hi + 1, step):
-		for wx in range(lo, hi + 1, step):
-			if float(maxi(absi(wx), absi(wz))) > inner:
-				var h := ground_h(float(wx), float(wz))
-				out.append([Vector3(float(wx), (h - 6.0) / 2.0, float(wz)), Vector3(float(step), h + 6.0, float(step))])
+## 场外顶点色：向岩石色渐混 + 确定性明度抖动（去包围圈后的旷野）
+func _outside_color(px: float, pz: float) -> Color:
+	var d := maxf(absf(px), absf(pz)) - core.HALF
+	var c := _col_lo.lerp(_col_rock, 0.18 + 0.42 * Blueprint.smooth01(d / 60.0))
+	var k := 0.90 + 0.16 * Blueprint.ihash(int(floor(px * 0.5)), int(floor(pz * 0.5)), 7331)
+	return Color(c.r * k, c.g * k, c.b * k)
+
+
+## 重建地面网格（挖/填/落墙后 height_rev 变）：只重算场内区 + 相邻法线，与静态场外区合并重建。
+func _rebuild_field() -> void:
+	if _ln == 0 or _ground == null:
+		return # 蓝图尚未套用（正常流程 apply_blueprint 先于 build_terrain）
+	_fill_field_region()
+	_recompute_normals(_i0 - 2, _i1 + 2)
+	_apply_mesh()
+
+
+## 法线：采样线坐标差 + 高度中心差（渐进格距按实际坐标差算，水密网格共享顶点自适应）
+func _recompute_normals(lo: int, hi: int) -> void:
+	lo = maxi(lo, 0)
+	hi = mini(hi, _ln - 1)
+	for lj in range(lo, hi + 1):
+		var dz := maxf(_lattice[mini(lj + 1, _ln - 1)] - _lattice[maxi(lj - 1, 0)], 0.0001)
+		var row := lj * _ln
+		var row_p := maxi(lj - 1, 0) * _ln
+		var row_n := mini(lj + 1, _ln - 1) * _ln
+		for li in range(lo, hi + 1):
+			var dx := maxf(_lattice[mini(li + 1, _ln - 1)] - _lattice[maxi(li - 1, 0)], 0.0001)
+			var du := _heights[row_n + li] - _heights[row_p + li]
+			var dv := _heights[row + mini(li + 1, _ln - 1)] - _heights[row + maxi(li - 1, 0)]
+			_normals[row + li] = Vector3(-dv * dz, dx * dz, -du * dx).normalized()
+
+
+## 以当前顶点数组重建 surface（索引与场外顶点静态；一次上传全量，56k 顶点量级）
+func _apply_mesh() -> void:
+	var mesh := ArrayMesh.new()
+	var arrays: Array = []
+	arrays.resize(Mesh.ARRAY_MAX)
+	arrays[Mesh.ARRAY_VERTEX] = _positions
+	arrays[Mesh.ARRAY_NORMAL] = _normals
+	arrays[Mesh.ARRAY_COLOR] = _colors
+	arrays[Mesh.ARRAY_INDEX] = _indices
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+	_ground.mesh = mesh
 
 
 # ---- 威胁热层 ----

@@ -222,19 +222,51 @@ func _initialize() -> void:
 	if sp24.x >= 0.0 and sp24.x < vp_size.x and sp24.y >= 0.0 and sp24.y < vp_size.y:
 		var back24: Vector2i = view.pick_cell(sp24.x, sp24.y)
 		check(back24 == Vector2i(24, 24), "新视角下拾取回环 %s" % str(back24))
-	finish("INPUT", 15)
+
+	# ---- 15. 滚轮缩放（拉近/还原/限位 0.6–1.8；暂停与 HUD 区冻结）----
+	var yz0: float = cam.global_position.y
+	await _wheel_at(vp_size * Vector2(0.5, 0.5), true)
+	var yz1: float = cam.global_position.y
+	check(yz1 < yz0 - 1.0, "滚轮拉近（y %.1f→%.1f）" % [yz0, yz1])
+	await _wheel_at(vp_size * Vector2(0.5, 0.5), false)
+	var yz2: float = cam.global_position.y
+	check(absf(yz2 - yz0) < 1.0, "滚轮拉远还原（y %.1f，基准 %.1f）" % [yz2, yz0])
+	for _i in 14:
+		await _wheel_at(vp_size * Vector2(0.5, 0.5), true)
+	var yz3: float = cam.global_position.y
+	await _wheel_at(vp_size * Vector2(0.5, 0.5), true)
+	var yz4: float = cam.global_position.y
+	check(absf(yz4 - yz3) < 0.3 and yz3 < yz0 * 0.75, "拉近限位 0.6（y %.1f→%.1f）" % [yz3, yz4])
+	for _i in 24:
+		await _wheel_at(vp_size * Vector2(0.5, 0.5), false)
+	var yz5: float = cam.global_position.y
+	await _wheel_at(vp_size * Vector2(0.5, 0.5), false)
+	var yz6: float = cam.global_position.y
+	check(absf(yz6 - yz5) < 0.5 and yz5 > yz0 * 1.5, "拉远限位 1.8（y %.1f→%.1f）" % [yz5, yz6])
+	main.paused = true
+	await _wheel_at(vp_size * Vector2(0.5, 0.5), true)
+	check(absf(cam.global_position.y - yz6) < 0.2, "暂停中滚轮冻结")
+	main.paused = false
+	await _wheel_at(Vector2(vp_size.x - 30.0, 400.0), false)
+	check(absf(cam.global_position.y - yz6) < 0.2, "HUD 区滚轮冻结")
+	finish("INPUT", 21)
 
 
-## 读取特定战场格柱体顶部高度（独立于 ground_y，防止自我对拍）。
+## 读取特定战场格中心处的地面网格顶点高度（独立于 ground_y，防止自我对拍）。
+## 世界重做后地面是单张连续网格（格中心恰为采样线交点：场内 0.5m 细格）。
 func _terrain_top(view, cell: Vector2i) -> float:
 	var pos: Vector3 = view.cell_to_world(cell.x, cell.y)
-	for mmi in view.field_root.get_children():
-		var mesh: MultiMesh = mmi.multimesh
-		for i in mesh.instance_count:
-			var xf: Transform3D = mesh.get_instance_transform(i)
-			if is_equal_approx(xf.origin.x, pos.x) and is_equal_approx(xf.origin.z, pos.z):
-				return xf.origin.y + xf.basis.get_scale().y * 0.5
-	fail("地面柱体缺失：" + str(cell))
+	for node in view.field_root.get_children():
+		if not (node is MeshInstance3D):
+			continue
+		var mesh: Mesh = node.mesh
+		for s in mesh.get_surface_count():
+			var arr: Array = mesh.surface_get_arrays(s)
+			var verts: PackedVector3Array = arr[Mesh.ARRAY_VERTEX]
+			for v in verts:
+				if absf(v.x - pos.x) < 0.01 and absf(v.z - pos.z) < 0.01:
+					return v.y
+	fail("地面网格缺格中心顶点：" + str(cell))
 	return NAN
 
 
@@ -287,6 +319,16 @@ func _key(code: Key) -> void:
 	var ev := InputEventKey.new()
 	ev.keycode = code
 	ev.pressed = true
+	get_root().push_input(ev)
+	await process_frame
+
+
+## 滚轮注入：pos 处一次上滚（拉近）/ 下滚（拉远）。
+func _wheel_at(pos: Vector2, up: bool) -> void:
+	var ev := InputEventMouseButton.new()
+	ev.button_index = MOUSE_BUTTON_WHEEL_UP if up else MOUSE_BUTTON_WHEEL_DOWN
+	ev.pressed = true
+	ev.position = pos
 	get_root().push_input(ev)
 	await process_frame
 
@@ -376,8 +418,8 @@ func _find_row(view, world, x0: int, y0: int, x1: int, y1: int, n: int, exclude:
 
 
 func _find_ore(view, world) -> Vector2i:
-	for y in 48:
-		for x in 48:
+	for y in 64:
+		for x in 64:
 			if world.grid.at(x, y) == Grid.COVER and world.sc.is_ore(x, y):
 				if _clickable_cover(view, world, x, y):
 					return Vector2i(x, y)
@@ -394,9 +436,10 @@ func _clickable_cover(view, world, x: int, y: int) -> bool:
 
 
 ## 实心块中心格：4 邻全 SOLID（就算拾取偏一格也仍是 SOLID，零副作用断言不误伤）。
+## 64² 场景里成片实心在岩脊 y40..42（含 4 邻的中心行 = y41），扫描窗须覆盖。
 func _find_solid_block(view, world) -> Vector2i:
-	for y in range(8, 40):
-		for x in range(8, 40):
+	for y in range(8, 45):
+		for x in range(8, 45):
 			if world.grid.at(x, y) != Grid.SOLID:
 				continue
 			if world.grid.at(x, y + 1) != Grid.SOLID or world.grid.at(x, y - 1) != Grid.SOLID or world.grid.at(x + 1, y) != Grid.SOLID or world.grid.at(x - 1, y) != Grid.SOLID:
