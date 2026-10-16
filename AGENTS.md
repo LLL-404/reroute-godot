@@ -169,13 +169,13 @@ python tools/check_shots.py    # 截图像素校验
   `promo_redirect` / `promo_economy` / `promo_ambush` / `promo_barrage`，1920×1080）
   归置 `shots/store/`（+ 实机图 5 张副本：`game`/`heat`/`ghost`/`smoke_mid`/`game_20x9`）；
   登记 CREDITS §3.6；待用户上传。决策记录 = 方案 §11.11。
-- 双端 release 打包（D2-1，2026-10-16 **半完成**）：Windows 出包 `export/game.exe` +
-  `game.pck`（+ `data_RerouteGodot_windows_x86_64/`；`export/` 不入库）；本机 **SAC=1
-  （Smart App Control）拦未签名 exe**——直跑不可用，自证改
-  `--main-pack export/game.pck --selfcheck`（22/0 PASS）；Android release 走
-  `GODOT_ANDROID_KEYSTORE_RELEASE_{PATH,USER,PASSWORD}` 环境变量注入（预设六字段全空、
-  密码不落仓库），预演（debug keystore）已过（apksigner = CN=Android Debug）；正式包待用户
-  keystore；单次导出 ~10min（勿短超时）。`logs/` 增 `.gdignore`（防 png 证据被误导入）。
+- 双端 release 打包（D2-1，2026-10-16 **包已双端出齐**）：Windows `export/game.exe` 已自签
+  （`CN=Reroute`，材料在仓外 `D:\G\game\keystores\`，本机信任链 Valid；复签脚本
+  `tools/sign_windows_exe.ps1`）+ `game.pck`；本机 **SAC=1 拦未签名 exe**——自证走
+  `--main-pack export/game.pck --selfcheck`（22/0 PASS）；Android 正式包
+  `export/reroute-release.apk`（keystore alias `reroute`，`GODOT_ANDROID_KEYSTORE_RELEASE_*`
+  环境变量注入，apksigner = CN=Reroute；密码台账 `D:\G\game\keystores\signing.env` 勿入库）；
+  单次导出 ~10min（勿短超时）。双端目视验收待用户。`logs/` 有 `.gdignore`。
   决策记录 = 方案 §11.12。
 - 历史审计报告（`docs/*-20261015.md`）按**快照原则保持原样**，不要顺着结构整理去改它们。
 

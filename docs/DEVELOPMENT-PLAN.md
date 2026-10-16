@@ -892,7 +892,7 @@ HUD 全部控件、标题/暂停/结算三屏、三件套音频、真实 glb 资
 
 | 任务 | 范围 | 验收 |
 |---|---|---|
-| D2-1 双端包 | PC exe + Android APK 各出一份 | 两端各自能启动完成一局。🔶 **2026-10-16 Windows 半完成**：release 出包（`export/game.exe` 109.5MB + `game.pck` 80.6MB）；`--main-pack` 自证 22/0 PASS + exe 图标目视（icon2_core）——本机直跑被拦根因 = **Smart App Control（SAC=1）**拦未签名 exe（Godot 官方 exe 签名 Valid 可跑），双击验收转用户侧。**Android 预演通过**：debug keystore + `GODOT_ANDROID_KEYSTORE_RELEASE_*` 环境变量注入（预设六字段实测全空）→ 282.9MB release APK 签名、`apksigner verify --print-certs`（CN=Android Debug）过；**正式包待用户 release keystore**。详见 §11.12；证据 `logs/gates-20261016-d2/` |
+| D2-1 双端包 | PC exe + Android APK 各出一份 | 两端各自能启动完成一局。🔶 **2026-10-16 包已双端出齐**：Windows `export/game.exe`（已自签 `CN=Reroute`，本机信任链 Valid；“无法验证发布者”材料补齐）+ `game.pck`；`--main-pack` 自证 22/0 PASS；**Android 正式 `export/reroute-release.apk`（282.9MB，keystore alias `reroute`，apksigner = CN=Reroute）**。直跑被拦根因 = 本机 **SAC=1** 拦未签名 exe（签名后复测待用户）。**双端目视验收待用户**（Windows 双击复测 / Android 装机）。签名材料在仓外 `D:\G\game\keystores\`（勿入库）。详见 §11.12；证据 `logs/gates-20261016-d2/` |
 | D2-2 包体裁剪 | ✅ 已完成（见 §7.12）：`export_presets.cfg` 设 `exclude_filter="tests/*,shots/*,tools/*"` | 包体下降，功能不受影响 |
 | D2-3 真人试玩 | **至少 2 人各玩 2 局**，记录：卡在哪、什么时候看不懂、哪一步最无聊、第一局结局 | 书面记录（这决定 D3 的全部内容） |
 | D2-4 引导复核 | 确认左下提示徽章与标题屏「玩法说明」是否足够；试玩者是否 5 秒内看懂「放墙改道」 | 试玩记录里的原话 |
@@ -1632,10 +1632,23 @@ check_shots 25/0；`nc-d17.*` 负对照与 `audio-post-nc.*` 恢复件齐）。�
 说明文档 / 引导关 SAC / 换分发形态）。替代自证：`--main-pack export/game.pck --selfcheck` →
 **22/0 PASS**；exe 图标抽取目视 = icon2_core。
 
-**Android 预演**（正式包等用户 release keystore）：`--export-release "Android"` +
+**Windows 签名（用户侧双击报「无法验证发布者」后补齐）**：自签代码签名证书 `CN=Reroute`
+（5 年期，指纹 `8048667B8B54107F7725D5C6B81F0D72B2676D58`；材料
+`D:/G/game/keystores/reroute-codesign.pfx`/`.cer`，**仓外**）→ 导入 CurrentUser\TrustedPublisher
++ Root 后 `Get-AuthenticodeSignature` = **Valid**；`game.exe` 已签名（+1.3KB），本机发布者显示
+Reroute。边界：自签**只在本机信任链下有效**——他人机器的 SmartScreen 不认自签（仍需 CA 证书，
+或按「更多信息→仍要运行」指引操作，留 D4 写进说明）；SAC 是否放行自签待用户复测判定
+（若仍拦 = SAC 本身，需关闭它或换验收形态）。重新导出 exe 后复签：`tools/sign_windows_exe.ps1`。
+
+**Android 出包（预演 → 正式）**：`--export-release "Android"` +
 `GODOT_ANDROID_KEYSTORE_RELEASE_PATH/USER/PASSWORD` 环境变量注入——预设 `keystore/*` 六字段
 实测全空而导出仍完成签名，**机制实锤**（密码不落仓库/预设）→ `reroute-release-rehearsal.apk`
 282.9MB 出包，`apksigner verify --print-certs` = `CN=Android Debug`（预演用 debug keystore）。
+**正式**：生成 release keystore（`D:/G/game/keystores/reroute-release.keystore`，alias `reroute`，
+PKCS12/RSA2048/10000 天，SHA-256 `06FB8144DF8C524F198B3A414A0474B74B1C4D25D6F8C15F0AA4B7393A4F0E3F`；
+密码台账 `signing.env` 同目录，**仓外**）→ 同机制出 `export/reroute-release.apk`（282.9MB），
+`apksigner verify --print-certs` = `CN=Reroute, OU=GameJam, O=Reroute, C=CN`（与 keystore 指纹一致）；
+预演包已删（被正式包取代）。
 单次导出 ~10 分钟（dotnet publish + 打包 + 签名 + 校验），跑闸勿按短超时。旁注：
 “Could not find version of build tools that matches Target SDK, using 34.0.0” 为 build-tools
 回退提示（34.0.0 实签），无害。
@@ -1644,8 +1657,7 @@ check_shots 25/0；`nc-d17.*` 负对照与 `audio-post-nc.*` 恢复件齐）。�
 （生成伴生 `.import`）——增设 `logs/.gdignore`（Godot 遇 `.gdignore` 跳过整目录扫描），
 删除误生成 `.import`。
 
-**遗留**：正式 APK（待用户 release keystore）→ 双端目视验收（Windows 双击含 SAC 问题、
-Android 装机；均依赖用户侧）。
+**遗留**：双端目视验收（Windows 双击复测［已签名］、Android 装机；均依赖用户侧）。
 
 ---
 
