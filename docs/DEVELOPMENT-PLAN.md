@@ -1595,7 +1595,7 @@ MCP 侧需以 `target_dir` 显式指定项目（无目录参数时 `maker_status
 check_shots 25/0；`nc-d17.*` 负对照与 `audio-post-nc.*` 恢复件齐）。素材登记：本仓 `CREDITS.md`
 §3.2/§3.5 + §7.4b 清单；对外件 `cashline/docs/AI-ASSETS.md` 待同批补行。
 
-**遗留**：双端 release 包（D2-1）目视验收图标（D2-5 已收盘，见 §11.11）——打包段进展见 §11.12（Windows 出包 + Android 预演过；正式包与双端验收待用户 keystore 提供后收口）。
+**遗留**：双端 release 包（D2-1）目视验收（图标并入；D2-5 已收盘，见 §11.11）——打包段进展见 §11.12（Windows 已签名出包 + Android 正式包与提审件封装完毕；双端目视验收待用户）。
 
 ### 11.11 详情页素材（D2-5：AI 五图 + 实机图选定）(2026-10-16)
 
