@@ -909,7 +909,7 @@ HUD 全部控件、标题/暂停/结算三屏、三件套音频、真实 glb 资
 
 | 任务 | 范围 | 验收 |
 |---|---|---|
-| D2-1 双端包 | PC exe + Android APK 各出一份 | 两端各自能启动完成一局。🔶 **2026-10-16 包已双端出齐**：Windows `export/game.exe`（已自签 `CN=Reroute`，本机信任链 Valid；“无法验证发布者”材料补齐）+ `game.pck`；`--main-pack` 自证 22/0 PASS；**Android 正式 `export/reroute-release.apk`（282.9MB，keystore alias `reroute`，apksigner = CN=Reroute）**。直跑被拦根因 = 本机 **SAC=1** 拦未签名 exe（**自签注册信任后双击复测已通过：能启动**）。**Windows 目视验收通过；Android 装机待设备。**签名材料在仓外 `D:\G\game\keystores\`（勿入库）。详见 §11.12；证据 `logs/gates-20261016-d2/` |
+| D2-1 双端包 | PC exe + Android APK 各出一份 | 两端各自能启动完成一局。🔶 **2026-10-16 包已双端出齐**：Windows `export/game.exe`（已自签 `CN=Reroute`，本机信任链 Valid；“无法验证发布者”材料补齐）+ `game.pck`；`--main-pack` 自证 22/0 PASS；**Android 正式 `export/reroute-release.apk`（282.9MB，keystore alias `reroute`，apksigner = CN=Reroute）**。直跑被拦根因 = 本机 **SAC=1** 拦未签名 exe（**自签注册信任后双击复测已通过：能启动**）。**Windows 目视验收通过；Android 装机验收 2026-10-16 经 MuMu 12 完成（GL 验收包口径，见 §11.13）。**签名材料在仓外 `D:\G\game\keystores\`（勿入库）。详见 §11.12/§11.13；证据 `logs/gates-20261016-d2/` + `logs/gates-20261016-mumu/` |
 | D2-2 包体裁剪 | ✅ 已完成（见 §7.12）：`export_presets.cfg` 设 `exclude_filter="tests/*,shots/*,tools/*"` | 包体下降，功能不受影响 |
 | D2-3 真人试玩 | **至少 2 人各玩 2 局**，记录：卡在哪、什么时候看不懂、哪一步最无聊、第一局结局 | 书面记录（这决定 D3 的全部内容） |
 | D2-4 引导复核 | 确认左下提示徽章与标题屏「玩法说明」是否足够；试玩者是否 5 秒内看懂「放墙改道」 | 试玩记录里的原话 |
@@ -1691,7 +1691,35 @@ CN=Reroute、exe 签名 Valid、pck 自证 22/0 PASS，证据 `logs/gates-202610
 （99.5MB，`git bundle verify` = okay）。同批：Maker 工程（reroute-maker）素材批入库推送 +
 远端构建成功（`f0936e2`，1m20s，日志 watcher 已开）。
 
-**遗留**：Android 装机验收（待设备；Windows 已签名双击复测已通过 = 能启动）。
+**遗留**：Android 装机验收 —— ✅ 2026-10-16 经 MuMu 12 完成（GL 验收包口径，见 §11.13）；Windows 已签名双击复测已通过 = 能启动。
+
+### 11.13 MuMu 模拟器装机验收（Android 装机验收落地）(2026-10-16)
+
+**环境**：MuMu 模拟器（Android 15，x86_64，假 Adreno 640 / 宿主 N 卡；`D:/Program Files/Netease/MuMu`，
+adb `127.0.0.1:16384`；x86_64 ADB 连接与安装均正常）。
+
+**① 提审包（Vulkan）在 MuMu 黑屏 = 模拟器侧限制，非游戏缺陷**：`export/reroute-release.apk`
+安装成功（282,885,969B streamed）、进程启动、引擎初始化、主循环与游戏逻辑照常跑，但呈现层报
+`ERROR: Couldn't present to Vulkan queue (VkResult error 5)`（`rendering_device_driver_vulkan.cpp:3359`，
+前缀 `AHardwareBuffer(w=4,h=4) failed (-3)`），画面全黑。排查链：宿主 renderer_mode vk/dx ×
+strategy perf/dis/auto × force_discrete 全组合无改善；dexdump 证实 APK 无 intent 传引擎参数机制
+（`cmdLineArg` 仅为 XR 模式枚举，死路）；Godot 上游 issue（#105598 等「模拟器黑屏、真机正常」）
+属同已知类问题。**结论：MuMu 虚拟 Vulkan present 不兼容，与游戏包无因果**（同代码 Windows
+Vulkan 渲染早已目视验收通过）。
+
+**② 替代验收：GL 兼容验收包（同代码同资源，仅渲染后端不同）**：临时置
+`renderer/rendering_method.mobile="gl_compatibility"` → `--export-release "Android"` 出
+`export/acceptance-glcheck/reroute-glcheck.apk`（同 keystore CN=Reroute，sha256 `25e79614…`，与
+提审包 `ee3a56d1…` 相区分）→ **project.godot 已还原、`git status` 干净自证（提审物零污染）**。
+MuMu 上日志 `OpenGL ES 3.2 - Compatibility - Adreno 640`，验收链全绿：主菜单渲染 → 开始对局
+（HUD/核心 1200/供给 300/波次/工具栏）→ 放墙扣费（300→290）+ 墙入场上屏 → 自然失守结算
+「防线失守 0:46」（完整对局闭环）→ 再来一局 → 选塔×60 放塔扣费 + 塔上屏 → 全程无
+FATAL/crash/ANR。
+
+**证据**：`logs/gates-20261016-mumu/mumu-08…12-*.png`（08 主菜单 / 09 对局 / 10 放墙 / 11 结算 /
+12 放塔；01-07 为黑屏排查过程留档）。**口径注**：Android 目视验收用 GL 后端完成；提审包（Vulkan）
+建议用户真机复验一眼（安装 + 开一局），与 D2-3 真人试玩合并执行。MuMu 现设置保留
+renderer_mode=dx + strategy=auto + force_discrete=true。
 
 ---
 

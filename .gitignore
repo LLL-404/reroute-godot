@@ -7,3 +7,6 @@ export/
 # .NET 构建产物（不入库）
 bin/
 obj/
+
+# 桌面截图（含本机桌面内容，不入库）
+logs/**/desktop-*.png
