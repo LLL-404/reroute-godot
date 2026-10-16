@@ -25,6 +25,7 @@ func _initialize() -> void:
 	preload("res://tests/test_canon.gd").new().register(kit)
 	preload("res://tests/test_grid.gd").new().register(kit)
 	preload("res://tests/test_flowfield.gd").new().register(kit)
+	preload("res://tests/test_mapgen.gd").new().register(kit)
 	preload("res://tests/test_scenario.gd").new().register(kit)
 	preload("res://tests/test_world.gd").new().register(kit)
 	preload("res://tests/test_save.gd").new().register(kit)

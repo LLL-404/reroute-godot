@@ -21,9 +21,9 @@ func _find_cell(w: World, want_h: int) -> Vector2i:
 
 ## 固定命令剧本：挖矿 / 建墙 / 开暗门 / 填高 / 挖低（覆盖格子与高度两类状态）。
 func _scripted(w: World) -> void:
-	w.apply_command({ "kind": "dig", "x": 30, "y": 20 })
-	w.apply_command({ "kind": "wall", "x": 19, "y": 39 })
-	w.apply_command({ "kind": "dig", "x": 5, "y": 53 })
+	w.apply_command({ "kind": "dig", "x": w.sc.mid_ore[0].x, "y": w.sc.mid_ore[0].y })
+	w.apply_command({ "kind": "wall", "x": w.sc.core.x, "y": 20 })
+	w.apply_command({ "kind": "dig", "x": w.sc.basin_plug.x, "y": w.sc.basin_plug.y })
 	var c_fill := _find_cell(w, 0)
 	if c_fill.x >= 0:
 		w.apply_command({ "kind": "fill", "x": c_fill.x, "y": c_fill.y })
@@ -43,13 +43,14 @@ func register(kit: TestKit) -> void:
 	kit.test("encode-fields", func():
 		var w := World.new(Scenario.new(), 123)
 		var d := Save.encode(w, 2)
-		kit.eq(d["format"], 1, "格式版本")
+		kit.eq(d["format"], 2, "格式版本")
 		kit.eq(d["schema"], Canon.STATE_SCHEMA, "状态版本")
-		kit.eq(d["sc_fp"], 47717674, "剧本指纹 0x02d81d2a")
+		kit.eq(d["sc_fp"], 2112498434, "剧本指纹 0x7dea2b02")
 		kit.eq(d["meta"]["run"], 2, "meta.run")
 		kit.eq(d["meta"]["tick"], 0, "meta.tick")
 		kit.eq(d["meta"]["wave"], 0, "meta.wave 开局 0")
 		kit.eq(d["state"]["seed"], "123", "seed 字符串编码")
+		kit.eq(d["state"]["sc_seed"], "20261003", "sc_seed 字符串编码")
 		var ins := Save.inspect(d)
 		kit.eq(ins["ok"], true, "inspect 新档通过"))
 

@@ -28,6 +28,7 @@ const HEAT_COLORS := [
 const FINE_STEP := 0.5
 const OUT_RINGS := 54 # i=1..54 → 最远 ±260.96
 const SOLID_BUMP := 1.6 # SOLID 格在网格内的抬升（原柱体口径：顶 = ground_y + 1.6）
+const RIM_BUMP := 4.2 # 地图边框圈（峡谷崖壁）额外抬升：纯视觉围合，对齐宣传图峡谷口
 
 var host: Node3D
 var core: ViewCoreScript
@@ -101,8 +102,9 @@ func ground_y(x: int, y: int) -> float:
 # ---- 蓝图 / 地形 ----
 
 ## 应用蓝图：换高度函数与场内高表、重建地面网格、重刷配色与雾。（R1 一次 + 每局一次）
-func apply_blueprint(bp: Dictionary, seed: int) -> void:
-	var composed: Array = Blueprint.compose(bp, seed)
+## anchor：地标位置对齐当局 Scenario（ridge_y/basin_y/core）；空 = 预设坐标（探针口径）。
+func apply_blueprint(bp: Dictionary, seed: int, anchor: Dictionary = {}) -> void:
+	var composed: Array = Blueprint.compose(bp, seed, anchor)
 	height_fn = composed[0]
 	cur_palette = composed[1]
 
@@ -139,7 +141,8 @@ func apply_blueprint(bp: Dictionary, seed: int) -> void:
 		core.env.fog_light_color = Color(fog[0], fog[1], fog[2])
 		core.env.fog_depth_begin = float(cur_palette["fog_start"])
 		core.env.fog_depth_end = float(cur_palette["fog_end"])
-		core.env.background_color = Color(fog[0] * 0.80, fog[1] * 0.80, fog[2] * 0.84)
+		# 天空/远霾：比雾色更亮的暖晕（金色时刻地平线）
+		core.env.background_color = Color(minf(fog[0] * 1.32, 1.0), minf(fog[1] * 1.22, 1.0), minf(fog[2] * 1.08, 1.0))
 
 	_build_lattice()
 	_build_ground()
@@ -240,6 +243,8 @@ func _fill_field_region() -> void:
 				t += float(grid.get_h(x, y)) * core.H_STEP
 				if grid.at(x, y) == Grid.SOLID:
 					t += SOLID_BUMP
+					if x == 0 or y == 0 or x == n - 1 or y == n - 1:
+						t += RIM_BUMP # 边框崖壁（视觉围合）
 			_cell_top[y * n + x] = t
 	for lj in range(_i0, _i1 + 1):
 		var pz := _lattice[lj]
@@ -254,6 +259,8 @@ func _fill_field_region() -> void:
 			var x_mid := absf(fx - float(cx0)) > 1e-6
 			var best := -1.0e9
 			var best_solid := false
+			var bx := 0
+			var by := 0
 			for dz in 2:
 				var cy := cy0 - dz
 				if dz == 1 and z_mid:
@@ -270,21 +277,42 @@ func _fill_field_region() -> void:
 					if t > best:
 						best = t
 						best_solid = grid != null and grid.at(cx, cy) == Grid.SOLID
+						bx = cx
+						by = cy
 			if best < -1.0e8:
 				best = ground_h(px, pz) # 理论到不了（场内必有邻格）；兜底防 NaN
+			var slope := 0.0
+			if not best_solid:
+				var t0 := _cell_top[by * n + bx]
+				var s1 := absf(t0 - _cell_top[by * n + maxi(bx - 1, 0)])
+				var s2 := absf(t0 - _cell_top[by * n + mini(bx + 1, n - 1)])
+				var s3 := absf(t0 - _cell_top[maxi(by - 1, 0) * n + bx])
+				var s4 := absf(t0 - _cell_top[mini(by + 1, n - 1) * n + bx])
+				slope = maxf(maxf(s1, s2), maxf(s3, s4))
 			_heights[row + li] = best
 			_positions[row + li] = Vector3(px, best, pz)
-			_colors[row + li] = _field_color(best, best_solid)
+			_colors[row + li] = _field_color(best, best_solid, slope, bx, by)
 
 
-func _field_color(h: float, solid: bool) -> Color:
+## 场内顶点色：高程三档连续混色 + 坡度岩石化 + 层理与确定性明度抖动（对齐宣传图崖面观感）。
+func _field_color(h: float, solid: bool, slope: float, cx: int, cy: int) -> Color:
 	if solid:
 		return _col_rock
-	if h < _band_lo:
-		return _col_lo
-	if h > _band_hi:
-		return _col_hi
-	return _col_mid
+	var t := 0.0
+	if h >= _band_hi:
+		t = 1.0
+	elif h > _band_lo:
+		t = (h - _band_lo) / (_band_hi - _band_lo)
+	var base: Color
+	if t < 0.5:
+		base = _col_lo.lerp(_col_mid, Blueprint.smooth01(t * 2.0))
+	else:
+		base = _col_mid.lerp(_col_hi, Blueprint.smooth01((t - 0.5) * 2.0))
+	var rock_mix := clampf((slope - 0.45) / 1.2, 0.0, 0.72)
+	base = base.lerp(_col_rock, rock_mix)
+	var strata := 0.5 + 0.5 * sin(h * 5.3 + float(cx) * 0.7 + float(cy) * 0.4)
+	var k := (0.93 + 0.14 * Blueprint.ihash(cx * 3 + 11, cy * 3 - 7, 917)) * (0.95 + 0.05 * strata)
+	return Color(base.r * k, base.g * k, base.b * k)
 
 
 ## 场外顶点色：向岩石色渐混 + 确定性明度抖动（去包围圈后的旷野）

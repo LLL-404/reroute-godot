@@ -4,34 +4,44 @@ extends RefCounted
 # 验证闸宿主（GDScript 移植）：黄金回放 + 确定性浸泡 + 不变式看门狗 + 终局冻结自证。
 # 口径照搬 reroute/scripts/sim/verify.lua：每道量化闸带正对照与负对照。
 
-# 黄金回放命令脚本（tick, kind, x, y, kind_id）：命令在"该 tick 开始前"生效。
-# 覆盖放墙改道（漏斗墙收窄双咽喉）、塔火、挖矿经济、开门陷阱、拆除、英雄点地移动与震荡波，
-# 以及非法命令（零副作用也进指纹口径）。
-# 2026-10-16 世界重做：坐标随 64² 地图整体平移（中心系 x+8、y 按区带 +10/+16，盆地系 y+16），
-# 条目数与 tick 序列不变；行为等价性由二次重录后的黄金基线锁定。
-const SCRIPT_COMMANDS := [
-	[20, "dig", 30, 20], [20, "dig", 31, 20], [20, "dig", 4, 58], [20, "dig", 5, 58],
-	[30, "dig", 32, 20], [30, "dig", 33, 20], [30, "dig", 34, 20], [30, "wall", 32, 6],
-	[31, "hero", 32, 6], [32, "hero", 5, 53], [33, "shock", 0, 0], [34, "fill", 17, 40],
-	[35, "lower", 32, 6], [40, "dig", 6, 58], [40, "dig", 4, 57], [40, "dig", 5, 57],
-	[40, "dig", 6, 57], [50, "dig", 4, 56], [50, "dig", 5, 56], [50, "dig", 6, 56],
-	[50, "dig", 32, 6], [60, "wall", 17, 43], [60, "wall", 18, 43], [60, "wall", 20, 43],
-	[60, "wall", 21, 43], [70, "wall", 42, 43], [70, "wall", 43, 43], [70, "wall", 45, 43],
-	[70, "wall", 46, 43], [70, "wall", -5, 12], [80, "tower", 18, 38], [90, "tower", 20, 38],
-	[90, "dig", 99, 99], [100, "tower", 17, 39], [110, "tower", 43, 38], [120, "tower", 45, 38],
-	[130, "tower", 42, 39], [140, "wall", 18, 41], [140, "wall", 20, 41], [140, "wall", 43, 41],
-	[140, "wall", 45, 41], [160, "hero", 32, 14], [220, "hero", 28, 20], [300, "tower", 28, 12],
-	[460, "dig", 30, 20], [461, "wall", 5, 59], [462, "fill", 5, 59], [500, "tower", 35, 12],
-	[1000, "tower", 18, 37], [1000, "dig", 5, 53], [1050, "tower", 20, 37], [1100, "tower", 43, 37],
-	[1150, "fill", 28, 39], [1160, "fill", 28, 39], [1170, "fill", 28, 39], [1180, "fill", 28, 39],
-	[1190, "lower", 28, 39], [1195, "fill", 28, 39], [2000, "hero", 19, 37], [2600, "tower", 29, 9],
-	[2700, "tower", 35, 9], [2900, "shock", 0, 0], [3400, "tower", 31, 10], [3600, "tower", 32, 9],
-	[4000, "wall", 29, 39], [4020, "wall", 30, 39], [4100, "tower", 17, 38], [4300, "tower", 46, 38],
-	[4400, "tower", 26, 14], [4500, "tower", 38, 14], [4520, "shock", 0, 0], [4600, "tower", 34, 8],
-	[4620, "hero", 32, 12], [4700, "tower", 30, 8], [4720, "wall", 29, 11], [4740, "wall", 35, 11],
-	[4800, "shock", 0, 0], [5000, "remove", 21, 43], [5200, "tower", 28, 10], [5400, "shock", 0, 0],
-	[5600, "remove", 43, 41],
-]
+## 黄金回放命令脚本模板（tick, kind, x, y, kind_id）：命令在"该 tick 开始前"生效。
+## 2026-10-16 世界生成：坐标不再钉死，全部按 Scenario 锚点（核心/咽喉中心/脊行/矿表/插口）重排；
+## 条目数与 tick 序列、同 tick 组内相对序与手搓夹具版一一对应：
+##   放墙漏斗收窄双咽喉、塔火链、挖矿经济（中场全挖 + 盆地 9/12，末角矿留作非法命令）、
+##   开门陷阱（1000t 挖插口 → 第三出怪口渗漏）、拆除、英雄点地/震荡波，以及非法命令（零副作用进指纹口径）。
+## 咽喉几何约定：谷口宽 3（中心 ±1），漏斗墙行 = ridge_y+3（脊带下行之南），走廊卡口行 = ridge_y+1。
+static func script_for(sc: Scenario) -> Array:
+	var cx := sc.core.x
+	var ry := sc.ridge_y
+	var wx: int = sc.chokes[0].x
+	var ex: int = sc.chokes[1].x
+	var my: int = sc.mid_ore[0].y # 中场矿带行
+	var ore := sc.mid_ore # x 主序：cx-2..cx+2
+	var bo := sc.basin_ore # x 主序：3 列 × 4 行 = 12 格；末行（idx 3/7/11）留作非法命令
+	var plug := sc.basin_plug
+	return [
+		[20, "dig", ore[0].x, ore[0].y], [20, "dig", ore[1].x, ore[1].y], [20, "dig", bo[2].x, bo[2].y], [20, "dig", bo[6].x, bo[6].y],
+		[30, "dig", ore[2].x, ore[2].y], [30, "dig", ore[3].x, ore[3].y], [30, "dig", ore[4].x, ore[4].y], [30, "wall", cx, sc.core.y],
+		[31, "hero", cx, sc.core.y], [32, "hero", plug.x, plug.y], [33, "shock", 0, 0], [34, "fill", wx - 2, ry],
+		[35, "lower", cx, sc.core.y], [40, "dig", bo[10].x, bo[10].y], [40, "dig", bo[1].x, bo[1].y], [40, "dig", bo[5].x, bo[5].y],
+		[40, "dig", bo[9].x, bo[9].y], [50, "dig", bo[0].x, bo[0].y], [50, "dig", bo[4].x, bo[4].y], [50, "dig", bo[8].x, bo[8].y],
+		[50, "dig", cx, sc.core.y], [60, "wall", wx - 2, ry + 3], [60, "wall", wx - 1, ry + 3], [60, "wall", wx + 1, ry + 3],
+		[60, "wall", wx + 2, ry + 3], [70, "wall", ex - 2, ry + 3], [70, "wall", ex - 1, ry + 3], [70, "wall", ex + 1, ry + 3],
+		[70, "wall", ex + 2, ry + 3], [70, "wall", -5, 12], [80, "tower", wx - 1, ry - 2], [90, "tower", wx + 1, ry - 2],
+		[90, "dig", 99, 99], [100, "tower", wx - 2, ry - 1], [110, "tower", ex - 1, ry - 2], [120, "tower", ex + 1, ry - 2],
+		[130, "tower", ex - 2, ry - 1], [140, "wall", wx - 1, ry + 1], [140, "wall", wx + 1, ry + 1], [140, "wall", ex - 1, ry + 1],
+		[140, "wall", ex + 1, ry + 1], [160, "hero", cx, 14], [220, "hero", cx - 4, my], [300, "tower", cx - 4, 12],
+		[460, "dig", ore[0].x, ore[0].y], [461, "wall", bo[11].x, bo[11].y], [462, "fill", bo[11].x, bo[11].y], [500, "tower", cx + 3, 12],
+		[1000, "tower", wx - 1, ry - 3], [1000, "dig", plug.x, plug.y], [1050, "tower", wx + 1, ry - 3], [1100, "tower", ex - 1, ry - 3],
+		[1150, "fill", cx - 4, ry - 1], [1160, "fill", cx - 4, ry - 1], [1170, "fill", cx - 4, ry - 1], [1180, "fill", cx - 4, ry - 1],
+		[1190, "lower", cx - 4, ry - 1], [1195, "fill", cx - 4, ry - 1], [2000, "hero", wx, ry - 3], [2600, "tower", cx - 3, 9],
+		[2700, "tower", cx + 3, 9], [2900, "shock", 0, 0], [3400, "tower", cx - 1, 10], [3600, "tower", cx, 9],
+		[4000, "wall", cx - 3, ry - 1], [4020, "wall", cx - 2, ry - 1], [4100, "tower", wx - 2, ry - 2], [4300, "tower", ex + 2, ry - 2],
+		[4400, "tower", cx - 6, 14], [4500, "tower", cx + 6, 14], [4520, "shock", 0, 0], [4600, "tower", cx + 2, 8],
+		[4620, "hero", cx, 12], [4700, "tower", cx - 2, 8], [4720, "wall", cx - 3, 11], [4740, "wall", cx + 3, 11],
+		[4800, "shock", 0, 0], [5000, "remove", wx + 2, ry + 3], [5200, "tower", cx - 4, 10], [5400, "shock", 0, 0],
+		[5600, "remove", ex - 1, ry + 1],
+	]
 
 
 ## 按声明 tick 稳定排序命令副本（同 tick 保持原相对序）。
@@ -99,7 +109,7 @@ static func run_world(sc: Scenario, seed: int, commands: Array, sample_every: in
 	for _i in 200:
 		world.tick()
 	for _i in 20:
-		world.apply_command({ "kind": "wall", "x": 30, "y": 44 })
+		world.apply_command({ "kind": "wall", "x": sc.core.x, "y": sc.core.y })
 	if world.fingerprint() != fp0:
 		return [null, "终局冻结破例：Outcome 后状态仍在变 tick=%d" % world.tick_count]
 	if world.outcome == World.RUNNING:

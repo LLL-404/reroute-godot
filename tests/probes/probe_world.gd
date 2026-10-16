@@ -5,30 +5,30 @@ extends ProbeKit
 
 
 func _initialize() -> void:
-	# 构造（真实 64² 场景）
+	# 构造（真实 64² 场景，坐标一律锚定 Scenario）
 	var sc := Scenario.new()
 	var w := World.new(sc, 20261003)
 	check(w.tick_count == 0 and w.supply == 300 and w.outcome == World.RUNNING, "new basics")
 	check(w.units.size() == 0 and w.buildings.size() == 1, "new tables")
-	check(w.core["hp"] == 1200 and w.core["x"] == 32 and w.core["y"] == 6, "core placed")
-	check(w.hero["x"] == 32 and w.hero["y"] == 8 and w.hero["tx"] == -1, "hero placed")
-	check(w.building_at(32, 6) == w.core, "building_at core")
+	check(w.core["hp"] == 1200 and w.core["x"] == sc.core.x and w.core["y"] == sc.core.y, "core placed")
+	check(w.hero["x"] == sc.hero_spawn.x and w.hero["y"] == sc.hero_spawn.y and w.hero["tx"] == -1, "hero placed")
+	check(w.building_at(sc.core.x, sc.core.y) == w.core, "building_at core")
 	check(w.field_rev == w.grid.rev, "field synced")
 
 	# 真实图命令
-	w.apply_command({ "kind": "dig", "x": 30, "y": 20 })
-	check(w.supply == 325 and w.grid.at(30, 20) == Grid.OPEN, "dig ore")
-	w.apply_command({ "kind": "dig", "x": 4, "y": 17 })
+	w.apply_command({ "kind": "dig", "x": sc.mid_ore[0].x, "y": sc.mid_ore[0].y })
+	check(w.supply == 325 and w.grid.at(sc.mid_ore[0].x, sc.mid_ore[0].y) == Grid.OPEN, "dig ore")
+	w.apply_command({ "kind": "dig", "x": sc.core.x, "y": 17 })
 	check(w.supply == 325, "dig non-ore no yield")
-	w.apply_command({ "kind": "dig", "x": 5, "y": 53 })
+	w.apply_command({ "kind": "dig", "x": sc.basin_plug.x, "y": sc.basin_plug.y })
 	check(w.route_opened == true, "dig plug opens route")
-	w.apply_command({ "kind": "wall", "x": 19, "y": 39 })
-	check(w.supply == 315 and w.grid.at(19, 39) == Grid.SOLID, "wall build")
-	w.apply_command({ "kind": "wall", "x": 32, "y": 6 })
+	w.apply_command({ "kind": "wall", "x": sc.core.x, "y": 20 })
+	check(w.supply == 315 and w.grid.at(sc.core.x, 20) == Grid.SOLID, "wall build")
+	w.apply_command({ "kind": "wall", "x": sc.core.x, "y": sc.core.y })
 	check(w.supply == 315, "wall on core rejected")
-	w.apply_command({ "kind": "spawn", "x": 20, "y": 56 })
+	w.apply_command({ "kind": "spawn", "x": sc.spawns[0].x, "y": sc.spawns[0].y })
 	check(w.units.size() == 1 and w.units[0]["speed_ticks"] == 4, "spawn")
-	w.apply_command({ "kind": "spawn", "x": 32, "y": 6 })
+	w.apply_command({ "kind": "spawn", "x": sc.core.x, "y": sc.core.y })
 	check(w.units.size() == 1, "spawn on solid rejected")
 	w.tick()
 	check(w.tick_count == 1, "tick count")
@@ -62,14 +62,14 @@ func _initialize() -> void:
 	check(buf.data[0] == 0 and buf.data[1] == 0 and buf.data[2] == 0 and buf.data[3] == 5, "STATE_SCHEMA bytes")
 
 	# 终局冻结
-	var f := World.new(Scenario.new(), 1)
+	var f := World.new(sc, 1)
 	f.outcome = World.LOST
 	var fp0 := f.fingerprint()
-	f.apply_command({ "kind": "wall", "x": 19, "y": 39 })
-	f.apply_command({ "kind": "dig", "x": 30, "y": 20 })
-	f.apply_command({ "kind": "hero", "x": 28, "y": 14 })
+	f.apply_command({ "kind": "wall", "x": sc.core.x, "y": 20 })
+	f.apply_command({ "kind": "dig", "x": sc.mid_ore[0].x, "y": sc.mid_ore[0].y })
+	f.apply_command({ "kind": "hero", "x": sc.core.x, "y": 14 })
 	f.apply_command({ "kind": "shock" })
-	f.apply_command({ "kind": "spawn", "x": 20, "y": 56 })
+	f.apply_command({ "kind": "spawn", "x": sc.spawns[0].x, "y": sc.spawns[0].y })
 	for _i in 50:
 		f.tick()
 	check(f.fingerprint() == fp0, "frozen after outcome")

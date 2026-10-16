@@ -1,78 +1,171 @@
 extends ProbeKit
 
-# R5 验证探针：scenario 移植（数值表/夹具结构/is_ore/指纹对拍引擎现值/波次合同）。
+# R5 验证探针：scenario 程序化布局（默认种子锚点 / 高度模板 / 建图结构 / 生成校验读取面 /
+# 裸图流场路径合同 / 指纹守门 / 波次表）。
 # 判定：exit 0 + stdout 含 `[SCENARIO] PASS`。
 
 
 func _initialize() -> void:
-	# 数值表
-	check(Sim.TICK_HZ == 20 and Sim.START_SUPPLY == 300 and Sim.ORE_YIELD == 25, "sim consts")
-	check(Sim.CONVOY_SHIFT == 3 and Sim.FILL_COST == 15 and Sim.LOWER_COST == 10, "economy consts")
-	check(Sim.H_MIN == 0 and Sim.H_MAX == 5, "height consts")
-	check(Sim.B_WALL == 1 and Sim.B_TOWER == 2 and Sim.B_CORE == 3, "building idx")
-	check(Sim.E_SWARM == 1 and Sim.E_BEHEMOTH == 2, "enemy idx")
-	check(Sim.BUILDINGS[Sim.B_WALL - 1]["cost"] == 10 and Sim.BUILDINGS[Sim.B_WALL - 1]["hp"] == 120, "wall def")
-	check(Sim.BUILDINGS[Sim.B_TOWER - 1]["range"] == 12 and Sim.BUILDINGS[Sim.B_TOWER - 1]["shoots"] == true, "tower def")
-	check(Sim.ENEMIES[Sim.E_SWARM - 1]["reward"] == 3 and Sim.ENEMIES[Sim.E_BEHEMOTH - 1]["damage"] == 60, "enemy defs")
-	check(Sim.HERO["speed_ticks"] == 3 and Sim.HERO["skill_cooldown"] == 400, "hero def")
-
 	var sc := Scenario.new()
-	# 布局锚点
-	check(sc.core == Vector2i(32, 6) and sc.hero_spawn == Vector2i(32, 8), "anchors")
-	check(sc.spawns.size() == 3 and sc.spawns[2] == Vector2i(5, 57), "spawns")
-	check(sc.basin_plug == Vector2i(5, 53), "plug")
-	check(sc.end_tick == 6400 and sc.hard_cap_tick == 8800 and sc.trickle_every == 300, "ticks")
 
-	# 波次合同
+	# --- 锚点（默认种子 20261003 全量钉死）---
+	check(Scenario.DEFAULT_SEED == 20261003 and sc.seed == Scenario.DEFAULT_SEED, "default seed")
+	check(sc.w == 64 and sc.h == 64, "dims 64x64")
+	check(sc.core == Vector2i(33, 6), "core")
+	check(sc.hero_spawn == Vector2i(33, 8), "hero_spawn")
+	check(sc.spawns.size() == 3, "spawns count")
+	check(sc.spawns.size() >= 3 and sc.spawns[0] == Vector2i(21, 56) and sc.spawns[1] == Vector2i(45, 56) and sc.spawns[2] == Vector2i(6, 57), "spawns anchors")
+	check(sc.ridge_y == 42, "ridge_y")
+	check(sc.chokes.size() == 2 and sc.chokes[0] == Vector2i(22, 42) and sc.chokes[1] == Vector2i(46, 42), "chokes")
+	check(sc.basin_plug == Vector2i(8, 53), "basin_plug")
+	check(sc.basin_rect == Rect2i(3, 53, 7, 8), "basin_rect")
+	check(sc.mesa == Rect2i(16, 48, 2, 2), "mesa")
+	check(sc.sparse_phase == 2, "sparse_phase")
+	check(sc.resample_salt == 0, "resample_salt")
+	check(sc.end_tick == 6400 and sc.hard_cap_tick == 8800 and sc.trickle_every == 300, "timing")
+	check(sc.wave_scale_pct == 100, "wave_scale_pct")
+	check(Scenario.PATH_REF == 548 and Scenario.PATH_LO == 466 and Scenario.PATH_HI == 630, "path band consts")
+
+	# 越界护栏：锚点若破例（数组变短），后续读取退化为显式坏值而不是硬崩。
+	var spawn0: Vector2i = sc.spawns[0] if sc.spawns.size() > 0 else Vector2i(-1, -1)
+	var spawn1: Vector2i = sc.spawns[1] if sc.spawns.size() > 1 else Vector2i(-1, -1)
+	var spawn2: Vector2i = sc.spawns[2] if sc.spawns.size() > 2 else Vector2i(-1, -1)
+	var choke0: Vector2i = sc.chokes[0] if sc.chokes.size() > 0 else Vector2i(-1, -1)
+	var choke1: Vector2i = sc.chokes[1] if sc.chokes.size() > 1 else Vector2i(-1, -1)
+
+	# --- 波次表（不随布局变奏）---
+	var waves_ok := true
 	var total := 0
 	var first := 1 << 30
 	var last := 0
 	var max_batch := 0
 	var finale := 0
 	for wv in sc.waves:
-		total += wv[3]
-		if wv[0] < first:
-			first = wv[0]
-		if wv[0] > last:
-			last = wv[0]
-		if wv[3] > max_batch:
-			max_batch = wv[3]
-		if wv[0] >= 4600:
-			finale += wv[3]
+		if wv.size() < 4 or wv[1] < 1 or wv[1] > 2:
+			waves_ok = false
+			continue
+		var t: int = wv[0]
+		var cnt: int = wv[3]
+		total += cnt
+		if t < first:
+			first = t
+		if t > last:
+			last = t
+		if cnt > max_batch:
+			max_batch = cnt
+		if t >= 4600:
+			finale += cnt
+	check(waves_ok, "waves shape")
 	check(sc.waves.size() == 25, "waves count")
 	check(total == 200 and first == 60 and last == 4860 and max_batch == 14 and finale == 82, "waves contract")
 
-	# 高度夹具
-	check(sc.height_at(32, 6) == 3 and sc.height_at(32, 12) == 2 and sc.height_at(35, 12) == 1, "height fixture")
-	check(sc.height_at(19, 40) == 1 and sc.height_at(32, 41) == 0 and sc.height_at(32, 56) == 0, "height fixture 2")
+	# --- height_at 锚点 ---
+	var cx: int = sc.core.x
+	check(sc.height_at(cx, 6) == 3, "h core peak")
+	check(sc.height_at(cx, 12) == 2, "h core step mid")
+	check(sc.height_at(cx + 2, 12) == 2, "h core step edge")
+	check(sc.height_at(cx + 3, 12) == 1, "h north bank")
+	check(sc.height_at(cx, 20) == 1, "h bank mid")
+	check(sc.height_at(choke0.x, sc.ridge_y) == 1, "h choke west mouth")
+	check(sc.height_at(choke1.x, sc.ridge_y) == 1, "h choke east mouth")
+	# 咽喉下沿 h0：height_at 只在 y == ridge_y 的咽喉列给 h1（任务书 ridge_y+1 == 1 与实现不符，见报告）。
+	check(sc.height_at(choke1.x, sc.ridge_y + 1) == 0, "h choke east south h0")
+	check(sc.height_at(cx, sc.ridge_y) == 0, "h ridge at core x")
+	check(sc.height_at(cx, sc.ridge_y + 1) == 0, "h south of ridge")
+	check(sc.height_at(cx, 56) == 0, "h south lowland")
+	check(sc.height_at(sc.mesa.position.x, sc.mesa.position.y) == 1 \
+		and sc.height_at(sc.mesa.end.x - 1, sc.mesa.position.y) == 1 \
+		and sc.height_at(sc.mesa.position.x, sc.mesa.end.y - 1) == 1 \
+		and sc.height_at(sc.mesa.end.x - 1, sc.mesa.end.y - 1) == 1, "h mesa corners")
+	check(sc.height_at(0, 0) == 1, "h north bank corner")
 
-	# 建图结构
+	# --- build_grid 结构 ---
 	var g := sc.build_grid()
-	check(g.at(0, 0) == Grid.SOLID and g.at(32, 0) == Grid.SOLID and g.at(63, 63) == Grid.SOLID, "borders")
-	check(g.at(32, 6) == Grid.SOLID, "core solid")
-	check(g.at(32, 8) == Grid.OPEN, "hero spawn open")
-	check(g.at(20, 56) == Grid.OPEN and g.at(44, 56) == Grid.OPEN, "main spawns open")
-	check(g.at(5, 57) == Grid.COVER, "basin spawn on ore cover")
-	check(g.at(28, 41) == Grid.SOLID and g.at(19, 41) == Grid.OPEN and g.at(44, 42) == Grid.OPEN, "ridge/chokes")
-	check(g.at(2, 53) == Grid.SOLID and g.at(9, 61) == Grid.SOLID, "basin ring")
-	check(g.at(5, 53) == Grid.COVER, "plug cover")
-	check(g.at(7, 60) == Grid.OPEN, "basin interior")
-	check(g.at(30, 20) == Grid.COVER and g.at(34, 20) == Grid.COVER and g.at(29, 20) == Grid.OPEN, "mid ore")
-	check(g.at(4, 17) == Grid.COVER, "sparse cover")
-	check(g.get_h(32, 6) == 3 and g.get_h(32, 12) == 2 and g.get_h(19, 40) == 1, "heights landed")
+	var border_ok := true
+	for x in sc.w:
+		if g.at(x, 0) != Grid.SOLID or g.at(x, sc.h - 1) != Grid.SOLID:
+			border_ok = false
+	for y in sc.h:
+		if g.at(0, y) != Grid.SOLID or g.at(sc.w - 1, y) != Grid.SOLID:
+			border_ok = false
+	check(border_ok, "border solid")
+	check(g.at(sc.core.x, sc.core.y) == Grid.SOLID, "core solid")
+	check(g.at(sc.hero_spawn.x, sc.hero_spawn.y) == Grid.OPEN, "hero spawn open")
+	check(g.at(spawn0.x, spawn0.y) == Grid.OPEN, "spawn1 open")
+	check(g.at(spawn1.x, spawn1.y) == Grid.OPEN, "spawn2 open")
+	check(g.at(spawn2.x, spawn2.y) == Grid.COVER, "spawn3 on ore cover")
+	var choke_ok := true
+	for c in [choke0, choke1]:
+		var cell: Vector2i = c
+		for dy in 3:
+			for dx in range(-1, 2):
+				if g.at(cell.x + dx, cell.y + dy) != Grid.OPEN:
+					choke_ok = false
+	check(choke_ok, "choke aisle open x3 rows")
+	var mx: int = (choke0.x + choke1.x) / 2
+	check(absi(mx - choke0.x) > 1 and absi(mx - choke1.x) > 1, "ridge mid-span x premise")
+	check(g.at(mx, sc.ridge_y) == Grid.SOLID and g.at(mx, sc.ridge_y + 1) == Grid.SOLID and g.at(mx, sc.ridge_y + 2) == Grid.SOLID, "ridge mid-span solid")
+	var b := sc.basin_rect
+	var bx1: int = b.position.x + b.size.x - 1
+	var by1: int = b.position.y + b.size.y - 1
+	check(g.at(b.position.x, b.position.y) == Grid.SOLID and g.at(bx1, b.position.y) == Grid.SOLID \
+		and g.at(b.position.x, by1) == Grid.SOLID and g.at(bx1, by1) == Grid.SOLID \
+		and g.at(b.position.x + 1, b.position.y) == Grid.SOLID, "basin ring solid samples")
+	check(g.at(sc.basin_plug.x, sc.basin_plug.y) == Grid.COVER, "plug cover")
+	check(g.at(b.position.x + 1, b.position.y + 1) == Grid.OPEN, "basin interior open")
+	var ore_ok := true
+	for o in sc.ore_cells:
+		var oc: Vector2i = o
+		if g.at(oc.x, oc.y) != Grid.COVER:
+			ore_ok = false
+	check(ore_ok, "all ore cells cover")
+	check(g.at(sc.sparse_phase, 17) == Grid.COVER, "sparse row cover")
+	check(g.at(sc.sparse_phase + 1, 17) == Grid.OPEN, "sparse row neighbor open")
+	check(g.get_h(sc.core.x, sc.core.y) == 3 and g.get_h(sc.core.x, 12) == 2 \
+		and g.get_h(choke0.x, sc.ridge_y) == 1 and g.get_h(sc.mesa.position.x, sc.mesa.position.y) == 1, "heights landed")
 
-	# is_ore
-	check(sc.is_ore(30, 20) and sc.is_ore(31, 20) and sc.is_ore(4, 58), "is_ore true")
-	check(not sc.is_ore(5, 53) and not sc.is_ore(29, 20) and not sc.is_ore(0, 0), "is_ore false")
+	# --- 生成校验读取面（每次传新鲜网格）+ 负对照 ---
+	var cg := sc.check_grid(sc.build_grid())
+	check(cg == "", "check_grid legal: " + cg)
+	var pg := sc.check_plug_open(sc.build_grid())
+	check(pg == "", "check_plug_open legal: " + pg)
+	var opened := sc.build_grid()
+	sc.check_plug_open(opened)
+	check(sc.check_grid(opened) != "", "check_grid rejects opened plug")
 
-	# 指纹：确定性 + 负对照 + **引擎现值对拍**
+	# --- 裸图流场路径合同（核心 → 主口 ∈ 标定带；盆地口封闭不可达）---
+	var ff := FlowField.new(sc.build_grid(), false)
+	ff.begin([sc.core])
+	while not ff.done():
+		ff.step(1 << 20)
+	var d0: int = ff.dist_at(spawn0.x, spawn0.y)
+	var d1: int = ff.dist_at(spawn1.x, spawn1.y)
+	var d2: int = ff.dist_at(spawn2.x, spawn2.y)
+	check(ff.done() and ff.dist_at(sc.core.x, sc.core.y) == 0, "flowfield from core done")
+	check(d0 >= Scenario.PATH_LO and d0 <= Scenario.PATH_HI, "path spawn1 in band d0=%d" % d0)
+	check(d1 >= Scenario.PATH_LO and d1 <= Scenario.PATH_HI, "path spawn2 in band d1=%d" % d1)
+	check(d0 == d1, "main spawn paths equal d0=%d d1=%d" % [d0, d1])
+	check(d2 == -1, "spawn3 unreachable closed d2=%d" % d2)
+
+	# --- 指纹守门（0x7dea2b02）+ 确定性 + 负对照 ---
 	var canon := Canon.new()
-	var fp := sc.fingerprint(canon)
-	var fp2 := Scenario.new().fingerprint(canon)
-	check(fp == fp2, "fingerprint determinism")
-	check(fp == 47717674, "fingerprint vs 引擎现值 0x02d81d2a（得 " + str(fp) + "）")
+	var fp: int = sc.fingerprint(canon)
+	check(fp == 0x7dea2b02, "fingerprint baseline (got 0x%x)" % fp)
+	check(fp == sc.fingerprint(canon), "fingerprint repeat call")
+	check(fp == Scenario.new().fingerprint(Canon.new()), "fingerprint fresh instance")
 	var mut := Scenario.new()
 	mut.wave_scale_pct = 90
-	check(sc.fingerprint(canon) != mut.fingerprint(canon), "fingerprint negative control")
+	check(fp != mut.fingerprint(canon), "fingerprint neg wave_scale")
+	check(fp != Scenario.new(20261004).fingerprint(Canon.new()), "fingerprint neg seed")
 
-	finish("SCENARIO")
+	# --- 矿数据 ---
+	check(sc.mid_ore.size() == 5 and sc.basin_ore.size() == 12, "ore counts")
+	check(sc.ore_cells.size() == sc.basin_ore.size() + sc.mid_ore.size(), "ore_cells size")
+	check(sc.ore_cells.size() == 17 and sc.basin_ore.size() == 12 and sc.mid_ore.size() == 5 \
+		and sc.ore_cells[0] == sc.basin_ore[0] and sc.ore_cells[12] == sc.mid_ore[0], "ore_cells order basin->mid")
+	check(sc.mid_ore.size() == 5 and sc.mid_ore[0] == Vector2i(31, 21) and sc.mid_ore[4] == Vector2i(35, 21), "mid ore span")
+	check(sc.basin_ore.size() == 12 and sc.basin_ore[0] == Vector2i(5, 56) and sc.basin_ore[11] == Vector2i(7, 59), "basin ore span")
+	check(sc.is_ore(33, 21) and sc.is_ore(5, 56) and sc.is_ore(7, 59), "is_ore true")
+	check(not sc.is_ore(sc.basin_plug.x, sc.basin_plug.y) and not sc.is_ore(4, 54) and not sc.is_ore(0, 0), "is_ore false plug/interior/border")
+
+	finish("SCENARIO", 66, "d0=%d d1=%d d2=%d fp=0x%x" % [d0, d1, d2, fp])

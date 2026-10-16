@@ -47,7 +47,9 @@ func _initialize() -> void:
 		var idx: PackedInt32Array = arr[Mesh.ARRAY_INDEX]
 		check(verts.size() == 56169, "网格顶点数 56169（%d）" % verts.size())
 		check(idx.size() == 334176, "网格索引数 334176（%d）" % idx.size())
-		# 连续性抽检：穿过核心区的一行采样点，线序无缺口且相邻高差 ≤ 2.0（含 SOLID 1.6 台阶量级）
+		# 连续性抽检：穿过核心区的一行采样点，线序无缺口且相邻高差 ≤ 2.0。
+		# 2026-10-16 视觉升级例外：地图边框圈为「峡谷崖壁」（RIM_BUMP 4.2，设计意图），
+		# 仅允许在最外 1m 带（|x| ≥ 31）出现 >2.0 台阶；其余任何台阶/缺线仍判断裂。
 		var row_ok := true
 		var by_x := {}
 		for v in verts:
@@ -64,9 +66,11 @@ func _initialize() -> void:
 				row_ok = false # 缺采样线 = 网格断裂
 				break
 			if absf(float(by_x[k1]) - float(by_x[k0])) > 2.0:
-				row_ok = false
-				break
-		check(row_ok, "网格连续性抽检（无缺线且线高差 ≤ 2.0）")
+				var rim_band := maxi(absi(k0), absi(k1)) >= 62 # x=±31 → k=±62（崖壁带）
+				if not rim_band:
+					row_ok = false
+					break
+		check(row_ok, "网格连续性抽检（无缺线且非崖壁带高差 ≤ 2.0）")
 
 	print("[SCENE] field=", st["field"], " plain=", st["plain"], " solids=", st["solids"], "/", n_solid, " covers=", st["covers"], "/", n_cover, " cam=", st["cam"])
 	finish("SCENE", 11, "ms=%d" % (Time.get_ticks_msec() - t0))

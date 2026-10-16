@@ -161,7 +161,7 @@ func load_game(slot: int) -> bool:
 	world = w
 	view.set_heat(false)
 	var picked: Array = Blueprint.pick(run_index)
-	view.apply_blueprint(picked[0], picked[1])
+	view.apply_blueprint(picked[0], picked[1], _visual_anchor())
 	view.is_ore = Callable(sc, "is_ore")
 	view.build_terrain(world.grid)
 	view.sync(world)
@@ -244,13 +244,22 @@ func _on_hud_skill() -> void:
 		view.play_sound("orc_chief_roar.mp3", 0.9)
 
 
+## 视觉地标锚点：岩脊/盆地/前哨峰对齐当局玩法图（纯表现层单向；sim 不知道本系统存在）。
+func _visual_anchor() -> Dictionary:
+	return {
+		"ridge_y": sc.ridge_y + 1,
+		"basin_y": float(sc.basin_rect.position.y) + float(sc.basin_rect.size.y - 1) * 0.5,
+		"core": sc.core,
+	}
+
+
 func new_game() -> void:
 	run_index += 1
-	sc = Scenario.new()
+	sc = Scenario.new(BASE_SEED + run_index) # 玩法地图 = 每局一套布局（与 RNG 种子同源，确定性）
 	# 新局先清理上一局的视觉状态，避免热层跨局残留。
 	view.set_heat(false)
 	var picked: Array = Blueprint.pick(run_index)
-	view.apply_blueprint(picked[0], picked[1])
+	view.apply_blueprint(picked[0], picked[1], _visual_anchor())
 	world = World.new(sc, BASE_SEED + run_index)
 	view.is_ore = Callable(sc, "is_ore")
 	view.build_terrain(world.grid)
@@ -262,7 +271,7 @@ func new_game() -> void:
 	if hud != null:
 		hud.reset()
 		hud.set_heat_vis(false)
-	print("[Game] 新对局 run=", run_index, " seed=", BASE_SEED + run_index)
+	print("[Game] 新对局 run=", run_index, " seed=", BASE_SEED + run_index, " sc_seed=", sc.seed)
 
 
 ## 主循环：推进模拟 tick、终局检测、视图同步、HUD 更新

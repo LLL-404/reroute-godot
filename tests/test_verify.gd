@@ -52,10 +52,10 @@ func register(kit: TestKit) -> void:
 		kit.ok(same2, "run_world 与「声明 tick 生效」参照实现逐样本一致"))
 
 	kit.test("golden-script-sorted", func():
-		var sc := Verify.SCRIPT_COMMANDS
+		var sc := Verify.script_for(Scenario.new())
 		var bad := ""
 		for i in range(1, sc.size()):
 			if sc[i][0] < sc[i - 1][0]:
 				bad = "第 %d 条 tick=%d 排在 tick=%d 之后" % [i, sc[i][0], sc[i - 1][0]]
 				break
-		kit.eq(bad, "", "SCRIPT_COMMANDS 按 tick 非降序（黄金指纹基线成立的前提）"))
+		kit.eq(bad, "", "script_for 按 tick 非降序（黄金指纹基线成立的前提）"))

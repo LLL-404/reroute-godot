@@ -1,13 +1,14 @@
 extends ProbeKit
 
-# R7 验证探针：黄金回放（C3）——GDScript sim 核逐位复现引擎录制的黄金基线指纹（12 条）。
+# R7 验证探针：黄金回放（C3）——GDScript sim 核逐位复现引擎录制的黄金基线指纹。
 # 判定：exit 0 + stdout 含 `[GOLDEN] PASS`。
 
 
 func _initialize() -> void:
 	var sc := Scenario.new()
-	print("[GOLDEN] golden replay running (seed=" + str(GoldenBaseline.SEED) + ", cmds=" + str(Verify.SCRIPT_COMMANDS.size()) + ")...")
-	var res := Verify.run_world(sc, GoldenBaseline.SEED, Verify.SCRIPT_COMMANDS, GoldenBaseline.EVERY, true)
+	var cmds: Array = Verify.script_for(sc)
+	print("[GOLDEN] golden replay running (seed=" + str(GoldenBaseline.SEED) + ", cmds=" + str(cmds.size()) + ")...")
+	var res := Verify.run_world(sc, GoldenBaseline.SEED, cmds, GoldenBaseline.EVERY, true)
 	var samples = res[0]
 	var err = res[1]
 	if err != "":
@@ -23,7 +24,7 @@ func _initialize() -> void:
 		print("[GOLDEN] all " + str(samples.size()) + " fingerprints compared")
 
 	# 确定性复跑：同种子同命令流，两遍逐位一致
-	var res2 := Verify.run_world(Scenario.new(), GoldenBaseline.SEED, Verify.SCRIPT_COMMANDS, GoldenBaseline.EVERY, false)
+	var res2 := Verify.run_world(Scenario.new(), GoldenBaseline.SEED, cmds, GoldenBaseline.EVERY, false)
 	if res2[1] != "":
 		check(false, "rerun error: " + str(res2[1]))
 	else:

@@ -95,9 +95,9 @@ func camera_zoom(factor: float) -> void:
 	core.zoom_by(factor)
 
 
-## 应用蓝图（→ view_terrain）
-func apply_blueprint(bp: Dictionary, seed: int) -> void:
-	terrain.apply_blueprint(bp, seed)
+## 应用蓝图（→ view_terrain）；anchor 可选：地标对齐当局 Scenario（见 blueprint.compose）
+func apply_blueprint(bp: Dictionary, seed: int, anchor: Dictionary = {}) -> void:
+	terrain.apply_blueprint(bp, seed, anchor)
 
 
 ## 铺一局的动态内容（→ view_entities）

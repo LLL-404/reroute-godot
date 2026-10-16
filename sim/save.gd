@@ -10,7 +10,8 @@ extends RefCounted
 #   · 派生态（pmap/hp/by_cell/field/siege/hero_field/rev）不进存储，读档后重建；
 #   · 本模块零行为变化：不触碰既有模拟路径，probe_golden 指纹不受影响。
 
-const FORMAT_VERSION := 1
+# v2（2026-10-16 世界生成）：state 增 sc_seed（布局种子），读档按种子重建校验；旧档自然拒载。
+const FORMAT_VERSION := 2
 
 
 ## 世界 → 存档字典。run_index 供读档还原蓝图视觉（Blueprint.pick(run_index) 派生）。
@@ -49,6 +50,7 @@ static func encode(world: World, run_index: int) -> Dictionary:
 		},
 		"state": {
 			"seed": str(world.seed),
+			"sc_seed": str(world.sc.seed),
 			"rng": str(world.rng.state),
 			"tick": world.tick_count,
 			"supply": world.supply,
@@ -80,13 +82,13 @@ static func decode(d) -> World:
 		return null
 	if not (d.has("state") and d.has("checksum") and d.has("sc_fp")):
 		return null
-	var sc := Scenario.new()
-	if sc.fingerprint(Canon.new()) != int(d["sc_fp"]):
-		return null
 	var st: Dictionary = d["state"]
-	for k in ["seed", "rng", "tick", "supply", "outcome", "route", "kills", "convoy", "lost", "gw", "gh", "cells", "hgt", "units", "buildings", "next_unit", "next_building", "hero"]:
+	for k in ["seed", "sc_seed", "rng", "tick", "supply", "outcome", "route", "kills", "convoy", "lost", "gw", "gh", "cells", "hgt", "units", "buildings", "next_unit", "next_building", "hero"]:
 		if not st.has(k):
 			return null
+	var sc := Scenario.new(int(str(st["sc_seed"])))
+	if sc.fingerprint(Canon.new()) != int(d["sc_fp"]):
+		return null
 	if int(st["gw"]) != sc.w or int(st["gh"]) != sc.h:
 		return null
 	var cells := Marshalls.base64_to_raw(str(st["cells"]))
@@ -175,6 +177,9 @@ static func inspect(d) -> Dictionary:
 		return { "ok": false, "reason": "状态版本不符", "meta": {} }
 	if not (d.has("meta") and d.has("state") and d.has("checksum") and d.has("sc_fp")):
 		return { "ok": false, "reason": "存档字段缺失", "meta": {} }
-	if Scenario.new().fingerprint(Canon.new()) != int(d["sc_fp"]):
+	var sc_seed: int = Scenario.DEFAULT_SEED
+	if typeof(d["state"]) == TYPE_DICTIONARY and d["state"].has("sc_seed"):
+		sc_seed = int(str(d["state"]["sc_seed"]))
+	if Scenario.new(sc_seed).fingerprint(Canon.new()) != int(d["sc_fp"]):
 		return { "ok": false, "reason": "存档来自旧版本剧本", "meta": {} }
 	return { "ok": true, "reason": "", "meta": d["meta"] }

@@ -96,10 +96,12 @@ func run(main) -> int:
 		_chk(has_player, "blade 含 AnimationPlayer（骨架动画管线）")
 		inst0.free()
 
-	# ---- 2. sim 核心：黄金回放（12 指纹，含不变式 + 冻结自证）+ 确定性复跑 ----
+	# ---- 2. sim 核心：黄金回放（指纹表，含不变式 + 冻结自证）+ 确定性复跑 ----
 	var samples: Array = []
 	var golden_ok := false
-	var res: Array = Verify.run_world(Scenario.new(), GoldenBaseline.SEED, Verify.SCRIPT_COMMANDS, GoldenBaseline.EVERY, true)
+	var sc_g: Scenario = Scenario.new()
+	var cmds: Array = Verify.script_for(sc_g)
+	var res: Array = Verify.run_world(sc_g, GoldenBaseline.SEED, cmds, GoldenBaseline.EVERY, true)
 	if res[1] != "":
 		_fail("run_world：" + str(res[1]))
 	else:
@@ -115,7 +117,7 @@ func run(main) -> int:
 				_fail("指纹失配 tick %d：得 %s 期 %s" % [int(want[0]), str(got[1]), str(want[1])])
 		_cmpi(mism, 0, "黄金指纹逐位一致（引擎黄金基线）")
 	if golden_ok:
-		var res2: Array = Verify.run_world(Scenario.new(), GoldenBaseline.SEED, Verify.SCRIPT_COMMANDS, GoldenBaseline.EVERY, false)
+		var res2: Array = Verify.run_world(Scenario.new(), GoldenBaseline.SEED, cmds, GoldenBaseline.EVERY, false)
 		if res2[1] != "":
 			_fail("复跑：" + str(res2[1]))
 		else:

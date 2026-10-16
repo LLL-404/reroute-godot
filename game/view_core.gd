@@ -65,13 +65,13 @@ func setup() -> void:
 
 	env = Environment.new()
 	env.background_mode = Environment.BG_COLOR
-	env.background_color = Color(0.24, 0.23, 0.215)
+	env.background_color = Color(0.55, 0.44, 0.33)
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	env.ambient_light_color = Color(0.55, 0.52, 0.48)
-	env.ambient_light_energy = 0.55
+	env.ambient_light_color = Color(0.62, 0.53, 0.43)
+	env.ambient_light_energy = 0.62
 	env.fog_enabled = true
 	env.fog_mode = Environment.FOG_MODE_DEPTH
-	env.fog_light_color = Color(0.305, 0.285, 0.265)
+	env.fog_light_color = Color(0.60, 0.47, 0.34)
 	env.fog_depth_begin = 55.0
 	env.fog_depth_end = 170.0
 	var we := WorldEnvironment.new()
@@ -81,8 +81,8 @@ func setup() -> void:
 
 	sun = DirectionalLight3D.new()
 	sun.name = "Sun"
-	sun.light_energy = 1.5
-	sun.light_color = Color(1.0, 0.96, 0.88)
+	sun.light_energy = 1.9
+	sun.light_color = Color(1.0, 0.87, 0.68) # 金色时刻暖阳（对齐宣传图）
 	sun.shadow_enabled = true
 	sun.rotation_degrees = Vector3(-52.0, 38.0, 0.0)
 	host.add_child(sun)
