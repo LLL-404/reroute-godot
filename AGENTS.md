@@ -18,7 +18,7 @@ Engineering 保真度极高：模拟核心是**确定性**的，有 16 指纹黄
 | `tools/` | Python 工具：`check_shots.py` / `convert_all.py` / `umd2_to_gltf.py` / `verify_glb.py` |
 | `assets/` | `audio/sfx`(29 mp3) / `fonts`(Noto Sans SC) / `models`(glb) / `icon`(图标五件套) |
 | `docs/` | 开发方案（权威）、审计报告、`devlogs/` |
-| `shots/` | 验收截图产物（已 `exclude_filter` 排除出包） |
+| `shots/` | 验收截图产物 + `store/` 详情页提审素材（AI 五图 + 实机图副本；已 `exclude_filter` 排除出包） |
 | `logs/` | 闸的 stdout/exit 证据 |
 
 ## 二、分层纪律（**单向，不许反向**）
@@ -165,6 +165,10 @@ python tools/check_shots.py    # 截图像素校验
   [放塔/放墙帧内去重、拆除、塔开火=cooldown 回跳]、核心受击 30t 节流；`main._check_outcome`
   结算链 + `bgm_settlement`）。`probe_audio` 38→56、`selfcheck` 29 mp3；负对照 bad=3；
   全 21 闸绿（证据 `logs/gates-20261016-d17/`）；决策记录 = 方案 §11.10。
+- 详情页素材（D2-5，2026-10-16）**已完成**：AI 五图（头图 `store_header` + 宣传图
+  `promo_redirect` / `promo_economy` / `promo_ambush` / `promo_barrage`，1920×1080）
+  归置 `shots/store/`（+ 实机图 5 张副本：`game`/`heat`/`ghost`/`smoke_mid`/`game_20x9`）；
+  登记 CREDITS §3.6；待用户上传。决策记录 = 方案 §11.11。
 - 历史审计报告（`docs/*-20261015.md`）按**快照原则保持原样**，不要顺着结构整理去改它们。
 
 ---

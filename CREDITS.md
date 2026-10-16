@@ -127,6 +127,24 @@ OFL 的「保留字体名称（Reserved Font Name）」条款。
 接线：`project.godot config/icon` + `export_presets.cfg`（Windows `icon`/`console_wrapper_icon`、
 Android `launcher_icons` 主图 + 自适应前后景）。D1-7 产。
 
+### 3.6 详情页素材 `shots/store/` —— 5 张 AI 图 + 5 张实机图（D2-5）
+
+官方硬要求：详情页**头图 1 + 宣传图 4**。AI 五图全部为自有 AI 图像生成（TapTap Maker
+制造积分），1920×1080；原图存 `reroute-maker/assets/image/`（Maker 绑定项目），本仓为
+**提审用副本**（`shots/*` 已在 `exclude_filter` 排除，不进 pck）。
+
+| 槽位 | 文件 | 内容 | 原图（reroute-maker） |
+|---|---|---|---|
+| 头图 | `store_header.png` | 核心与防线全景（封面构图） | `store_header_20261016015528.png` |
+| 宣传图 1 | `promo_redirect.png` | 放墙改道（机制表达最佳） | `promo_redirect_20261016015528.png` |
+| 宣传图 2 | `promo_economy.png` | 击杀赏金（绕行越远越贵） | `promo_economy_20261016015528.png` |
+| 宣传图 3 | `promo_ambush.png` | 挖矿开新口（暗门两难） | `promo_ambush_20261016015528.png` |
+| 宣传图 4 | `promo_barrage.png` | 弩塔齐射轰击虫群 | `promo_barrage_20261016030427.png` |
+
+实机图 5 张（自 `shots/` 选定、副本同置，上传时最终确认）：
+`game.png` / `heat.png` / `ghost.png` / `smoke_mid.png` / `game_20x9.png`——纯对局画面，
+对齐 §0.3 E「不用过场/读条/菜单截图」。
+
 ---
 
 ## 四、风险台账
@@ -182,8 +200,9 @@ Android `launcher_icons` 主图 + 自适应前后景）。D1-7 产。
 - 后者结构见 `cashline/docs/AI-ASSETS.md`（五段式：AI 生成 / 程序生成 / AI 辅助编写 /
   纯人工 / 引擎与第三方），那份是**对外交付件**。
 - 两处**必须口径一致**，以 `assets/` 实测数字为准（本文件 §三 即实测值）：
-  - 音频 **29 条**（10-16 D1-7 后；AI-ASSETS.md 对外件需**同批**补登记：+10 音频 + 图标套件）
+  - 音频 **29 条**（10-16 D1-7 后；AI-ASSETS.md 对外件需**同批**补登记：+10 音频 + 图标套件 + 详情页五图）
   - 模型 **10 个 glb**
+  - 详情页素材 **5 张 AI 图 + 5 张实机图**（10-16 D2-5；副本 `shots/store/`，见 §3.6）
   - AI-ASSETS.md §五 目前写「引擎：UrhoX」，**Godot 版必须改成 Godot 4.7.2 stable (mono)**
 - 本文件新增任何外部素材后，AI-ASSETS.md §五 要**同批**补一行。
 
@@ -209,3 +228,4 @@ OFL 的再分发义务就没履行（本文 §一 规则 2「登记 ≠ 履行�
 | 2026-10-14 | 建档。登记现有素材三类（10 glb + 19 mp3 + 1 字体 + 13 截图），四源裁决表定稿，R-1（simhei.ttf 随包分发）列为阻塞项 |
 | 2026-10-14 | **R-1 已解决**：`simhei.ttf` → `NotoSansSC-Regular.otf`（OFL-1.1）；随包 `OFL.txt` + 新增 `THIRD-PARTY-NOTICES.txt` 并加入 `include_filter`；代码 2 处路径更新、selfcheck 断言强化为字形存在性；全闸回归通过，pck 内 simhei 残留 0 处。§二 修正：Fab/Sketchfab 等站**并非只有写实资源**，风格化/低模/卡通/体素包均大量存在，真实约束是风格一致性而非来源。新增 R-4（export_filter 过宽，待单独裁定） |
 | 2026-10-16 | D1-7 制造积分素材入库：+10 mp3（9 音效 + 结算 BGM，台账 19→29）+ 图标套件 `assets/icon/`（icon2_core 定稿，主图/192/自适应前后景/ico）。新增 §3.5；§3.2/§3.4 计数与 §五 口径同步；对外件 `cashline/docs/AI-ASSETS.md` 待同批补行 |
+| 2026-10-16 | D2-5 详情页素材归置：`shots/store/` 新增 AI 五图（头图 `store_header` + 宣传 `promo_redirect`/`promo_economy`/`promo_ambush`/`promo_barrage`）+ 实机图 5 张副本；新增 §3.6；§五 口径同步 |
