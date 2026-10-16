@@ -1657,6 +1657,17 @@ PKCS12/RSA2048/10000 天，SHA-256 `06FB8144DF8C524F198B3A414A0474B74B1C4D25D6F8
 （生成伴生 `.import`）——增设 `logs/.gdignore`（Godot 遇 `.gdignore` 跳过整目录扫描），
 删除误生成 `.import`。
 
+**提审上传件（2026-10-16 封装）**：Android = `export/reroute-release.apk`（282,885,969B，
+SHA-256 `ee3a56d11d6257aa07e1c96d742a94f5770ae632d7f6c8576f0759d0364af1d9`）；
+Windows = `export/reroute-windows.zip`（146.4MB，根目录 `game.exe`［已签名］+ `game.pck` +
+`data_RerouteGodot_windows_x86_64/` + `运行说明.txt`［自签提示与「仍要运行」指引，面向他人机器］；
+上传表单「可执行文件」填 `game.exe`；SHA-256
+`4dc2142e67bd5403441b9a7a034a0a8f7bccd455c393024401acb866618c8eb8`）。封装纪律：打包前清
+`data/` 的 `*.tmp` 与旧运行时残留（历次导出曾混入 60+ 个 dotnet publish 残留 .tmp + 旧
+.NET8 文件，疑实时防护干扰——首版 zip 因此多出 ~33MB，已重封）；zip 不含 `.idsig`。
+上传操作口径（TapPlay / 通用隐私协议 / 投稿弹窗占位 / 防沉迷「未接入」/ 双端同时勾选）
+已收录于 §0.3 B 清单，照单执行。
+
 **遗留**：双端目视验收（Windows 双击复测［已签名］、Android 装机；均依赖用户侧）。
 
 ---
