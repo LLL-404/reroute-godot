@@ -892,7 +892,7 @@ HUD 全部控件、标题/暂停/结算三屏、三件套音频、真实 glb 资
 
 | 任务 | 范围 | 验收 |
 |---|---|---|
-| D2-1 双端包 | PC exe + Android APK 各出一份 | 两端各自能启动完成一局 |
+| D2-1 双端包 | PC exe + Android APK 各出一份 | 两端各自能启动完成一局。🔶 **2026-10-16 Windows 半完成**：release 出包（`export/game.exe` 109.5MB + `game.pck` 80.6MB）；`--main-pack` 自证 22/0 PASS + exe 图标目视（icon2_core）——本机直跑被拦根因 = **Smart App Control（SAC=1）**拦未签名 exe（Godot 官方 exe 签名 Valid 可跑），双击验收转用户侧。**Android 预演通过**：debug keystore + `GODOT_ANDROID_KEYSTORE_RELEASE_*` 环境变量注入（预设六字段实测全空）→ 282.9MB release APK 签名、`apksigner verify --print-certs`（CN=Android Debug）过；**正式包待用户 release keystore**。详见 §11.12；证据 `logs/gates-20261016-d2/` |
 | D2-2 包体裁剪 | ✅ 已完成（见 §7.12）：`export_presets.cfg` 设 `exclude_filter="tests/*,shots/*,tools/*"` | 包体下降，功能不受影响 |
 | D2-3 真人试玩 | **至少 2 人各玩 2 局**，记录：卡在哪、什么时候看不懂、哪一步最无聊、第一局结局 | 书面记录（这决定 D3 的全部内容） |
 | D2-4 引导复核 | 确认左下提示徽章与标题屏「玩法说明」是否足够；试玩者是否 5 秒内看懂「放墙改道」 | 试玩记录里的原话 |
@@ -1595,7 +1595,7 @@ MCP 侧需以 `target_dir` 显式指定项目（无目录参数时 `maker_status
 check_shots 25/0；`nc-d17.*` 负对照与 `audio-post-nc.*` 恢复件齐）。素材登记：本仓 `CREDITS.md`
 §3.2/§3.5 + §7.4b 清单；对外件 `cashline/docs/AI-ASSETS.md` 待同批补行。
 
-**遗留**：双端 release 包（D2-1）目视验收图标（D2-5 已收盘，见 §11.11）。
+**遗留**：双端 release 包（D2-1）目视验收图标（D2-5 已收盘，见 §11.11）——打包段进展见 §11.12（Windows 出包 + Android 预演过；正式包与双端验收待用户 keystore 提供后收口）。
 
 ### 11.11 详情页素材（D2-5：AI 五图 + 实机图选定）(2026-10-16)
 
@@ -1619,6 +1619,33 @@ check_shots 25/0；`nc-d17.*` 负对照与 `audio-post-nc.*` 恢复件齐）。�
 登记 CREDITS §3.6；对外件 `cashline/docs/AI-ASSETS.md` 与 D1-7 素材**同批**补行。
 
 **遗留**：用户侧上传详情页（五图 + 实机图从本仓副本取）。
+
+### 11.12 D2-1 双端 release 包（打包段）(2026-10-16)
+
+**Windows**：`--export-release "Windows Desktop"` 出包 `export/game.exe`（109.5MB）+
+`game.pck`（80.6MB）+ `data_RerouteGodot_windows_x86_64/`（.NET publish 产物；`export/` 不入库）。
+本机**直跑 game.exe 被系统拦截**——根因定位 = 本机 **Smart App Control 处于强制模式（SAC=1）**，
+拦未签名新 exe。三条对照坐实：同目录拷入的微软签名 `where.exe` 可跑；Godot 官方 console exe
+签名 Valid 可跑；game.exe `NotSigned` 被拒（连 PowerShell `Start-Process` 亦被策略拦）。
+**这不是产物缺陷**，但两件事要记：①本机双击验收转用户侧（关 SAC 可解，一次性不可逆，用户决定）；
+②「SAC 开启的玩家机器上首次运行」是发行问题（自签不满足 SAC 信誉要求；留 D4 评估去向：
+说明文档 / 引导关 SAC / 换分发形态）。替代自证：`--main-pack export/game.pck --selfcheck` →
+**22/0 PASS**；exe 图标抽取目视 = icon2_core。
+
+**Android 预演**（正式包等用户 release keystore）：`--export-release "Android"` +
+`GODOT_ANDROID_KEYSTORE_RELEASE_PATH/USER/PASSWORD` 环境变量注入——预设 `keystore/*` 六字段
+实测全空而导出仍完成签名，**机制实锤**（密码不落仓库/预设）→ `reroute-release-rehearsal.apk`
+282.9MB 出包，`apksigner verify --print-certs` = `CN=Android Debug`（预演用 debug keystore）。
+单次导出 ~10 分钟（dotnet publish + 打包 + 签名 + 校验），跑闸勿按短超时。旁注：
+“Could not find version of build tools that matches Target SDK, using 34.0.0” 为 build-tools
+回退提示（34.0.0 实签），无害。
+
+**侧效应修复**：证据 `logs/gates-20261016-d2/win-exe-icon.png` 被 Godot 导入扫描误当资源
+（生成伴生 `.import`）——增设 `logs/.gdignore`（Godot 遇 `.gdignore` 跳过整目录扫描），
+删除误生成 `.import`。
+
+**遗留**：正式 APK（待用户 release keystore）→ 双端目视验收（Windows 双击含 SAC 问题、
+Android 装机；均依赖用户侧）。
 
 ---
 
