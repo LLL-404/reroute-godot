@@ -339,31 +339,31 @@
 
 ---
 
-## 2. 事实基线（2026-10-14 实测；2026-10-15 D5-2 探针规整后重核）
+## 2. 事实基线（2026-10-16 世界程序化生成 + 视觉升级后全量重核）
 
-所有数据均为本次会话在 `D:/G/game/games/reroute-godot` 下实跑所得。
+所有数据均为此后实跑所得（原始 stdout 见 `logs/gates-20261016-visual/`；窗口/无头口径见 §2.1）。
 
 | 项 | 证据 | 命令 |
 |---|---|---|
-| 单测 100 例全绿 | `[UNIT-DONE] passed=100 failed=0` + `[UNIT-ALL-GREEN]` | `<godot> --headless --path <P> -s res://tests/run_tests.gd` |
+| 单测 104 例全绿 | `[UNIT-DONE] passed=104 failed=0` + `[UNIT-ALL-GREEN]` | `<godot> --headless --path <P> -s res://tests/run_tests.gd` |
 | 黄金回放 16 指纹逐位一致 | `[GOLDEN] checks=2 bad=0` + `[GOLDEN] PASS` | `<godot> --headless --path <P> -s res://tests/probes/probe_golden.gd` |
 | 主场景构建对拍 | `[SCENE] checks=11 bad=0` + `[SCENE] PASS`（field=4096 / plain=39312 / solids·covers 对拍 + 单地面网格 56169 顶点 / 334176 索引 / 连续性抽检） | `<godot> --headless --path <P> -s res://tests/probes/probe_scene.gd` |
-| 视觉同步逐位对拍 1773 断言 | `[SYNC] checks=1773 bad=0 moved=42 match=100` | `<godot> --path <P> -s res://tests/probes/probe_sync.gd`（**窗口模式**） |
-| 输入闭环 41 断言 | `[INPUT] checks=41 bad=0` | `<godot> --path <P> -s res://tests/probes/probe_input.gd`（**窗口模式**） |
+| 视觉同步逐位对拍 1803 断言 | `[SYNC] checks=1803 bad=0 moved=46 match=100` | `<godot> --path <P> -s res://tests/probes/probe_sync.gd`（**窗口模式**） |
+| 输入闭环 57 断言 | `[INPUT] checks=57 bad=0` | `<godot> --path <P> -s res://tests/probes/probe_input.gd`（**窗口模式**） |
 | 三屏流转 39 断言 | `[UI_FLOW] checks=39 bad=0` | `<godot> --path <P> -s res://tests/probes/probe_ui_flow.gd`（**窗口模式**） |
-| HUD 63 断言 | `[HUD] checks=63 bad=0` | `<godot> --path <P> -s res://tests/probes/probe_hud.gd`（**窗口模式**） |
-| 全局冒烟一局到底 | `[SMOKE] checks=31 bad=0` + `[SMOKE] PASS`（outcome=LOST tick=4139 kills=116 peak_units=28 towers=6 skills=4） | `<godot> --path <P> -s res://tests/probes/probe_smoke.gd`（**窗口模式**） |
-| 三张验收截图可出 | `[SHOTS] checks=3 bad=0` | `<godot> --path <P> -s res://tests/probes/probe_shots.gd`（**窗口模式**） |
-| 截图像素校验 | `[SHOTS] checks=15 fail=0` `warm=750293 teal=2836 red=158622 green=3393` | `python tools/check_shots.py` |
+| HUD 69 断言 | `[HUD] checks=69 bad=0` | `<godot> --path <P> -s res://tests/probes/probe_hud.gd`（**窗口模式**） |
+| 全局冒烟一局到底 | `[SMOKE] checks=31 bad=0` + `[SMOKE] PASS`（run=1 seed=20261004：outcome=LOST tick=4942 kills=133 supply=1058 peak_units=76 towers=6 skills=4） | `<godot> --path <P> -s res://tests/probes/probe_smoke.gd`（**窗口模式**） |
+| 验收截图可出 | `[SHOTS] checks=5 bad=0`（含 20:9 / 窄屏目视件） | `<godot> --path <P> -s res://tests/probes/probe_shots.gd`（**窗口模式**） |
+| 截图像素校验 | `[SHOTS] checks=25 fail=0`（game warm=804330 teal=2829） | `python tools/check_shots.py` |
 | 资产 57 断言 | `[ASSET] checks=57 bad=0` | `<godot> --path <P> -s res://tests/probes/probe_asset.gd`（**窗口模式**） |
 | 模型动画齐备 | `blade/worker/king anims: Attack/Crawl/Death/Hurt/Idle` | `<godot> --path <P> -s res://tests/probes/probe_model.gd`（**窗口模式**） |
 | 朝向截面图 | `[ORIENT] cross shot saved` | `<godot> --path <P> -s res://tests/probes/probe_orient.gd`（**窗口模式**） |
-| 音频 38 断言 | `[AUDIO] checks=38 bad=0` | `<godot> --path <P> -s res://tests/probes/probe_audio.gd`（**窗口模式**） |
+| 音频 56 断言 | `[AUDIO] checks=56 bad=0` | `<godot> --path <P> -s res://tests/probes/probe_audio.gd`（**窗口模式**） |
 | 存档/设置/退出/返回 74 断言 | `[SAVE] checks=74 bad=0` 含安卓返回路由 | `<godot> --path <P> -s res://tests/probes/probe_save.gd`（**窗口模式**） |
-| 触屏可点 29 断言 | `[TOUCH] checks=29 bad=0`（含 22 按钮触达尺寸矩阵） | `<godot> --path <P> -s res://tests/probes/probe_touch.gd`（**窗口模式**） |
-| 模拟模块 5 探针 | `[SIM/GRID/FLOW/SCENARIO/WORLD]` 各自 `checks=N bad=0` + `PASS`（5/22/52/34/20） | `tests/probes/probe_{sim,grid,flow,scenario,world}.gd`（headless） |
-| Windows 导出可用 | exit 0，`export/game.exe` 109 MB + `game.pck` 72 MB | `<godot> --headless --path <P> --export-release "Windows Desktop" <P>/export/game.exe` |
-| 导出包自证 | `[SELFCHECK] checks=22 bad=0` + `[SELFCHECK] PASS` + exit 0 | `./export/game.exe --headless --selfcheck` |
+| 触屏可点 39 断言 | `[TOUCH] checks=39 bad=0`（含按钮触达尺寸矩阵） | `<godot> --path <P> -s res://tests/probes/probe_touch.gd`（**窗口模式**） |
+| 模拟模块 5 探针 | `[SIM/GRID/FLOW/SCENARIO/WORLD]` 各自 `checks=N bad=0` + `PASS`（5/22/52/68/20） | `tests/probes/probe_{sim,grid,flow,scenario,world}.gd`（headless） |
+| Windows 导出可用 | exit 0，`export/game.exe` 109,550,080 B + `game.pck` 80,584,368 B（2026-10-16 晚重出；复签 `SIGNED=Valid`） | `<godot> --headless --path <P> --export-release "Windows Desktop" <P>/export/game.exe` |
+| 导出包自证 | `[SELFCHECK] checks=22 bad=0` + `[SELFCHECK] PASS` + exit 0 | `<godot> --headless --main-pack export/game.pck --selfcheck`（本机 SAC 拦未签名 exe，见 §11.12） |
 
 - `<godot>` = `D:/G/game/Godot_v4.7.2-stable_mono_win64/Godot_v4.7.2-stable_mono_win64_console.exe`
 - `<P>` = `D:/G/game/games/reroute-godot`
@@ -378,7 +378,7 @@
 在 headless 下必然失败或空转。**这些探针必须窗口模式运行**。
 
 本次会话中实测：
-- `probe_input.gd` 在 headless 下 8 项断言失败；窗口模式下 41 项全绿。
+- `probe_input.gd` 在 headless 下 8 项断言失败；窗口模式下 57 项全绿。
 - `probe_asset.gd` / `probe_model.gd` / `probe_orient.gd` 在 headless 下
   `get_texture()` 返回 null → `Cannot call method 'save_png' on a null value`，
   进程不退出（空转）；窗口模式下分别 PASS / 出图正常。
@@ -401,20 +401,27 @@
 - 边界外恒 `SOLID`；`Grid` 另存一份加帧镜像 `pmap`（通行）/`hp`（高度），供流场做
   纯下标邻域运算。
 
-### 3.2 地图要素（`Scenario._init` / `build_grid`）
+### 3.2 地图要素（`Scenario._init` × `sim/mapgen.gd` 生成，2026-10-16 起）
 
-| 要素 | 坐标 | 说明 |
+布局不再手搓：`MapGen.generate(seed, salt)` 在参数域内变奏采样（结构模板固定：北岸核心山头 /
+双咽喉岩脊 / 西南盆地插口陷阱 / 南场微丘），`Scenario` 校验结构不变量后建格；校验失败换盐
+重采样（≤64 次）。**首局种子 = `BASE_SEED` 20261003**，其后每局 `+run_index`（与仿真 RNG
+同源、确定性）。下表 = 种子 20261003 钉子值（单测/探针断言面，口径与参数域见 §11.14）：
+
+| 要素 | 坐标（seed 20261003） | 说明 |
 |---|---|---|
-| 核心 | `(24, 6)` | 1200 HP，占地 `SOLID`，不可拆 |
-| 英雄出生 | `(24, 8)` | 强制 `OPEN` |
-| 出怪口 1 | `(12, 40)` | 西咽喉外，主口 |
-| 出怪口 2 | `(36, 40)` | 东咽喉外，主口 |
-| 出怪口 3 | `(5, 41)` | 盆地内，**仅在挖开插口后生效** |
-| 盆地插口 | `(5, 37)` | 唯一的盆地覆盖格，挖开即 `route_opened = true` |
-| 岩脊 | `y=30..32, x=1..46` | 除两个咽喉口外全 `SOLID` |
-| 盆地内矿 | `x∈[4,6], y∈[40,43]` | 诱饵：挖插口才够得着 |
-| 中场矿 | `x∈[22,26], y=20` | 安全保底 |
-| 稀疏表土 | `y∈(12,26) ∧ x%9==4 ∧ y%11==6` | 可挖、不给矿 |
+| 核心 | `(33, 6)` | 1200 HP，占地 `SOLID`，不可拆 |
+| 英雄出生 | `(33, 8)` | 强制 `OPEN` |
+| 出怪口 1 | `(21, 56)` | 西咽喉外，主口 |
+| 出怪口 2 | `(45, 56)` | 东咽喉外，主口 |
+| 出怪口 3 | `(6, 57)` | 盆地内，**仅在挖开插口后生效** |
+| 盆地插口 | `(8, 53)` | 盆地岩环上缘唯一覆盖格，挖开即 `route_opened = true` |
+| 岩脊 | `ridge_y=42`（行 42..44） | 咽喉口宽 3：西 `x=22`、东 `x=46`（中心），除口外全 `SOLID` |
+| 盆地岩环 | `Rect2i(3, 53, 7, 8)` | 四周各一圈实心环 |
+| 盆地内矿 | `x∈[5,7], y∈[56,59]`（12 格） | 诱饵：挖插口才够得着 |
+| 中场矿 | `x∈[31,35], y=21`（5 格） | 安全保底；矿格共 17 |
+| 稀疏表土 | `y=17 ∧ x%9==2` | `sparse_phase=2`，可挖、不给矿 |
+| 南场微丘 | `Rect2i(16, 48, 2, 2)` | 2×2，`h1` |
 
 ### 3.3 玩家命令（唯一入口 `World.apply_command`）
 
@@ -596,7 +603,7 @@ game/  ←──  tests/probes/    （探针驱动表现层与整机）
 | 冻结物 | 位置 | 改动流程 |
 |---|---|---|
 | 16 个黄金指纹 | `sim/golden_baseline.gd` | 先说明为何必须改 → 重跑 `probe_golden` 采集新值 → 同一次提交里更新 `golden_baseline.gd` 与决策记录 |
-| 剧本指纹 `0x02d81d2a` | `Scenario.fingerprint()` | 改地图/波次/高度夹具后必须换基线 |
+| 剧本指纹 `0x7dea2b02` | `Scenario.fingerprint()` | 改地图/波次/高度夹具、或 `sim/mapgen.gd` 参数域后必须换基线（两主口裸图路径长标定 `PATH_REF=548` ∈ [466,630] 同属此列） |
 | `STATE_SCHEMA = 5` | `canon.gd` / `world.canonical_bytes()` | 改编码字段 = 升 schema 号 + 换基线 |
 
 **禁止**为了让某个探针变绿而修改基线值。探针失败优先怀疑实现。
@@ -680,7 +687,7 @@ g.height_rev : int          # 仅高度版本（视图地面重建用）
 
 ```gdscript
 # view.gd（节点：Main/View；D5-1 拆分后为门面——组装 + 转发，实现见 view_core/_terrain/_entities/_audio）
-view.apply_blueprint(bp, seed)     # 换蓝图（每局一次）
+view.apply_blueprint(bp, seed, anchor := {})  # 换蓝图（每局一次）；anchor 可选 = 视觉锚点 {ridge_y, basin_y, core}
 view.build_terrain(grid)           # 铺动态内容（每局一次）
 view.sync(world)                   # 每帧
 view.pick_cell(sx, sy) -> Vector2i # 屏幕 → 格；屏外返回 (-1,-1)
@@ -850,7 +857,7 @@ HUD 全部控件、标题/暂停/结算三屏、三件套音频、真实 glb 资
 | D1-5 DPI 与安全区 | 按 §6.5 的分辨率策略处理 Android 的 DPR 与刘海/手势区；HUD `S` 缩放需在窄屏下不越界 | 至少在 1 个 16:9 与 1 个 20:9 分辨率下目视截图。✅ **2026-10-16**：`stretch=canvas_items+expand` + `hud.safe` 安全区（探针注入制）；`shots/game_20x9.png`（20:9）与 `game_narrow.png`（窄屏 S=1.176）目视过；probe_hud 63→69，负对照 ×2（见 §11.9） |
 | D1-6 触屏拖线 | 拖拽放墙/塔在触屏下可用（按下 → 拖动 → 抬起） | `probe_touch` 覆盖拖线路径。✅ 同 D1-4（原文两行重复，一并收口） |
 | D1-7 **制造积分消耗** | 按 §7.4b 清单生成刚需素材（**图标 + 音效**），产出落 `.maker/assets/` 后搬入 `assets/` | ✅ **2026-10-16 完成**：Maker 绑定 `reroute-maker`（App「改道」）；图标（icon2_core → `assets/icon/` 五件套 → `config/icon` + 双端导出预设）；9 音效 + 结算 BGM 入库并接线（`probe_audio` 38→56 + 负对照 bad=3 + 全 21 闸绿）。详见 §11.10 |
-| D1-8 **日志 ②** | 建议：Android 移植 / 触屏适配的踩坑记录 | 已发（带标签 + 配图） |
+| D1-8 **日志 ②** | 建议：Android 移植 / 触屏适配的踩坑记录 | ✅ **2026-10-16 17:36 已发**（带标签 + 配图）：https://www.taptap.cn/moment/860212304162064981（moment_id `860212304162064981`，版块·综合）；匿名复访验证通过；成稿 `docs/devlogs/02-触屏刘海与黑屏排查.md` |
 
 **出口**：Android 全量包可启动、可操作、可完成一局。**若 D1 结束仍跑不通 → 触发 §7.11 预案。**
 
@@ -1072,7 +1079,7 @@ HUD 全部控件、标题/暂停/结算三屏、三件套音频、真实 glb 资
 
 | 闸 | 命令 | 通过判据 | 需窗口 |
 |---|---|---|---|
-| 单测 | `run_tests.gd` | `passed=100 failed=0` + `[UNIT-ALL-GREEN]` | 否 |
+| 单测 | `run_tests.gd` | `passed=104 failed=0` + `[UNIT-ALL-GREEN]` | 否 |
 | 黄金回放 | `tests/probes/probe_golden.gd` | `[GOLDEN] checks=2 bad=0` + `PASS`（16 指纹） | 否 |
 | 模拟模块 | `tests/probes/probe_{sim,grid,flow,scenario,world}.gd` | 各自 `[TAG] checks=N bad=0` + `PASS` | 否 |
 | 场景构建 | `tests/probes/probe_scene.gd` | `[SCENE] checks=11 bad=0` + `PASS`（field=4096 / plain=39312 / 单地面网格对拍） | 否 |
@@ -1084,9 +1091,9 @@ HUD 全部控件、标题/暂停/结算三屏、三件套音频、真实 glb 资
 | 全局冒烟 | `tests/probes/probe_smoke.gd` | `[SMOKE] PASS` | **是** |
 | 资产/模型 | `tests/probes/probe_{asset,model,orient}.gd` | 各自 `[TAG] PASS`（model/orient 出图；checks=6/1） | **是** |
 | 音频 | `tests/probes/probe_audio.gd` | `[AUDIO] PASS bad=0` | **是** |
-| 截图像素 | `tests/probes/probe_shots.gd` + `python tools/check_shots.py` | 探针 `[SHOTS] checks=3 bad=0` + 像素 `[SHOTS] checks=15 fail=0` | **是** |
-| 导出自证 | `export/game.exe --headless --selfcheck` | `[SELFCHECK] PASS` + exit 0 | 否 |
-| **触屏闭环** | `tests/probes/probe_touch.gd` | `[TOUCH] checks=29 bad=0` + `PASS`（触摸可点 + 按钮触达尺寸矩阵）；拖线/技能等全操作路径 D1 扩展 | **是** |
+| 截图像素 | `tests/probes/probe_shots.gd` + `python tools/check_shots.py` | 探针 `[SHOTS] checks=5 bad=0` + 像素 `[SHOTS] checks=25 fail=0` | **是** |
+| 导出自证 | `<godot> --headless --main-pack export/game.pck --selfcheck`（本机 SAC 拦未签名 exe，见 §11.12） | `[SELFCHECK] PASS` + exit 0 | 否 |
+| **触屏闭环** | `tests/probes/probe_touch.gd` | `[TOUCH] checks=39 bad=0` + `PASS`（触摸可点 + 按钮触达尺寸矩阵）；拖线/技能等全操作路径 D1 扩展 | **是** |
 | **Android 可玩** | `adb install` + 启动 + 手动完成一局 | 无崩溃、`adb logcat` 无 ERROR、7 个模式钮 + 技能 + 暂停 + 热层全部可点 | 真机/模拟器 |
 | **Android 自证（自动）** | `adb shell am start ... --es -- --selfcheck` 或 logcat 抓 `[SELFCHECK] PASS` | `[SELFCHECK] PASS` + exit 0 | — |
 
@@ -1721,6 +1728,69 @@ FATAL/crash/ANR。
 建议用户真机复验一眼（安装 + 开一局），与 D2-3 真人试玩合并执行。MuMu 现设置保留
 renderer_mode=dx + strategy=auto + force_discrete=true。
 
+### 11.14 世界程序化生成（变奏级 + 高度微变）与基线第三次重录（2026-10-16 晚）
+
+**需求（用户裁定）**：每局玩法地图与视觉地形都要不同，但难度与观感不许漂移。「变奏级」=
+结构模板固定（北岸核心山头 / 双咽喉岩脊 / 西南盆地插口陷阱 / 南场微丘），参数在可行带内
+逐局变奏；「高度微变」= 高度层随布局联动（核心山头顶 5 级、岩脊 / 盆地环 / 微丘按布局落位），
+不做结构性改版。
+
+**A 阶段 · 模拟侧生成**
+- 新 `sim/mapgen.gd`：纯整数、唯一随机源 = sim `Rng`（SplitMix64），`generate(seed, salt)`
+  采样布局参数字典（12 维参数域：core_x 30..34 / ridge_y 40..42 / 咽喉 16..22·41..47 间距≥15 /
+  盆地 x0 2..4 · y0 52..54 · 7..8×8..9 / 插口上缘列 / mid_y 19..21 / 表土相位 2..6 / 微丘 2×2）；
+  **盐重采样**：结构不变量校验失败换盐重采（≤64 次），产物绝不修改。200 种子压测全过
+  （salt 全 0）。
+- `Scenario` 重构：`Scenario.new(seed)` = 采样 → 校验（原 `check_grid` / `check_plug_open`
+  口径原样复用）→ 建格；**裸图路径长标定 `PATH_REF=548`（±15% 带 [466,630]）**——
+  难度不许因布局漂移（`probe_scenario` 实测 d0=d1=548）。
+- 冻结面迁移：`sim/verify.gd` 加 `script_for(sc)`（81 条命令脚本按 sc 生成，模板 + 锚定
+  坐标）；`game/main.gd` 每局 `Scenario.new(BASE_SEED + run_index)` 并打印 `sc_seed`；
+  `sim/save.gd` v2 增存 `sc_seed`；`game/selfcheck.gd` / `probe_golden` / `probe_world`
+  全部锚定化（不再假设手搓坐标）。
+- **基线第三次重录**（§5.4 流程：先说明 → 重采 → 同提交更新）：剧本指纹
+  `0x02d81d2a → 0x7dea2b02`；黄金 16 指纹重采（400..6400，首 `b72e0c13`、末 `811afe0e`），
+  WON@6400（核心余 744）、kills=236、supply=583。
+- 单测 100→104（`test_mapgen` 生成器用例 + `test_verify` 锚定化）；全 19 探针 + check_shots
+  绿：`logs/gates-20261016-mapgen-post/`。
+
+**B 阶段 · 视觉地形算法升级（`game/`）**：见 §11.15。两阶段合计单测 104、全 19 闸 +
+check_shots 全绿：`logs/gates-20261016-visual/`。
+
+### 11.15 视觉地形算法升级（渲染观感对齐商店头图）（2026-10-16 晚）
+
+**目标**：观感向 `shots/store/store_header.png`（峡谷宣传图）靠拢，且每局视觉不同
+（预设跟随 `run_index`，与玩法种子同变）。
+
+**B1 `game/blueprint.gd`（场算法）**
+- vnoise 改五次插值；新增：域扭曲（warp 0.30..0.50）、脊状调制（`(1-|2n-1|)`，按
+  `rr > 0.02` 门控成本）、台地量化（floor + smooth01 塑缓坡，场外按 `(1-g*0.7)` 淡出）、
+  **阈值化拉普拉斯侵蚀**（场内 129²@0.5m 预烘焙：Neumann 边界、双线性采样；场外解析
+  直取；erode_iter 5..8 按预设）。
+- 远场 micro 门控（`m_fade > 0.003` 才参与），消场界接缝。
+- **锚点 API**：`Blueprint.compose(bp, seed, anchor)`——`main._visual_anchor()` 从 `Scenario`
+  注入 `ridge_y+1 / basin_rect 中心 / core`（注意是 `basin_rect`），视觉地形与玩法布局对齐；
+  缺省 `{}` = 预设坐标（探针 / `--selfcheck` 口径不变）。
+- 三预设（canyon/shale/ember）参数上浮 + 调色板整体提亮变暖。
+- 性能：compose ~210ms + 场内 129² ~8ms + 全域扫 340..390ms，总 `<1s` 闸过。
+
+**B2 `game/view_terrain.gd` / `view_core.gd`（渲染层）**
+- `_field_color(h, solid, slope, cx, cy)` 重写：三档连续混色 + 坡度岩化
+  （`rock_mix = clampf((slope-0.45)/1.2, 0, 0.72)`）+ 层理 sin + 确定性抖动。
+- 边框圈 `RIM_BUMP := 4.2`（地图边框 SOLID 格抬升 = 峡谷崖壁围合，纯视觉）；
+  背景色 = 雾色 ×(1.32,1.22,1.08)。
+- 灯光：太阳 energy 1.9、暖色 (1.0,0.87,0.68)；环境光 (0.62,0.53,0.43)×0.62。
+
+**闸与证据**：`probe_scene` 连续性抽检加崖壁例外（>2.0 台阶仅允许 `|x|≥31` 带）；顶点数
+不变（56169 / 334176）；`check_shots` 25 项无需重标定即绿；全 19 闸 + 单测绿：
+`logs/gates-20261016-visual/`（§2 全表已按此重核）。`shots/store/` 实机 5 图已用新截图
+刷新（AI 五图未动）。
+
+**遗留**：Windows 侧产物已按本文口径重出（`game.pck` 自证 22/0 + 复签 Valid，2026-10-16 晚）；
+Android `reroute-release.apk` 仍为 D2-1 版、不含本次变更——**D4 提交前需重出双端包**
+（Windows 出包后必须复签：`tools/sign_windows_exe.ps1`，PS 5.1 需 UTF-8 BOM，已修）。
+提交前终核证据 = `logs/gates-20261016-final/`（headless 套件 + 重导出 + 自证）。
+
 ---
 
 ## 12. AI 任务卡模板（派活时照抄）
@@ -1734,7 +1804,7 @@ renderer_mode=dx + strategy=auto + force_discrete=true。
             除非任务本身就是 D4 的重录>
 - 实现要求：<引用 §5 相关条款>
 - 验收命令（注意哪些必须窗口模式，见 §2.1）：
-    <godot> --headless --path <P> -s res://tests/run_tests.gd      # 期望 passed=100 failed=0
+    <godot> --headless --path <P> -s res://tests/run_tests.gd      # 期望 passed=104 failed=0
     <godot> --path <P> -s res://tests/probes/probe_xxx.gd                       # 期望 [XXX] PASS
 - 证据要求：stdout 原文 + exit code + （涉及画面时）截图且必须目视
 - 失败预案：<该任务在 §7.11 砍单顺序里的位置>

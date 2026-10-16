@@ -4,7 +4,7 @@
 > **速查表与红线**，不复制权威文档内容；冲突时以方案为准。
 
 64×64 塔防，核心机制「放墙改道」：敌人绕得越远、死时赏金越高（`reward + traveled>>3`）。
-Engineering 保真度极高：模拟核心是**确定性**的，有 16 指纹黄金基线锁死行为（2026-10-16 世界 64² 重录）。
+Engineering 保真度极高：模拟核心是**确定性**的，有 16 指纹黄金基线锁死行为（2026-10-16 世界程序化生成后第三次重录）。
 
 ---
 
@@ -12,9 +12,9 @@ Engineering 保真度极高：模拟核心是**确定性**的，有 16 指纹黄
 
 | 路径 | 管什么 |
 |---|---|
-| `sim/` | 模拟核心十模块，纯逻辑、**无浮点、无渲染**：`lua64`(语义 shim) / `canon` / `rng` / `grid` / `flowfield` / `scenario` / `sim`(数值表) / `world` / `verify` / `golden_baseline` / `save`(存档编解码) |
+| `sim/` | 模拟核心十二模块，纯逻辑、**无浮点、无渲染**：`lua64`(语义 shim) / `canon` / `rng` / `grid` / `flowfield` / `mapgen`(布局生成) / `scenario`(布局构造+校验) / `sim`(数值表) / `world` / `verify` / `golden_baseline` / `save`(存档编解码) |
 | `game/` | 表现层，只读模拟：`main`(主循环/输入) / `view`(3D 门面) + 组件 `view_core`/`view_terrain`/`view_entities`/`view_audio`（D5-1 拆分 2026-10-15） / `models` / `blueprint` / `hud` / `screens`(五屏+确认弹窗) / `save_io`(槽位 I/O) / `user_settings`(音量/全屏) / `selfcheck` |
-| `tests/` | 单测 100 例 + **19 个验收探针**（`tests/probes/`，公共夹具 `probe_kit.gd`，D5-2 2026-10-15） |
+| `tests/` | 单测 104 例 + **19 个验收探针**（`tests/probes/`，公共夹具 `probe_kit.gd`，D5-2 2026-10-15） |
 | `tools/` | Python 工具：`check_shots.py` / `convert_all.py` / `umd2_to_gltf.py` / `verify_glb.py` |
 | `assets/` | `audio/sfx`(29 mp3) / `fonts`(Noto Sans SC) / `models`(glb) / `icon`(图标五件套) |
 | `docs/` | 开发方案（权威）、审计报告、`devlogs/` |
@@ -41,7 +41,7 @@ GODOT="D:/G/game/Godot_v4.7.2-stable_mono_win64/Godot_v4.7.2-stable_mono_win64_c
 P="D:/G/game/games/reroute-godot"
 
 # headless 安全：单测 + 模拟模块探针 + 场景构建
-"$GODOT" --headless --path "$P" -s res://tests/run_tests.gd                    # 100 单测
+"$GODOT" --headless --path "$P" -s res://tests/run_tests.gd                    # 104 单测
 for p in golden scene sim grid flow scenario world; do
   "$GODOT" --headless --path "$P" -s res://tests/probes/probe_$p.gd
 done
@@ -76,7 +76,7 @@ python tools/check_shots.py    # 截图像素校验
 | 冻结物 | 位置 |
 |---|---|
 | 16 个黄金指纹 | `sim/golden_baseline.gd` |
-| 剧本指纹 `0x02d81d2a` | `Scenario.fingerprint()` |
+| 剧本指纹 `0x7dea2b02` | `Scenario.fingerprint()` |
 | `STATE_SCHEMA = 5` | `canon.gd` / `world.canonical_bytes()` |
 
 漂移了先怀疑**实现**，不是怀疑基线。真要改：先说明为何必须改 → 重跑 `probe_golden` 采新值
@@ -177,6 +177,15 @@ python tools/check_shots.py    # 截图像素校验
   环境变量注入，apksigner = CN=Reroute；密码台账 `D:\G\game\keystores\signing.env` 勿入库）；
   单次导出 ~10min（勿短超时）。Windows 双击复测已通过（能启动）；Android 装机待设备。`logs/` 有 `.gdignore`。
   决策记录 = 方案 §11.12。
+- 地图程序化生成 + 视觉算法升级（2026-10-16 晚）**已完成**：新 `sim/mapgen.gd` 变奏级布局
+  （12 维参数域 + 盐重采样 ≤64 + 裸图路径长标定 548±15%，难度不漂移）；`Scenario.new(seed)`
+  生成 + 校验；每局 `BASE_SEED + run_index`（与仿真 RNG 同源）；**基线第三次重录**
+  （剧本指纹 0x02d81d2a→0x7dea2b02；16 指纹 400..6400；WON@6400 余 744）。视觉：
+  `blueprint` 五次插值 / 域扭曲 / 脊状 / 台地 / 阈值化侵蚀 + 锚点 API（视觉对齐玩法布局；
+  `ridge_y` / `basin_rect` 中心 / `core`）、`view_terrain` 坡度岩化 + 崖壁围合（RIM_BUMP 4.2）、
+  灯光/调色提亮；单测 100→104；全 19 闸 + check_shots 绿（证据 `logs/gates-20261016-mapgen-post/`
+  + `logs/gates-20261016-visual/`）；决策记录 = 方案 §11.14/§11.15。
+  **Android/Windows 现包不含本次变更，D4 提交前必须重出。**
 - 历史审计报告（`docs/*-20261015.md`）按**快照原则保持原样**，不要顺着结构整理去改它们。
 
 ---

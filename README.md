@@ -4,7 +4,9 @@
 
 > **当前状态（2026-10-16）**：模拟核心与表现层**均已完成**，游戏可完整游玩
 > （五屏 UI：标题 / 对局 / 暂停 / 结算 / 存档 / 设置 —— 3 槽位存档、音量与全屏设置、
-> 退出二次确认、安卓返回键路由；3D 视图 + HUD + 音频 + 真实模型资产）。
+> 退出二次确认、安卓返回键路由；3D 视图 + HUD + 音频 + 真实模型资产；
+> **地图每局程序化生成**（结构模板变奏，`sim/mapgen.gd`）+ 视觉地形算法升级
+> ——侵蚀 / 域扭曲 / 崖壁围合，见方案 §11.14 / §11.15）。
 >
 > **交付目标**：2026 TapTap 聚光灯 21 天游戏创作挑战（主题「涌现」）。
 > 官方建议 **10-18 前提交**，硬截止 **10-21**。目标 **Android + Windows 双端**
@@ -31,7 +33,7 @@ P="D:/G/game/games/reroute-godot"
 "$GODOT" --path "$P"
 
 # 全部自动化闸（窗口模式的必须去掉 --headless）
-"$GODOT" --headless --path "$P" -s res://tests/run_tests.gd   # 100 单测
+"$GODOT" --headless --path "$P" -s res://tests/run_tests.gd   # 104 单测
 "$GODOT" --headless --path "$P" -s res://tests/probes/probe_golden.gd      # 黄金回放 16 指纹
 "$GODOT" --headless --path "$P" -s res://tests/probes/probe_scene.gd       # 主场景构建
 "$GODOT" --path "$P" -s res://tests/probes/probe_sync.gd                   # 视觉同步对拍
@@ -56,7 +58,7 @@ P="D:/G/game/games/reroute-godot"
 
 | 路径 | 管什么 |
 |---|---|
-| `sim/` | 模拟核心十模块：`lua64`(语义 shim) / `canon` / `rng` / `grid` / `flowfield` / `scenario` / `sim`(数值表) / `world` / `verify` / `golden_baseline`。纯逻辑、无渲染、无浮点 |
+| `sim/` | 模拟核心十二模块：`lua64`(语义 shim) / `canon` / `rng` / `grid` / `flowfield` / `mapgen`(布局生成) / `scenario`(布局构造+校验) / `sim`(数值表) / `world` / `verify` / `golden_baseline` / `save`(存档编解码)。纯逻辑、无渲染、无浮点 |
 | `game/` | 表现层：`main`(主循环/输入) / `view`(3D 门面；D5-1 拆分后 = 门面 + `view_core`/`view_terrain`/`view_entities`/`view_audio`) / `models`(资产) / `blueprint`(程序化地形) / `hud` / `screens` / `selfcheck` |
 | `tests/` | 单测套件 + 验收探针：`kit.gd`(记录式断言) + `run_tests.gd`(入口) + 7 模块用例 + `stub_scenario` 夹具；`tests/probes/` = 19 个验收探针，同时是全链路冒烟入口 |
 | `assets/` | 音频 29 个 mp3、中文字体、10 个 glb 模型、图标套件 |
@@ -70,6 +72,7 @@ P="D:/G/game/games/reroute-godot"
 64×64 塔防，核心机制「放墙改道」：用墙/塔/地形改造把敌人推上更长的路，
 绕行越远赏金越高（`reward + traveled>>3`）。挖开西南盆地插口能拿到矿，
 但也会打开第三个出怪口。撑到 6400 tick 且场上清空即胜。
+**每局布局与视觉地形按种子变奏生成**（结构模板固定、难度带 548±15% 标定，见方案 §11.14）。
 
 相机：`WASD` 平移、鼠标右键拖拽平移（跟手）、`Q/E` 旋转、滚轮缩放（0.6–1.8×）；`TAB` 热层；
 `Esc` 暂停。窗口缩放会取景回默认北向视角（平移/旋转/缩放重置）。
@@ -92,5 +95,5 @@ P="D:/G/game/games/reroute-godot"
 6. **语义 shim**（`sim/lua64.gd`）：`%` 截尾→`mod`（向下取整）、无 `//`→`idiv`、
    `>>` 算术移→`lshr`（逻辑移）。`*`/`+`/`<<`/位运算回绕与 Lua 一致，直译。
 7. **数组原地 compact**（`arr[i]=arr[j]` + `resize`）触发类型错误→建新数组。
-8. **基线冻结**：`sim/golden_baseline.gd` 的 16 指纹、剧本指纹 `0x02d81d2a`、
+8. **基线冻结**：`sim/golden_baseline.gd` 的 16 指纹、剧本指纹 `0x7dea2b02`、
    `STATE_SCHEMA=5` 都是判据。改动必须走「记录 + 重录」流程，**禁止为了修绿探针而改基线**。
