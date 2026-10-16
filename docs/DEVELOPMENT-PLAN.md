@@ -1791,6 +1791,30 @@ Android `reroute-release.apk` 仍为 D2-1 版、不含本次变更——**D4 提
 （Windows 出包后必须复签：`tools/sign_windows_exe.ps1`，PS 5.1 需 UTF-8 BOM，已修）。
 提交前终核证据 = `logs/gates-20261016-final/`（headless 套件 + 重导出 + 自证）。
 
+### 11.16 「场内地面缺失」根因修复 + 峡谷化第二步（2026-10-17 凌晨）
+
+**根因修复（用户反馈「区域在一个坑里」）**：`view_terrain._build_indices()` 三角绕序倒置
+（原 `(a,c,b)/(a,d,c)` 使全部地面面片被背面剔除）——自 world64 重做（`1e836bf`）即存在，
+用户所见「平坦地板」实为雾背景穿透的洞（雾开 = fog 色，雾关 = 背景 ×1.32 可证）。
+改为 `(a,b,c)/(a,c,d)`（保留共享对角 a-c）；墙带陡面因屏幕投影翻转故此前可见。
+诊断链：magenta 背景测试（洞=magenta）→ NaN/数据扫描（0 异常）→ `git stash`（洞在已
+提交代码同样存在，非本轮引入）→ hide/cull 测试定论。顶点数/索引数不变（56169/334176）。
+
+**峡谷化第二步（用户拍板：rim_h=18 / 干冲沟保留 / fit 俯角落 44°）**
+- `blueprint.compose` 场外新增：干冲沟（fbm 窄带挖蚀 2.2m、d>2 淡入）、崖顶脊状化
+  （`crest := 0.75+0.40*rn²`）、台阶层理量化（4.5m 一层 + smooth01 圆缘）；mouth 豁口
+  改由 `main._visual_anchor()` 注入 `gate_x`（spawns 格 x→世界 x−31.5），豁口对齐出发口。
+- 三预设重调（canyon rim 18.0/mesa 16/und 2.2/0.050；shale 12.5；ember 21），
+  微观纹理收敛；`view_terrain`：RIM_BUMP 4.2→5.0、岩壁层理带对齐 4.5m 台阶、
+  场内花纹更收敛；`view_core`：环境光 0.40→0.50、太阳 elevation 52°→58°、
+  `fit_camera` 俯角界 40/56→36/44（二分偏好最高可行俯角 → 默认落 44°）。
+- DP 陷阱：`floor()` 推断 Variant，`var tq: float` 必须显式类型（Parse Error 一次）。
+
+**闸与证据**：全 19 探针 + 单测 104/0 + selfcheck 22/0 全绿；`probe_scene` PASS（11）；
+`check_shots` 25 项无需重标定（game_20x9 warm=958769 teal=2761，修复前 804330）；
+`probe_save` 曾误用 headless 运行挂起报错——save/orient 等窗口探针必须窗口模式（§2.1）。
+剧本指纹 0x7dea2b02 不变（纯视觉改动）。
+
 ---
 
 ## 12. AI 任务卡模板（派活时照抄）

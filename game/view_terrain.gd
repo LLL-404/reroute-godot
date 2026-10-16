@@ -6,6 +6,8 @@ extends RefCounted
 # 几何工具借 core；节点挂点统一走 host。
 # 2026-10-16 世界重做：旧「柱带 + 环带」方块拼装（_rebuild_field 柱体 / _rebuild_ring /
 # _collect_ring）已删除；SOLID 抬升融入同一网格（岩石色 + 1.6m）。
+# 2026-10-16 世界重做②（方案 §11.16）：边框崖壁加「周向起伏 + 南面出怪口豁口」
+# （_rim_scale，对齐当局 spawn 列），场外配色按高度岩化。
 # 顶点高规则：场内采样点 = 邻接格顶高的 max（格顶 = 蓝图高 + 模拟层 1.2m/级 + SOLID 抬升），
 # 场外采样点 = 蓝图高度函数直取；网格一次建成（场外数据蓝图期内静态），
 # 高度变化（挖/填/落墙）只重算场内区并与静态区合并重建 surface。
@@ -28,7 +30,8 @@ const HEAT_COLORS := [
 const FINE_STEP := 0.5
 const OUT_RINGS := 54 # i=1..54 → 最远 ±260.96
 const SOLID_BUMP := 1.6 # SOLID 格在网格内的抬升（原柱体口径：顶 = ground_y + 1.6）
-const RIM_BUMP := 4.2 # 地图边框圈（峡谷崖壁）额外抬升：纯视觉围合，对齐宣传图峡谷口
+const RIM_BUMP := 5.0 # 地图边框圈（峡谷崖壁）额外抬升：纯视觉围合，对齐宣传图峡谷口
+const RIM_MOUTH_W := 3.6 # 南面出怪口豁口半宽（m，spawn 列两侧高斯衰减）
 
 var host: Node3D
 var core: ViewCoreScript
@@ -39,6 +42,7 @@ var grid: Grid = null
 var field_h: PackedFloat64Array
 var height_fn: Callable
 var cur_palette: Dictionary = {}
+var _gates := PackedFloat64Array() # 南面出怪口世界 x（崖壁豁口对齐当局 spawn 列）
 
 var heat_on := false
 var heat_root: Node3D = null
@@ -107,6 +111,11 @@ func apply_blueprint(bp: Dictionary, seed: int, anchor: Dictionary = {}) -> void
 	var composed: Array = Blueprint.compose(bp, seed, anchor)
 	height_fn = composed[0]
 	cur_palette = composed[1]
+	_gates = PackedFloat64Array()
+	var gx: Variant = anchor.get("gate_x", [])
+	if typeof(gx) == TYPE_ARRAY:
+		for v in gx:
+			_gates.append(float(v))
 
 	# 场内 64² 格高表：单位/建筑/幽灵/拾取的贴地全走这里
 	field_h = PackedFloat64Array()
@@ -190,11 +199,11 @@ func _build_indices() -> void:
 			var d := row1 + li
 			var c := d + 1
 			_indices[w] = a
-			_indices[w + 1] = c
-			_indices[w + 2] = b
+			_indices[w + 1] = b
+			_indices[w + 2] = c
 			_indices[w + 3] = a
-			_indices[w + 4] = d
-			_indices[w + 5] = c
+			_indices[w + 4] = c
+			_indices[w + 5] = d
 			w += 6
 
 
@@ -218,7 +227,7 @@ func _build_ground() -> void:
 				h = height_fn.call(px, pz)
 			_heights[row + li] = h
 			_positions[row + li] = Vector3(px, h, pz)
-			_colors[row + li] = _outside_color(px, pz)
+			_colors[row + li] = _outside_color(px, pz, h)
 	_fill_field_region()
 	_recompute_normals(0, _ln - 1)
 	if _ground == null:
@@ -244,7 +253,7 @@ func _fill_field_region() -> void:
 				if grid.at(x, y) == Grid.SOLID:
 					t += SOLID_BUMP
 					if x == 0 or y == 0 or x == n - 1 or y == n - 1:
-						t += RIM_BUMP # 边框崖壁（视觉围合）
+						t += RIM_BUMP * _rim_scale(x, y) # 边框崖壁（视觉围合；周向起伏 + 南口豁口）
 			_cell_top[y * n + x] = t
 	for lj in range(_i0, _i1 + 1):
 		var pz := _lattice[lj]
@@ -294,6 +303,19 @@ func _fill_field_region() -> void:
 			_colors[row + li] = _field_color(best, best_solid, slope, bx, by)
 
 
+## 边框崖壁高度系数：周向确定性起伏（去直边皱褶感）+ 南面出怪口豁口（对齐当局 spawn 列，限南沿）。
+func _rim_scale(x: int, y: int) -> float:
+	var s := 0.70 + 0.55 * Blueprint.ihash(x * 7 + 3, y * 7 - 5, 5521)
+	if y == core.CELL_N - 1 and not _gates.is_empty():
+		var wx := float(x) - core.HALF + 0.5
+		var m := 0.0
+		for gx in _gates:
+			var u := (wx - gx) / RIM_MOUTH_W
+			m = maxf(m, exp(-u * u))
+		s *= 1.0 - 0.85 * m # 豁口处崖壁近乎归零（留 1.6m SOLID 门槛石）
+	return s
+
+
 ## 场内顶点色：高程三档连续混色 + 坡度岩石化 + 层理与确定性明度抖动（对齐宣传图崖面观感）。
 func _field_color(h: float, solid: bool, slope: float, cx: int, cy: int) -> Color:
 	if solid:
@@ -310,17 +332,29 @@ func _field_color(h: float, solid: bool, slope: float, cx: int, cy: int) -> Colo
 		base = _col_mid.lerp(_col_hi, Blueprint.smooth01((t - 0.5) * 2.0))
 	var rock_mix := clampf((slope - 0.45) / 1.2, 0.0, 0.72)
 	base = base.lerp(_col_rock, rock_mix)
+	var patch := Blueprint.ihash(cx / 4, cy / 4, 4441) # 4 格块状干燥色斑（破单色台面）
+	base = base.lerp(_col_lo, 0.13 * clampf((patch - 0.55) * 2.5, 0.0, 1.0))
 	var strata := 0.5 + 0.5 * sin(h * 5.3 + float(cx) * 0.7 + float(cy) * 0.4)
-	var k := (0.93 + 0.14 * Blueprint.ihash(cx * 3 + 11, cy * 3 - 7, 917)) * (0.95 + 0.05 * strata)
+	var k := (0.91 + 0.18 * Blueprint.ihash(cx * 3 + 11, cy * 3 - 7, 917)) * (0.94 + 0.07 * strata)
 	return Color(base.r * k, base.g * k, base.b * k)
 
 
-## 场外顶点色：向岩石色渐混 + 确定性明度抖动（去包围圈后的旷野）
-func _outside_color(px: float, pz: float) -> Color:
+## 场外顶点色：低地暖沙 → 高处/陡坡岩化（环山体/台地顶），岩壁叠层理微带 + 确定性明度抖动。
+func _outside_color(px: float, pz: float, h: float) -> Color:
 	var d := maxf(absf(px), absf(pz)) - core.HALF
-	var c := _col_lo.lerp(_col_rock, 0.18 + 0.42 * Blueprint.smooth01(d / 60.0))
-	var k := 0.90 + 0.16 * Blueprint.ihash(int(floor(px * 0.5)), int(floor(pz * 0.5)), 7331)
-	return Color(c.r * k, c.g * k, c.b * k)
+	var t := clampf((h - 0.6) / 7.5, 0.0, 1.0) # 低地=沙，高地=岩
+	var slope := 0.0
+	if not height_fn.is_null():
+		var s1 := absf(height_fn.call(px + 2.0, pz) - h)
+		var s2 := absf(height_fn.call(px, pz + 2.0) - h)
+		slope = maxf(s1, s2) * 0.5 # 陡坡面岩化（台地崖壁/环山体内坡）
+	var mix := clampf(0.16 + 0.30 * Blueprint.smooth01(d / 60.0) + 0.62 * t + 1.1 * clampf(slope / 3.0, 0.0, 0.75), 0.0, 1.0)
+	var c := _col_lo.lerp(_col_rock, mix)
+	var e := 1.0
+	if h > 3.0:
+		e = 0.86 + 0.14 * sin(h / 4.5 * 6.2831853 + px * 0.13) # 岩壁层理带（对齐 4.5m 台阶）
+	var k := (0.90 + 0.18 * Blueprint.ihash(int(floor(px * 0.5)), int(floor(pz * 0.5)), 7331)) * e
+	return Color(clampf(c.r * k, 0.0, 1.0), clampf(c.g * k, 0.0, 1.0), clampf(c.b * k, 0.0, 1.0))
 
 
 ## 重建地面网格（挖/填/落墙后 height_rev 变）：只重算场内区 + 相邻法线，与静态场外区合并重建。

@@ -246,10 +246,14 @@ func _on_hud_skill() -> void:
 
 ## 视觉地标锚点：岩脊/盆地/前哨峰对齐当局玩法图（纯表现层单向；sim 不知道本系统存在）。
 func _visual_anchor() -> Dictionary:
+	var gates: Array = []
+	for s in sc.spawns:
+		gates.append(float(s.x) - 31.5) # 格 x → 世界 x（cell_to_world 口径）
 	return {
 		"ridge_y": sc.ridge_y + 1,
 		"basin_y": float(sc.basin_rect.position.y) + float(sc.basin_rect.size.y - 1) * 0.5,
 		"core": sc.core,
+		"gate_x": gates,
 	}
 
 

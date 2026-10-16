@@ -67,8 +67,8 @@ func setup() -> void:
 	env.background_mode = Environment.BG_COLOR
 	env.background_color = Color(0.55, 0.44, 0.33)
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	env.ambient_light_color = Color(0.62, 0.53, 0.43)
-	env.ambient_light_energy = 0.62
+	env.ambient_light_color = Color(0.50, 0.52, 0.60) # 冷调天光（落日暖阳 + 冷影对比）
+	env.ambient_light_energy = 0.50
 	env.fog_enabled = true
 	env.fog_mode = Environment.FOG_MODE_DEPTH
 	env.fog_light_color = Color(0.60, 0.47, 0.34)
@@ -81,10 +81,10 @@ func setup() -> void:
 
 	sun = DirectionalLight3D.new()
 	sun.name = "Sun"
-	sun.light_energy = 1.9
-	sun.light_color = Color(1.0, 0.87, 0.68) # 金色时刻暖阳（对齐宣传图）
+	sun.light_energy = 1.55
+	sun.light_color = Color(1.0, 0.84, 0.62) # 金色时刻暖阳（对齐宣传图）
 	sun.shadow_enabled = true
-	sun.rotation_degrees = Vector3(-52.0, 38.0, 0.0)
+	sun.rotation_degrees = Vector3(-58.0, 38.0, 0.0)
 	host.add_child(sun)
 
 	for k in MAT:
@@ -185,8 +185,8 @@ func fit_camera() -> void:
 	var bc := (y_b + y_t) / 2.0
 	var R := HALF
 
-	var p_lo := deg_to_rad(35.0)
-	var p_hi := deg_to_rad(50.0)
+	var p_lo := deg_to_rad(36.0)
+	var p_hi := deg_to_rad(44.0)
 	for _i in 12:
 		var pm := (p_lo + p_hi) / 2.0
 		var zc := R * cos(pm)

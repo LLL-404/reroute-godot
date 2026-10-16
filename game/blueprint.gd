@@ -4,7 +4,9 @@ extends RefCounted
 # 视图层按配方组装地形高度与配色。积木全部是显式 seed 的纯函数。
 # 隔离纪律：本系统的视图种子绝不进 sim/；战场高度对仿真与黄金指纹不存在。
 # 本文件不使用 class_name；调用方以 preload 引用（规避 class_name 自引用类风险）。
-# 2026-10-16 世界重做：去「距场越远山越高」的包围圈层，场外 = 缓降坡 + 起伏 + 极缓远降。
+# 2026-10-16 世界重做②（视觉，方案 §11.16）：场外重做「群山台地环抱」——紧贴场沿的环山体
+# （周向崖顶起伏 + 南面出怪口豁口）+ 中距块状台地原 + 远山剪影；旧「缓降坡 + 极缓远降」删除。
+# 场内高度肌理不动；整张蓝图仍为纯视觉（不进 sim/指纹）。
 # 2026-10-16 视觉算法升级（对齐 shots/store 峡谷宣传图）：
 #   ① vnoise 五次插值（C² 连续）→ 去格子感；
 #   ② 域扭曲 fBm（p' = p + A·fbm(p)）→ 蜿蜒有机的肌理；
@@ -133,17 +135,28 @@ static func _bake_eroded(base: Callable, iters: int) -> Callable:
 
 ## 返回 [h_fn: Callable(wx, wz) -> float, palette: Dictionary]。
 ## 地标用格子坐标换算：wz_c = y - HALF + 0.5。
-## 场外不再叠「环山」：slope_w 门控的缓降坡 + 中频起伏 + 极缓远降，与场内无缝衔接。
+## 场外四层（g 门控渐入）：中频起伏 → 环山体（南面出怪口豁口）→ 台地原 → 远山剪影，
+## 与场内无缝衔接；gate_x（世界坐标 x 列表）来自 anchor（当局 spawn 列）或预设缺省。
 static func compose(bp: Dictionary, seed: int, anchor: Dictionary = {}) -> Array:
 	var world: Dictionary = bp["world"]
 	var micro: Dictionary = bp["micro"]
 	var landmarks: Array = _anchored_landmarks(bp, anchor)
 	var slope_w := float(world["slope_w"])
-	var depth := float(world["depth"])
-	var far_drop := float(world["far_drop"])
 	var und_amp := float(world["und_amp"])
 	var und_freq := float(world["und_freq"])
 	var und_oct := int(world["und_oct"])
+	var rim_h := float(world["rim_h"]) # 环山体高度（紧贴场沿隆起）
+	var rim_w := float(world["rim_w"]) # 环山体外坡宽
+	var rim_north := float(world.get("rim_north", 1.0)) # 北面背景山加高倍率（峡谷屏风）
+	var mouth_s := float(world.get("mouth_s", 0.0)) # 南面出怪口豁口强度（0=整圈闭合）
+	var mesa_h := float(world["mesa_h"]) # 中距台地原高度
+	var mesa_freq := float(world["mesa_freq"])
+	var mesa_start := float(world["mesa_start"])
+	var mesa_w := float(world["mesa_w"])
+	var sky_h := float(world["sky_h"]) # 远山剪影高度
+	var sky_start := float(world["sky_start"])
+	var sky_w := float(world["sky_w"])
+	var gates: Array = anchor.get("gate_x", world.get("gate_x", []))
 	var erode_iter := int(world.get("erode_iter", 0))
 	var freq := float(micro["freq"])
 	var off0 := float(micro["offset"][0])
@@ -178,11 +191,35 @@ static func compose(bp: Dictionary, seed: int, anchor: Dictionary = {}) -> Array
 			var hv: float = q + t_step * smooth01(fr)
 			h = h + (hv - h) * (1.0 - g * 0.7)
 		if g > 0.0:
-			# 场外三件套（全部由 g 渐入）：缓降坡 / 中频起伏 / 极缓远降
-			h -= depth * g
+			# 场外四层（全部由 g 渐入）：中频起伏 / 环山体 / 台地原 / 远山剪影
 			h += (fbm(wx * und_freq, wz * und_freq, und_oct, seed + 31) - 0.5) * und_amp * g
-			if d > 0.0:
-				h -= far_drop * d * g
+			var gv := fbm(wx * 0.021, wz * 0.021, 2, seed + 671)
+			h -= 2.2 * smooth01(0.14 - absf(gv - 0.5)) * smooth01((d - 2.0) / 4.0)
+			var g_rim := smooth01((d - 0.4) / rim_w)
+			if g_rim > 0.0:
+				var ra := fbm(wx * 0.017, wz * 0.017, 2, seed + 57)
+				var rn := 1.0 - absf(2.0 * ra - 1.0)
+				var crest := 0.75 + 0.40 * rn * rn
+				var rscale := 1.0
+				if mouth_s > 0.0 and wz > 2.0:
+					var m := 0.0
+					for gx in gates:
+						var u := (wx - float(gx)) / 5.0
+						m = maxf(m, exp(-u * u))
+					rscale = 1.0 - mouth_s * m * smooth01((wz - 2.0) / 7.0) # 南面出怪口豁口
+				var nb := 1.0 + (rim_north - 1.0) * smooth01((-wz - 4.0) / 14.0) # 北面加高（峡谷背景屏风）
+				var rise := rim_h * g_rim * crest * rscale * nb
+				var tq: float = floor(rise / 4.5) * 4.5
+				var tf: float = (rise - tq) / 4.5
+				h += tq + 4.5 * smooth01(tf * 1.6 - 0.3)
+			var g_mesa := smooth01((d - mesa_start) / mesa_w)
+			if g_mesa > 0.0:
+				var mv := fbm(wx * mesa_freq, wz * mesa_freq, 3, seed + 811)
+				var qv := smooth01((floor(mv * 5.0) * 0.2 - 0.28) / 0.30) # 平顶分层台地
+				h += mesa_h * g_mesa * qv * (0.70 + 0.60 * fbm(wx * 0.031, wz * 0.031, 2, seed + 812))
+			var g_sky := smooth01((d - sky_start) / sky_w)
+			if g_sky > 0.0:
+				h += sky_h * g_sky * (0.45 + 0.55 * fbm(wx * 0.011, wz * 0.011, 3, seed + 913))
 		# 战场地标（位置可由 anchor 对齐当局 Scenario；幅度/形状由蓝图定）
 		for lm in landmarks:
 			if lm["kind"] == "peak":
@@ -222,24 +259,34 @@ const PRESETS := {
 		],
 		"world": {
 			"slope_w": 16.0,
-			"depth": 2.2,
-			"far_drop": 0.02,
-			"und_amp": 1.6,
-			"und_freq": 0.045,
+			"rim_h": 18.0,
+			"rim_w": 3.0,
+			"rim_north": 1.7,
+			"mouth_s": 0.85,
+			"gate_x": [-10.5, 13.5, -25.5],
+			"mesa_h": 16.0,
+			"mesa_freq": 0.042,
+			"mesa_start": 16.0,
+			"mesa_w": 22.0,
+			"sky_h": 52.0,
+			"sky_start": 56.0,
+			"sky_w": 90.0,
+			"und_amp": 2.2,
+			"und_freq": 0.050,
 			"und_oct": 3,
 			"erode_iter": 6,
 		},
-		"micro": { "freq": 0.17, "amp_field": 0.52, "amp_edge": 0.20, "offset": [-3.7, 9.1], "warp": 0.38, "oct": 3, "terrace": 0.30 },
+		"micro": { "freq": 0.17, "amp_field": 1.05, "amp_edge": 0.20, "offset": [-3.7, 9.1], "warp": 0.38, "oct": 3, "terrace": 0.30 },
 		"palette": {
-			"ground_lo": [0.330, 0.240, 0.150],
-			"ground": [0.500, 0.360, 0.210],
-			"ground_hi": [0.620, 0.470, 0.300],
-			"rock": [0.430, 0.350, 0.250],
+			"ground_lo": [0.285, 0.190, 0.115],
+			"ground": [0.470, 0.330, 0.185],
+			"ground_hi": [0.700, 0.545, 0.360],
+			"rock": [0.360, 0.290, 0.215],
 			"fog": [0.600, 0.470, 0.340],
 			"band_lo_at": -0.25,
 			"band_hi_at": 0.45,
-			"fog_start": 48.0,
-			"fog_end": 165.0,
+			"fog_start": 58.0,
+			"fog_end": 235.0,
 		},
 	},
 	"shale": {
@@ -252,14 +299,24 @@ const PRESETS := {
 		],
 		"world": {
 			"slope_w": 20.0,
-			"depth": 1.6,
-			"far_drop": 0.018,
-			"und_amp": 2.0,
-			"und_freq": 0.035,
+			"rim_h": 12.5,
+			"rim_w": 4.5,
+			"rim_north": 1.5,
+			"mouth_s": 0.80,
+			"gate_x": [-10.5, 13.5, -25.5],
+			"mesa_h": 12.0,
+			"mesa_freq": 0.048,
+			"mesa_start": 20.0,
+			"mesa_w": 26.0,
+			"sky_h": 36.0,
+			"sky_start": 70.0,
+			"sky_w": 100.0,
+			"und_amp": 2.4,
+			"und_freq": 0.042,
 			"und_oct": 3,
 			"erode_iter": 5,
 		},
-		"micro": { "freq": 0.13, "amp_field": 0.35, "amp_edge": 0.12, "offset": [8.8, -2.6], "warp": 0.50, "oct": 3, "terrace": 0.22 },
+		"micro": { "freq": 0.13, "amp_field": 0.80, "amp_edge": 0.12, "offset": [8.8, -2.6], "warp": 0.50, "oct": 3, "terrace": 0.22 },
 		"palette": {
 			"ground_lo": [0.240, 0.260, 0.300],
 			"ground": [0.380, 0.420, 0.470],
@@ -268,8 +325,8 @@ const PRESETS := {
 			"fog": [0.420, 0.500, 0.620],
 			"band_lo_at": -0.20,
 			"band_hi_at": 0.40,
-			"fog_start": 45.0,
-			"fog_end": 150.0,
+			"fog_start": 55.0,
+			"fog_end": 215.0,
 		},
 	},
 	"ember": {
@@ -282,14 +339,24 @@ const PRESETS := {
 		],
 		"world": {
 			"slope_w": 13.0,
-			"depth": 2.6,
-			"far_drop": 0.025,
-			"und_amp": 1.3,
-			"und_freq": 0.055,
+			"rim_h": 21.0,
+			"rim_w": 2.5,
+			"rim_north": 1.8,
+			"mouth_s": 0.85,
+			"gate_x": [-10.5, 13.5, -25.5],
+			"mesa_h": 18.0,
+			"mesa_freq": 0.038,
+			"mesa_start": 14.0,
+			"mesa_w": 18.0,
+			"sky_h": 58.0,
+			"sky_start": 48.0,
+			"sky_w": 84.0,
+			"und_amp": 1.6,
+			"und_freq": 0.060,
 			"und_oct": 4,
 			"erode_iter": 8,
 		},
-		"micro": { "freq": 0.21, "amp_field": 0.5, "amp_edge": 0.2, "offset": [2.4, 11.7], "warp": 0.30, "oct": 3, "terrace": 0.40 },
+		"micro": { "freq": 0.21, "amp_field": 1.00, "amp_edge": 0.2, "offset": [2.4, 11.7], "warp": 0.30, "oct": 3, "terrace": 0.40 },
 		"palette": {
 			"ground_lo": [0.330, 0.200, 0.130],
 			"ground": [0.500, 0.300, 0.180],
@@ -298,8 +365,8 @@ const PRESETS := {
 			"fog": [0.620, 0.420, 0.280],
 			"band_lo_at": -0.30,
 			"band_hi_at": 0.50,
-			"fog_start": 55.0,
-			"fog_end": 175.0,
+			"fog_start": 60.0,
+			"fog_end": 240.0,
 		},
 	},
 }
