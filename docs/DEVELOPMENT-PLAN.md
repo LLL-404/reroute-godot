@@ -1685,6 +1685,12 @@ Windows = `export/reroute-windows.zip`（146.4MB，根目录 `game.exe`［已签
 上传操作口径（TapPlay / 通用隐私协议 / 投稿弹窗占位 / 防沉迷「未接入」/ 双端同时勾选）
 已收录于 §0.3 B 清单，照单执行。
 
+**上传前终核（2026-10-16）**：四件（APK/zip/exe/pck）SHA-256 与本段登记一致、apksigner =
+CN=Reroute、exe 签名 Valid、pck 自证 22/0 PASS，证据 `logs/gates-20261016-d2/final-precheck.out`；
+发布快照 = 标签 `d2-1-release-20261016` + git bundle `../reroute-godot-snapshot-20261016.bundle`
+（99.5MB，`git bundle verify` = okay）。同批：Maker 工程（reroute-maker）素材批入库推送 +
+远端构建成功（`f0936e2`，1m20s，日志 watcher 已开）。
+
 **遗留**：Android 装机验收（待设备；Windows 已签名双击复测已通过 = 能启动）。
 
 ---
