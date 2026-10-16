@@ -892,7 +892,7 @@ HUD 全部控件、标题/暂停/结算三屏、三件套音频、真实 glb 资
 
 | 任务 | 范围 | 验收 |
 |---|---|---|
-| D2-1 双端包 | PC exe + Android APK 各出一份 | 两端各自能启动完成一局。🔶 **2026-10-16 包已双端出齐**：Windows `export/game.exe`（已自签 `CN=Reroute`，本机信任链 Valid；“无法验证发布者”材料补齐）+ `game.pck`；`--main-pack` 自证 22/0 PASS；**Android 正式 `export/reroute-release.apk`（282.9MB，keystore alias `reroute`，apksigner = CN=Reroute）**。直跑被拦根因 = 本机 **SAC=1** 拦未签名 exe（签名后复测待用户）。**双端目视验收待用户**（Windows 双击复测 / Android 装机）。签名材料在仓外 `D:\G\game\keystores\`（勿入库）。详见 §11.12；证据 `logs/gates-20261016-d2/` |
+| D2-1 双端包 | PC exe + Android APK 各出一份 | 两端各自能启动完成一局。🔶 **2026-10-16 包已双端出齐**：Windows `export/game.exe`（已自签 `CN=Reroute`，本机信任链 Valid；“无法验证发布者”材料补齐）+ `game.pck`；`--main-pack` 自证 22/0 PASS；**Android 正式 `export/reroute-release.apk`（282.9MB，keystore alias `reroute`，apksigner = CN=Reroute）**。直跑被拦根因 = 本机 **SAC=1** 拦未签名 exe（**自签注册信任后双击复测已通过：能启动**）。**Windows 目视验收通过；Android 装机待设备。**签名材料在仓外 `D:\G\game\keystores\`（勿入库）。详见 §11.12；证据 `logs/gates-20261016-d2/` |
 | D2-2 包体裁剪 | ✅ 已完成（见 §7.12）：`export_presets.cfg` 设 `exclude_filter="tests/*,shots/*,tools/*"` | 包体下降，功能不受影响 |
 | D2-3 真人试玩 | **至少 2 人各玩 2 局**，记录：卡在哪、什么时候看不懂、哪一步最无聊、第一局结局 | 书面记录（这决定 D3 的全部内容） |
 | D2-4 引导复核 | 确认左下提示徽章与标题屏「玩法说明」是否足够；试玩者是否 5 秒内看懂「放墙改道」 | 试玩记录里的原话 |
@@ -1595,7 +1595,7 @@ MCP 侧需以 `target_dir` 显式指定项目（无目录参数时 `maker_status
 check_shots 25/0；`nc-d17.*` 负对照与 `audio-post-nc.*` 恢复件齐）。素材登记：本仓 `CREDITS.md`
 §3.2/§3.5 + §7.4b 清单；对外件 `cashline/docs/AI-ASSETS.md` 待同批补行。
 
-**遗留**：双端 release 包（D2-1）目视验收（图标并入；D2-5 已收盘，见 §11.11）——打包段进展见 §11.12（Windows 已签名出包 + Android 正式包与提审件封装完毕；双端目视验收待用户）。
+**遗留**：双端 release 包（D2-1）目视验收（图标并入；D2-5 已收盘，见 §11.11）——打包段进展见 §11.12（Windows 已签名出包 + Android 正式包与提审件封装完毕；**Windows 目视验收已通过（双击能启动）、Android 装机待设备**）。
 
 ### 11.11 详情页素材（D2-5：AI 五图 + 实机图选定）(2026-10-16)
 
@@ -1668,7 +1668,7 @@ Windows = `export/reroute-windows.zip`（146.4MB，根目录 `game.exe`［已签
 上传操作口径（TapPlay / 通用隐私协议 / 投稿弹窗占位 / 防沉迷「未接入」/ 双端同时勾选）
 已收录于 §0.3 B 清单，照单执行。
 
-**遗留**：双端目视验收（Windows 双击复测［已签名］、Android 装机；均依赖用户侧）。
+**遗留**：Android 装机验收（待设备；Windows 已签名双击复测已通过 = 能启动）。
 
 ---
 

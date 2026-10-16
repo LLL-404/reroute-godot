@@ -175,7 +175,7 @@ python tools/check_shots.py    # 截图像素校验
   `--main-pack export/game.pck --selfcheck`（22/0 PASS）；Android 正式包
   `export/reroute-release.apk`（keystore alias `reroute`，`GODOT_ANDROID_KEYSTORE_RELEASE_*`
   环境变量注入，apksigner = CN=Reroute；密码台账 `D:\G\game\keystores\signing.env` 勿入库）；
-  单次导出 ~10min（勿短超时）。双端目视验收待用户。`logs/` 有 `.gdignore`。
+  单次导出 ~10min（勿短超时）。Windows 双击复测已通过（能启动）；Android 装机待设备。`logs/` 有 `.gdignore`。
   决策记录 = 方案 §11.12。
 - 历史审计报告（`docs/*-20261015.md`）按**快照原则保持原样**，不要顺着结构整理去改它们。
 
