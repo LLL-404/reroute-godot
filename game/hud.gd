@@ -7,6 +7,11 @@ extends Control
 
 var S := 1.0
 
+# 安全区（Android 刘海/挖孔/手势条）：逻辑像素内边距 (左, 上, 右, 下)；桌面恒 0。
+# _safe_override 为探针注入口（Vector4(-1,-1,-1,-1) = 恢复平台自动）。
+var safe := Vector4.ZERO
+var _safe_override := Vector4(-1.0, -1.0, -1.0, -1.0)
+
 # 几何常量（与母版一致）：hud 布局与 main 点击排除共用这一份
 const BTN_H := 42.0
 const BTN_GAP := 7.0
@@ -300,6 +305,33 @@ func _build_floats() -> void:
 
 # ---------------- 布局（绝对像素，S 缩放） ----------------
 
+## 探针入口：注入安全区内边距（逻辑像素）；传 Vector4(-1,-1,-1,-1) 恢复平台自动。
+func set_safe_insets_override(v: Vector4) -> void:
+	_safe_override = v
+	_layout()
+
+
+## 安全区内边距（逻辑像素，canvas_items 拉伸下的可视 rect 坐标系）。
+## Android 取显示器安全区（刘海/挖孔/手势条）换算；其余平台恒 0，不打扰桌面。
+func _compute_safe() -> Vector4:
+	if _safe_override.x >= 0.0:
+		return _safe_override
+	if OS.get_name() != "Android":
+		return Vector4.ZERO
+	var scr := DisplayServer.screen_get_size()
+	var vp := get_viewport().get_visible_rect().size
+	var wpx := get_window().size.x
+	if scr.x <= 0 or scr.y <= 0 or vp.x <= 0.0 or wpx <= 0:
+		return Vector4.ZERO
+	var sa := DisplayServer.get_display_safe_area()
+	var sc := float(wpx) / vp.x # 物理→逻辑（等比例拉伸）
+	var l := maxf(float(sa.position.x), 0.0) / sc
+	var t := maxf(float(sa.position.y), 0.0) / sc
+	var r := maxf(float(scr.x - sa.position.x - sa.size.x), 0.0) / sc
+	var b := maxf(float(scr.y - sa.position.y - sa.size.y), 0.0) / sc
+	return Vector4(l, t, r, b)
+
+
 ## 重排所有控件（窗口尺寸变化时调用；绝对像素布局）。S 在此重算，
 ## 保证布局与 hit_regions() 始终跟随当前视口（build() 里的初值只服务构造）。
 func _layout() -> void:
@@ -307,12 +339,17 @@ func _layout() -> void:
 		return
 	var win := get_viewport().get_visible_rect().size
 	S = clampf(win.y / 816.0, 1.0, 1.6)
+	safe = _compute_safe()
+	var x0 := safe.x
+	var x1 := win.x - safe.z
+	var y0 := safe.y
+	var y1 := win.y - safe.w
 	# 顶栏
-	top_bar.position = Vector2.ZERO
-	top_bar.size = Vector2(win.x, TOP_H * S)
+	top_bar.position = Vector2(x0, y0)
+	top_bar.size = Vector2(x1 - x0, TOP_H * S)
 	var row_h := TOP_H * S
 	var gap := 18.0 * S
-	var x := 20.0 * S
+	var x := x0 + 20.0 * S
 	var lbl_core: Label = top_bar.get_node("lbl_core")
 	var lbl_wave: Label = top_bar.get_node("lbl_wave")
 	var divider: ColorRect = top_bar.get_node("divider")
@@ -322,7 +359,7 @@ func _layout() -> void:
 		ctl.position = Vector2(x, (row_h - ctl.size.y) / 2.0)
 		x += ctl.size.x + gap
 	# 供给 + 两钮右对齐（右起：暂停钮、热层钮、供给）
-	var right := win.x - 20.0 * S
+	var right := x1 - 20.0 * S
 	pause_btn.reset_size()
 	pause_btn.position = Vector2(right - pause_btn.size.x, (row_h - pause_btn.size.y) / 2.0)
 	right -= pause_btn.size.x + 8.0 * S
@@ -334,41 +371,46 @@ func _layout() -> void:
 
 	# 提示徽章（左上，top 64*S 锚定）
 	hint_panel.reset_size()
-	hint_panel.position = Vector2(16.0 * S, 64.0 * S)
+	hint_panel.position = Vector2(x0 + 16.0 * S, y0 + 64.0 * S)
 
 	# 模式列（右下角，从下往上排）
 	var col_w := COL_W * S
 	var btn_h := BTN_H * S
 	var btn_gap := BTN_GAP * S
-	var bx := win.x - (EDGE + COL_W) * S
+	var bx := x1 - (EDGE + COL_W) * S
 	for i in MODE_LABELS.size():
 		var key: String = MODE_LABELS[i]["key"]
 		var btn: Button = mode_buttons[key]
-		var by := win.y - (EDGE + CORNER_N * (BTN_H + BTN_GAP) - BTN_GAP) * S + i * (btn_h + btn_gap)
+		var by := y1 - (EDGE + CORNER_N * (BTN_H + BTN_GAP) - BTN_GAP) * S + i * (btn_h + btn_gap)
 		btn.position = Vector2(bx, by)
 
 	# 技能钮（模式列上方：底边距底 = EDGE + CORNER_N*(BTN_H+BTN_GAP)，按钮高 42）
-	var skill_y := win.y - (EDGE + CORNER_N * (BTN_H + BTN_GAP) + BTN_H) * S
+	var skill_y := y1 - (EDGE + CORNER_N * (BTN_H + BTN_GAP) + BTN_H) * S
 	skill_btn.position = Vector2(bx, skill_y)
 
 	# 横幅（顶部居中）
 	banner_card.reset_size()
-	var by2 := 110.0 * S
-	banner_card.position = Vector2((win.x - banner_card.size.x) / 2.0, by2)
+	var by2 := y0 + 110.0 * S
+	banner_card.position = Vector2((x0 + x1 - banner_card.size.x) / 2.0, by2)
 
 
 # ---------------- 命中区（main 点击排除的唯一来源） ----------------
 
 func hit_regions() -> Array:
 	var win := get_viewport().get_visible_rect().size
+	safe = _compute_safe()
+	var x0 := safe.x
+	var x1 := win.x - safe.z
+	var y0 := safe.y
+	var y1 := win.y - safe.w
 	var regions: Array = [
-		Rect2(0, 0, win.x, floorf(TOP_STRIP_H * S)),
-		Rect2(win.x - floorf(CORNER_W * S), win.y - floorf(CORNER_H * S), floorf(CORNER_W * S), floorf(CORNER_H * S)),
+		Rect2(x0, y0, x1 - x0, floorf(TOP_STRIP_H * S)),
+		Rect2(x1 - floorf(CORNER_W * S), y1 - floorf(CORNER_H * S), floorf(CORNER_W * S), floorf(CORNER_H * S)),
 	]
 	# 提示徽章宽度按字数估算（CJK 全角 ≈ 字号），略宽无害
 	var chars := HINT_TEXT.length()
 	var hw := floorf((16.0 + 8.0 + chars * 9.0 + 8.0) * S)
-	regions.append(Rect2(0, floorf(64.0 * S), hw, floorf(36.0 * S)))
+	regions.append(Rect2(x0, y0 + floorf(64.0 * S), hw, floorf(36.0 * S)))
 	return regions
 
 

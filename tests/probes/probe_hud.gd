@@ -209,6 +209,24 @@ func _initialize() -> void:
 	cmp_approx(hud.S, s0, "还原后 S")
 	cmp_rect(hud.hit_regions()[0], Rect2(0, 0, 1280, 64), "还原后命中区·顶栏条")
 
+	# ---- 13. 安全区（D1-5：注入刘海/手势条内边距，HUD 与命中区同步内缩）----
+	var s_ins := Vector4(48.0, 24.0, 60.0, 36.0)
+	hud.set_safe_insets_override(s_ins)
+	await process_frame
+	var sregions: Array = hud.hit_regions()
+	cmp_rect(sregions[0], Rect2(48, 24, 1280 - 48 - 60, 64), "安全区·顶栏条内缩")
+	var cw4 := floorf(hud.CORNER_W * hud.S)
+	var ch4 := floorf(hud.CORNER_H * hud.S)
+	cmp_rect(sregions[1], Rect2(1280 - 60 - cw4, 720 - 36 - ch4, cw4, ch4), "安全区·右下钮簇内缩")
+	check(hud.top_bar.position.is_equal_approx(Vector2(48, 24)), "安全区·顶栏起点内缩")
+	check(absf(hud.top_bar.size.x - (1280.0 - 48.0 - 60.0)) < 0.5, "安全区·顶栏宽度内缩")
+	var mbtn: Button = hud.mode_buttons["wall"]
+	var want_bx: float = 1280.0 - 60.0 - (hud.EDGE + hud.COL_W) * hud.S
+	check(absf(mbtn.position.x - want_bx) < 0.5, "安全区·模式列右缘内缩")
+	hud.set_safe_insets_override(Vector4(-1.0, -1.0, -1.0, -1.0))
+	await process_frame
+	cmp_rect(hud.hit_regions()[0], Rect2(0, 0, 1280, 64), "安全区复位·顶栏条")
+
 	# ---- 汇总 ----
 	finish("HUD", 30)
 

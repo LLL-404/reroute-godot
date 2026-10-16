@@ -4,6 +4,7 @@
 
 阈值取自 2026-10-13 实测渲染值（留 2-5 倍余量，防平台微差；真回归=关键色归零必触发）：
   warm=850724  teal=124  red=163694  green=575  diff(game,heat)=0.309  diff(game,ghost)=0.0009
+D1-5 追加：game_20x9.png（1600x720，20:9）/ game_narrow.png（960x720，4:3）尺寸+关键色。
 跑法：python tools/check_shots.py   （cwd=reroute-godot）
 判定：exit 0 + stdout 含 [SHOTS] PASS。
 """
@@ -68,6 +69,8 @@ green = lambda r, g, b: g > r + 40 and g > b + 20 and g > 120   # 幽灵绿板
 im_game = load('game.png')
 im_heat = load('heat.png')
 im_ghost = load('ghost.png')
+im_w9 = load('game_20x9.png')
+im_narrow = load('game_narrow.png')
 
 for name, im in (('game.png', im_game), ('heat.png', im_heat), ('ghost.png', im_ghost)):
     chk(im is not None, name + ' 存在')
@@ -93,6 +96,20 @@ if im_ghost is not None:
     n_green = scan(im_ghost, green)
     chk(n_green > 200, 'ghost 幽灵绿不足 %d（阈值 200）' % n_green)
     print('[SHOTS] ghost green=%d' % n_green)
+
+# D1-5：宽屏 20:9 与窄屏 4:3（阈值保守，目视件为主）
+for name, im, dims in (('game_20x9.png', im_w9, (1600, 720)), ('game_narrow.png', im_narrow, (960, 720))):
+    chk(im is not None, name + ' 存在')
+    if im is None:
+        continue
+    chk(im.size == dims, '%s 尺寸 %s != %s' % (name, im.size, dims))
+    colors2 = im.quantize(colors=256).getcolors()
+    chk(colors2 is not None and len(colors2) > 60, '%s 唯一色数过少 %d' % (name, len(colors2 or [])))
+    n_warm2 = scan(im, warm)
+    n_teal2 = scan(im, teal)
+    chk(n_warm2 > 250000, '%s 暖色地形不足 %d（阈值 250000）' % (name, n_warm2))
+    chk(n_teal2 > 30, '%s 核心青玉不足 %d（阈值 30）' % (name, n_teal2))
+    print('[SHOTS] %s warm=%d teal=%d' % (name, n_warm2, n_teal2))
 
 if im_game is not None and im_heat is not None:
     d1 = diff_ratio(im_game, im_heat)

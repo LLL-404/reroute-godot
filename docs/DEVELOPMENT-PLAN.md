@@ -811,8 +811,8 @@ HUD 全部控件、标题/暂停/结算三屏、三件套音频、真实 glb 资
 |---|---|
 | D0-1 赛事确认 | 已由本方案 §0.1 完成（官方帖查证）。仍需从队长群确认**认证是否已通过**、**报名厂商名是否已定** |
 | D0-2 开发者认证 | 个人主体、实名与身份证一致、厂商名不重名、地址到门牌号 |
-| D0-3 Android 环境清点 | Godot Android 导出模板（`4.7.2.stable.mono`）、Android SDK（platform-tools + build-tools）、JDK 17、adb 是否就位；缺什么装什么 |
-| D0-4 keystore | 生成 debug keystore（本轮用 debug 签名即可） |
+| D0-3 Android 环境清点 | Godot Android 导出模板（`4.7.2.stable.mono`）、Android SDK（platform-tools + build-tools）、JDK 17、adb 是否就位；缺什么装什么。✅ **2026-10-16 补做**：cmdline-tools + licenses + platform-tools + build-tools 34.0.0/35.0.0 + platforms 34/35 装入 `%LOCALAPPDATA%/Android/Sdk`；JDK 21（Adoptium jdk-21.0.12.101）配入 editor settings（实测可导出，17 亦可） |
+| D0-4 keystore | 生成 debug keystore（本轮用 debug 签名即可）。✅ **2026-10-16 补做**：`%APPDATA%/Godot/keystores/debug.keystore`（androiddebugkey），配入 editor settings（预设不内嵌路径，走全局回退） |
 | D0-5 **开发者日志 ①** | ✅ **成稿已就绪**：`docs/devlogs/01-开篇-放墙改道.md`（三段结构 + 配图 + 标签齐备，可直接发布）。发布位置：自己的动态 / 聚光灯论坛（`https://www.taptap.cn/app/710826/topic`）；游戏页面建好后可编辑挪回自己游戏论坛 |
 | D0-6 素材使用声明初稿 | 按官方飞书模板重排 `cashline/docs/AI-ASSETS.md`（见 §0.5 ②）。**先修 §五 的引擎错误：UrhoX → Godot 4.7.2**；数字按 Godot 工程重新点数 |
 
@@ -826,13 +826,13 @@ HUD 全部控件、标题/暂停/结算三屏、三件套音频、真实 glb 资
 
 | 任务 | 范围 | 验收 |
 |---|---|---|
-| D1-1 Android 导出预设 | `export_presets.cfg` 增加 Android 预设（arm64-v8a 必选，x86_64 供模拟器）；**先出空场景包**验证管线，再出全量包 | APK 生成成功，能装能启动 |
-| D1-2 触屏输入 | `main._unhandled_input` 增加 `InputEventScreenTouch` / `InputEventScreenDrag` 分支，映射到现有 `pointer_down` / `pointer_up` / `mouse_pos` 更新。**复用现有逻辑，不新写一套** | 新增 `probe_touch.gd`：注入触摸事件 → 世界状态变化与鼠标路径逐项一致 |
-| D1-3 HUD 触屏可点 | 确认 HUD 的 Control 按钮在触屏下可点；确认 `_unhandled_input` 不会被 UI 吞掉导致战场点击失效 | 真机/模拟器手动确认全部 7 个模式钮 + 技能 + 暂停 + 热层可点 |
-| D1-4 触屏拖线 | 拖拽放墙/塔在触屏下可用（按下 → 拖动 → 抬起） | `probe_touch` 覆盖拖线路径 |
-| D1-5 DPI 与安全区 | 按 §6.5 的分辨率策略处理 Android 的 DPR 与刘海/手势区；HUD `S` 缩放需在窄屏下不越界 | 至少在 1 个 16:9 与 1 个 20:9 分辨率下目视截图 |
-| D1-6 触屏拖线 | 拖拽放墙/塔在触屏下可用（按下 → 拖动 → 抬起） | `probe_touch` 覆盖拖线路径 |
-| D1-7 **制造积分消耗** | 按 §7.4b 清单生成刚需素材（**图标 + 音效**），产出落 `.maker/assets/` 后搬入 `assets/` | 图标已接入导出预设；音效已接入 `view.gd` |
+| D1-1 Android 导出预设 | `export_presets.cfg` 增加 Android 预设（arm64-v8a 必选，x86_64 供模拟器）；**先出空场景包**验证管线，再出全量包 | APK 生成成功，能装能启动。✅ **2026-10-16**：debug 测试包导出成功（278MB，apksigner verify 通过）；装机/启动待真机。附带修复：`RerouteGodot.csproj` net8.0→**net9.0**（Android 模板硬性要求）、ETC2/ASTC 开启 |
+| D1-2 触屏输入 | `main._unhandled_input` 增加 `InputEventScreenTouch` / `InputEventScreenDrag` 分支，映射到现有 `pointer_down` / `pointer_up` / `mouse_pos` 更新。**复用现有逻辑，不新写一套** | 新增 `probe_touch.gd`：注入触摸事件 → 世界状态变化与鼠标路径逐项一致。✅ **2026-10-16（实现路径微调，见 §11.9）**：实证 `push_input` 旁路引擎换算、`parse_input_event` 走真实链路 → **不写分支**，沿用引擎 `emulate_mouse_from_touch`；相位 6 触屏 vs 鼠标拖线世界逐字节一致（39 断言） |
+| D1-3 HUD 触屏可点 | 确认 HUD 的 Control 按钮在触屏下可点；确认 `_unhandled_input` 不会被 UI 吞掉导致战场点击失效 | 真机/模拟器手动确认全部 7 个模式钮 + 技能 + 暂停 + 热层可点。✅ 断言面已由 `probe_touch` 覆盖（22 钮触达尺寸矩阵 ≥36px + 触屏点击驱动全流程）；真机手动确认并入 D2 试玩 |
+| D1-4 触屏拖线 | 拖拽放墙/塔在触屏下可用（按下 → 拖动 → 抬起） | `probe_touch` 覆盖拖线路径。✅ **2026-10-16**：相位 6 全链路对拍（4 格墙/-40 供给/drag_start 清空/同 run 逐字节一致） |
+| D1-5 DPI 与安全区 | 按 §6.5 的分辨率策略处理 Android 的 DPR 与刘海/手势区；HUD `S` 缩放需在窄屏下不越界 | 至少在 1 个 16:9 与 1 个 20:9 分辨率下目视截图。✅ **2026-10-16**：`stretch=canvas_items+expand` + `hud.safe` 安全区（探针注入制）；`shots/game_20x9.png`（20:9）与 `game_narrow.png`（窄屏 S=1.176）目视过；probe_hud 63→69，负对照 ×2（见 §11.9） |
+| D1-6 触屏拖线 | 拖拽放墙/塔在触屏下可用（按下 → 拖动 → 抬起） | `probe_touch` 覆盖拖线路径。✅ 同 D1-4（原文两行重复，一并收口） |
+| D1-7 **制造积分消耗** | 按 §7.4b 清单生成刚需素材（**图标 + 音效**），产出落 `.maker/assets/` 后搬入 `assets/` | 图标已接入导出预设；音效已接入 `view.gd`。⏳ **阻塞**：Maker 项目未绑定（需 `taptap-maker init` 选「改道」App）——待用户；素材清单见 §7.4b |
 | D1-8 **日志 ②** | 建议：Android 移植 / 触屏适配的踩坑记录 | 已发（带标签 + 配图） |
 
 **出口**：Android 全量包可启动、可操作、可完成一局。**若 D1 结束仍跑不通 → 触发 §7.11 预案。**
@@ -1513,6 +1513,43 @@ rng 序列/next-id/hgt 保真/篡改·版本·截断拒载/inspect 三态）；�
 **证据**：`logs/gates-20261016-ui/`（全 21 闸绿：19 探针 + run_tests + check_shots，
 stderr 零 ERROR；`shots/title.png` 改版 + 新增 `shots/slots.png`/`shots/settings.png`
 目视确认）；决策补充 = `save.gd` 头注释（补场同步修复）。
+
+### 11.9 Android 导出管线 / 触屏输入 / DPI 与安全区（2026-10-16，补做 D0/D1 遗留）
+
+**背景**：用户指出「之前的任务没有完成」→ 复核 D0–D7 倒排，确认 D0-3/4、D1-1/2/4/5/6/7
+未闭环，本轮清 D0/D1（D1-7 见下）。
+
+**Android 管线（D0-3/4、D1-1）**：SDK（cmdline-tools + licenses + platform-tools +
+build-tools 34/35 + platforms 34/35）与 JDK 21 就位；debug keystore 生成；`csproj` 改
+net9.0（Android 导出模板硬性要求）；`project.godot` 增 `handheld/orientation=4`
+（SensorLandscape；int 4 经实测为正确存储格式）+ `import_etc2_astc=true`；
+`export_presets.cfg` 新增 Android 预设（arm64-v8a + x86_64、包名 `com.reroute.game`、
+显示名「改道」、exclude 同 Windows）。导出成功：`--export-debug` → 测试 APK（278MB），
+`apksigner verify` 通过。已知无害输出：build-tools 兜底提示、`shutdown_adb_on_exit`、
+无图标警告（D1-7 补）。**真机装机待设备（`adb devices` 暂空）**。
+
+**触屏决策（D1-2 关键偏离说明）**：不按原文「在 `_unhandled_input` 加 ScreenTouch/ScreenDrag
+分支」实现，理由 = 双触发（引擎 `emulate_mouse_from_touch` 默认真，触摸已被换算成鼠标事件
+喂进现有 pointer_down/up 路径；再写分支真机双重处理）。实证链：① `get_root().push_input()`
+**旁路** Input 单例换算——按钮可点是 GUI 原生吃触摸，但世界区拖拽到不了 `_unhandled_input`
+（开发期负对照 nc-pushinput：bad=4 FAIL）；② `Input.parse_input_event()` = 真实设备链路
+（OS → Input 换算 → GUI/unhandled）→ 触屏拖线通过。`probe_touch` 相位 6：同 run 内
+触屏拖线 vs 鼠标拖线，`canonical_bytes()` 逐字节一致 + 4 格墙 + 扣费 40 + drag_start 清空
+（29→39 断言）；正式负对照 nc-touch（关 `emulate_mouse_from_touch`）bad=4 FAIL。
+
+**DPI 与安全区（D1-5）**：`stretch/mode=canvas_items` + `aspect=expand` 落地 §6.5 策略——
+逻辑视口恒「高 720 / 宽按比例」，DPR 由拉伸换算负责；HUD 与相机 `S = clampf(逻辑高/816,
+1.0, 1.6)` 语义由物理像素转为**逻辑像素**（1280×720 下二者等价 → 既有断言零改动，实测
+probe_input/sync/hud 缩放段全绿）。安全区新增 `hud.safe: Vector4`（左/上/右/下，逻辑像素）：
+Android 由 `DisplayServer.get_display_safe_area()` 物理→逻辑换算，桌面恒 0；`_layout()` 与
+`hit_regions()` 同步内缩；探针注入口 `set_safe_insets_override()`。probe_hud 新增 6 断言
+（63→69），负对照 nc-safe（`_compute_safe` 恒零）bad=5 FAIL。目视件：`shots/game_20x9.png`
+（1600×720＝20:9）、`game_narrow.png`（960×720 窗口＝逻辑 1280×960，S=1.176 窄屏放大），
+HUD 不越界/无遮挡；`check_shots.py` 增两张尺寸+关键色校验（25 项）。
+
+**证据**：`logs/gates-20261016-d1/`（21 闸绿：run_tests 100/0 + 7 headless 探针 +
+12 窗口探针 + check_shots 25/0；负对照 ×3：nc-safe bad=5 / nc-touch bad=4 /
+nc-pushinput bad=4）。
 
 ---
 

@@ -66,7 +66,22 @@ func _initialize() -> void:
 		await process_frame
 	_shot("res://shots/ghost.png")
 
-	finish("SHOTS", 3)
+	# ---- 宽屏 20:9 与窄屏 4:3（D1-5 目视件：canvas_items+expand 下取景与 HUD S）----
+	view.show_ghost([], false)
+	view.sync(world)
+	root.size = Vector2i(1600, 720)
+	for _i in 5:
+		await process_frame
+	_shot("res://shots/game_20x9.png")
+	root.size = Vector2i(960, 720)
+	for _i in 5:
+		await process_frame
+	_shot("res://shots/game_narrow.png")
+	root.size = Vector2i(1280, 720)
+	for _i in 3:
+		await process_frame
+
+	finish("SHOTS", 5)
 
 
 func _shot(path: String) -> void:

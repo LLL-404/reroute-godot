@@ -151,6 +151,14 @@ python tools/check_shots.py    # 截图像素校验
   `view_audio` 按 bus 路由。单测 88→100（`test_save.gd` 12 例）；新探针 `probe_save`(74)/
   `probe_touch`(29)；负对照 ×2（断存档接线→`[SAVE] FAIL`；关终审校验→单测 98/2 恰两条
   tamper 用例）；全 21 闸绿（证据 `logs/gates-20261016-ui/`）；决策记录 = 方案 §11.8。
+- Android 管线 + 触屏 + DPI/安全区（D0-3/4、D1-1/2/4/5/6，2026-10-16）**已完成（真机装机待设备）**：
+  SDK/JDK21/debug keystore 就位；`csproj` 改 net9.0；`project.godot` 增 `orientation=4` +
+  `stretch canvas_items+expand` + ETC2/ASTC；`export_presets.cfg` 新增 Android 预设（`com.reroute.game`）；
+  debug APK 导出成功且 `apksigner verify` 通过。触屏 = 引擎 `emulate_mouse_from_touch` 换算
+  （**不写 ScreenTouch 分支**：`push_input` 旁路换算 / `parse_input_event` 走全链路，实测对拍逐字节一致）；
+  `probe_touch` 29→39。安全区 = `hud.safe` + `set_safe_insets_override()`（probe_hud 63→69）；
+  `probe_shots` 增 20:9/窄屏目视件；`check_shots.py` 25 项。负对照 ×3（nc-safe bad=5 /
+  nc-touch bad=4 / nc-pushinput bad=4）。证据 `logs/gates-20261016-d1/`；决策记录 = 方案 §11.9。
 - 历史审计报告（`docs/*-20261015.md`）按**快照原则保持原样**，不要顺着结构整理去改它们。
 
 ---

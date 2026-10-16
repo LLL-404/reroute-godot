@@ -19,6 +19,9 @@ config/features=PackedStringArray("4.7")
 
 window/size/viewport_width=1280
 window/size/viewport_height=720
+window/handheld/orientation=4
+window/stretch/mode="canvas_items"
+window/stretch/aspect="expand"
 
 [dotnet]
 
@@ -27,3 +30,7 @@ project/assembly_name="RerouteGodot"
 [editor_plugins]
 
 enabled=PackedStringArray("res://addons/godot-mcp/plugin.cfg")
+
+[rendering]
+
+textures/vram_compression/import_etc2_astc=true
