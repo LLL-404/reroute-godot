@@ -305,7 +305,7 @@
 | G4 | 导出包可自证（资源齐备 + 核心正确 + 场景可建） | `--headless --selfcheck` exit 0 |
 | G5 | 所有量化闸带正/负对照，画面证据肉眼过一遍 | 见 §9 验收矩阵 |
 | **G6** | **Android + Windows 双端可出包、可玩** | 双端包各自自测通过 + 真机/模拟器目视；**同一游戏页面同时勾选两端** |
-| **G7** | **触屏可完成全部核心操作**（放墙拖线、点地指挥、模式切换、技能） | 新增 `probe_touch.gd`：触摸路径与鼠标路径状态一致 |
+| **G7** | **触屏可完成全部核心操作**（放墙拖线、点地指挥、模式切换、技能） | `probe_touch.gd`（已建）：触屏可点 + 按钮触达尺寸矩阵；全操作路径 D1 扩展 |
 | **G8** | **10-18 前完成双端提交**（官方建议点），10-21 硬截止 | 后台显示已提交/审核中；提审前 8 项检查清单全勾 |
 | **G9** | **满足全程参与奖条件** | 前置：讲解视频/实机视频/五图素材按时上传；三条并列：① demo 展示核心循环 ② **开发者日志 ≥5 篇**（非同日、每篇带图、带标签）③ **试玩次数 ≥50**（累计，窗口约 45 天） |
 
@@ -328,7 +328,7 @@
 
 | 项 | 证据 | 命令 |
 |---|---|---|
-| 单测 88 例全绿 | `[UNIT-DONE] passed=88 failed=0` + `[UNIT-ALL-GREEN]` | `<godot> --headless --path <P> -s res://tests/run_tests.gd` |
+| 单测 100 例全绿 | `[UNIT-DONE] passed=100 failed=0` + `[UNIT-ALL-GREEN]` | `<godot> --headless --path <P> -s res://tests/run_tests.gd` |
 | 黄金回放 16 指纹逐位一致 | `[GOLDEN] checks=2 bad=0` + `[GOLDEN] PASS` | `<godot> --headless --path <P> -s res://tests/probes/probe_golden.gd` |
 | 主场景构建对拍 | `[SCENE] checks=11 bad=0` + `[SCENE] PASS`（field=4096 / plain=39312 / solids·covers 对拍 + 单地面网格 56169 顶点 / 334176 索引 / 连续性抽检） | `<godot> --headless --path <P> -s res://tests/probes/probe_scene.gd` |
 | 视觉同步逐位对拍 1773 断言 | `[SYNC] checks=1773 bad=0 moved=42 match=100` | `<godot> --path <P> -s res://tests/probes/probe_sync.gd`（**窗口模式**） |
@@ -342,6 +342,8 @@
 | 模型动画齐备 | `blade/worker/king anims: Attack/Crawl/Death/Hurt/Idle` | `<godot> --path <P> -s res://tests/probes/probe_model.gd`（**窗口模式**） |
 | 朝向截面图 | `[ORIENT] cross shot saved` | `<godot> --path <P> -s res://tests/probes/probe_orient.gd`（**窗口模式**） |
 | 音频 38 断言 | `[AUDIO] checks=38 bad=0` | `<godot> --path <P> -s res://tests/probes/probe_audio.gd`（**窗口模式**） |
+| 存档/设置/退出/返回 74 断言 | `[SAVE] checks=74 bad=0` 含安卓返回路由 | `<godot> --path <P> -s res://tests/probes/probe_save.gd`（**窗口模式**） |
+| 触屏可点 29 断言 | `[TOUCH] checks=29 bad=0`（含 22 按钮触达尺寸矩阵） | `<godot> --path <P> -s res://tests/probes/probe_touch.gd`（**窗口模式**） |
 | 模拟模块 5 探针 | `[SIM/GRID/FLOW/SCENARIO/WORLD]` 各自 `checks=N bad=0` + `PASS`（5/22/52/34/20） | `tests/probes/probe_{sim,grid,flow,scenario,world}.gd`（headless） |
 | Windows 导出可用 | exit 0，`export/game.exe` 109 MB + `game.pck` 72 MB | `<godot> --headless --path <P> --export-release "Windows Desktop" <P>/export/game.exe` |
 | 导出包自证 | `[SELFCHECK] checks=22 bad=0` + `[SELFCHECK] PASS` + exit 0 | `./export/game.exe --headless --selfcheck` |
@@ -354,7 +356,8 @@
 
 **`--headless` 下 SceneTree 根视口只有 64×64**，凡依赖屏幕坐标或渲染纹理的探针
 （`probe_input` / `probe_sync` / `probe_hud` / `probe_ui_flow` / `probe_shots` /
-`probe_smoke` / `probe_audio` / `probe_asset` / `probe_model` / `probe_orient`）
+`probe_smoke` / `probe_audio` / `probe_asset` / `probe_model` / `probe_orient` /
+`probe_save` / `probe_touch`）
 在 headless 下必然失败或空转。**这些探针必须窗口模式运行**。
 
 本次会话中实测：
@@ -472,7 +475,8 @@ reroute-godot/
 │   ├─ sim.gd               数值表（建筑/敌军/英雄/常量）
 │   ├─ world.gd             世界状态机（唯一变更入口）
 │   ├─ verify.gd            验证闸宿主（黄金回放 + 不变式看门狗 + 冻结自证）
-│   └─ golden_baseline.gd   16 个黄金指纹（**冻结数据**；2026-10-16 世界 64² 重录）
+│   ├─ golden_baseline.gd   16 个黄金指纹（**冻结数据**；2026-10-16 世界 64² 重录）
+│   └─ save.gd              存档编解码（encode/decode/inspect；确定性补场同步）
 ├─ game/                    表现层（只读模拟状态）
 │   ├─ main.gd              主循环 / 输入分发 / 对局生命周期
 │   ├─ view.gd              3D 视图门面：_ready 组装 + 公共面转发（D5-1 拆分）
@@ -483,14 +487,16 @@ reroute-godot/
 │   ├─ models.gd            真实资产（glb）实例管理
 │   ├─ blueprint.gd         程序化地形蓝图（**视图种子与仿真隔离**）
 │   ├─ hud.gd               顶栏 / 模式列 / 技能 / 横幅 / 赏金浮字
-│   ├─ screens.gd           标题 / 暂停 / 结算三屏
+│   ├─ screens.gd           标题 / 暂停 / 结算 / 存档 / 设置五屏 + 确认弹窗
+│   ├─ save_io.gd           存档槽位 I/O（user://save_slotN.json ×3）
+│   ├─ user_settings.gd     设置持久化（user://settings.cfg：音乐 / 音效 / 全屏）
 │   └─ selfcheck.gd         导出包自证
-├─ tests/                   单测（88 例）+ 验收探针
+├─ tests/                   单测（100 例）+ 验收探针
 │   ├─ kit.gd               记录式断言框架
 │   ├─ run_tests.gd         入口
 │   ├─ stub_scenario.gd     小图夹具（行为断言用）
-│   ├─ probes/              17 个验收探针（见 §9）
-│   └─ test_{rng,canon,grid,flowfield,scenario,world}.gd
+│   ├─ probes/              19 个验收探针（见 §9）
+│   └─ test_{rng,canon,grid,flowfield,scenario,world,save}.gd
 ├─ assets/{audio,fonts,models,image}
 ├─ shots/                   验收截图产物
 └─ tools/                   Python 工具（check_shots / umd2_to_gltf / verify_glb）
@@ -679,6 +685,18 @@ hud.float_bounty(sx, sy, text) / hud.build_stats(world) -> String
 shell.init(callbacks, hud) / shell.open_title() / open_pause() / open_gameover(won, world)
 shell.close_all() / shell.resume() / shell.current_page() -> String
 shell.handle_key(keycode) -> bool  # 返回 true = 已消费
+shell.open_slots(mode, from)       # mode: "load"|"save"；from = 返回目标页
+shell.open_settings(from) / shell.open_quit_confirm()
+shell.confirm_open() -> bool / shell.close_confirm() / shell.open_confirm(text, fn)
+
+# save_io.gd（静态；SLOT_N=3，user://save_slotN.json）
+SaveIO.slot_path(slot) / SaveIO.list_slots() / SaveIO.slot_info(slot) -> {empty,ok,reason,meta}
+SaveIO.has_any() -> bool / SaveIO.slot_meta(slot)
+SaveIO.save_slot(slot, world, run_index) -> bool / SaveIO.load_slot(slot) -> World|null
+SaveIO.delete_slot(slot)
+
+# user_settings.gd（静态；user://settings.cfg）
+UserSettings.load_cfg() / save_cfg(cfg) / apply_all(cfg) / apply_audio / apply_video
 ```
 
 ### 6.4 对局生命周期（`main.gd` 状态机）
@@ -686,16 +704,26 @@ shell.handle_key(keycode) -> bool  # 返回 true = 已消费
 ```
 启动 → new_game() → open_title()（paused=true，静态战场被标题压住）
   「开始对局」→ start_match()  ：paused=false，HUD 显示，BGM 开，页栈空
+  「继续对局」→ open_slots("load", "title")（无档禁用）→ 选有效槽位 → load_game(slot)：
+      校验四重（格式/schema/剧本指纹/canonical checksum）→ 还原 world/sc →
+      Blueprint.pick(存档 run) 重放视觉 → 直接进对局；损坏/版本不符 = 拒载显示原因（可删）
+  「设置」→ open_settings(from)：音乐/音效滑杆 + 全屏开关，即改即落盘
   HUD「暂停」/ ESC → pause_game() → open_pause()
       「继续」/ ESC → resume_game() → 页栈空
+      「保存进度」→ open_slots("save", "pause") → 空槽直写 / 占用槽先确认覆盖
+      「设置」→ open_settings("pause")
       「重开本局」→ restart_game() = new_game() + start_match()
       「回标题」→ to_title() = new_game() + open_title()
   终局（WON/LOST）→ _process 检测到 → over_shown=true → open_gameover()
       「再来一局」→ restart_game()
       「回标题」→ to_title()
+  「退出游戏」（仅标题）→ open_quit_confirm() → 确定 → _quit_game()（停音频 + 0.5s 延时退）
+  Android 返回 → main._android_back_handle()（GO_BACK 通知 / ui_cancel 动作双入口，80ms 去抖）：
+      确认弹窗=取消；暂停↔继续；进行中=暂停；存档/设置=回上级；结算=回标题；标题=退出确认
 ```
 
-`current_page() == ""` 即「进行中」。ESC 在标题/结算屏**不响应**。
+`current_page() == ""` 即「进行中」。ESC 在标题/结算屏**不响应**（返回键在标题 = 退出确认，
+是移动端专属路由，不改桌面 ESC 语义）。
 
 ### 6.5 外部依赖
 
@@ -1024,7 +1052,7 @@ HUD 全部控件、标题/暂停/结算三屏、三件套音频、真实 glb 资
 
 | 闸 | 命令 | 通过判据 | 需窗口 |
 |---|---|---|---|
-| 单测 | `run_tests.gd` | `passed=88 failed=0` + `[UNIT-ALL-GREEN]` | 否 |
+| 单测 | `run_tests.gd` | `passed=100 failed=0` + `[UNIT-ALL-GREEN]` | 否 |
 | 黄金回放 | `tests/probes/probe_golden.gd` | `[GOLDEN] checks=2 bad=0` + `PASS`（16 指纹） | 否 |
 | 模拟模块 | `tests/probes/probe_{sim,grid,flow,scenario,world}.gd` | 各自 `[TAG] checks=N bad=0` + `PASS` | 否 |
 | 场景构建 | `tests/probes/probe_scene.gd` | `[SCENE] checks=11 bad=0` + `PASS`（field=4096 / plain=39312 / 单地面网格对拍） | 否 |
@@ -1032,12 +1060,13 @@ HUD 全部控件、标题/暂停/结算三屏、三件套音频、真实 glb 资
 | 输入闭环 | `tests/probes/probe_input.gd` | `[INPUT] PASS bad=0` | **是** |
 | HUD | `tests/probes/probe_hud.gd` | `[HUD] PASS bad=0` | **是** |
 | 三屏流转 | `tests/probes/probe_ui_flow.gd` | `[UI_FLOW] PASS bad=0` | **是** |
+| 存档与设置 | `tests/probes/probe_save.gd` | `[SAVE] checks=74 bad=0` + `PASS`（含安卓返回路由） | **是** |
 | 全局冒烟 | `tests/probes/probe_smoke.gd` | `[SMOKE] PASS` | **是** |
 | 资产/模型 | `tests/probes/probe_{asset,model,orient}.gd` | 各自 `[TAG] PASS`（model/orient 出图；checks=6/1） | **是** |
 | 音频 | `tests/probes/probe_audio.gd` | `[AUDIO] PASS bad=0` | **是** |
 | 截图像素 | `tests/probes/probe_shots.gd` + `python tools/check_shots.py` | 探针 `[SHOTS] checks=3 bad=0` + 像素 `[SHOTS] checks=15 fail=0` | **是** |
 | 导出自证 | `export/game.exe --headless --selfcheck` | `[SELFCHECK] PASS` + exit 0 | 否 |
-| **触屏闭环** | `tests/probes/probe_touch.gd`（D1 新建） | 触摸路径与鼠标路径世界状态逐项一致 | **是** |
+| **触屏闭环** | `tests/probes/probe_touch.gd` | `[TOUCH] checks=29 bad=0` + `PASS`（触摸可点 + 按钮触达尺寸矩阵）；拖线/技能等全操作路径 D1 扩展 | **是** |
 | **Android 可玩** | `adb install` + 启动 + 手动完成一局 | 无崩溃、`adb logcat` 无 ERROR、7 个模式钮 + 技能 + 暂停 + 热层全部可点 | 真机/模拟器 |
 | **Android 自证（自动）** | `adb shell am start ... --es -- --selfcheck` 或 logcat 抓 `[SELFCHECK] PASS` | `[SELFCHECK] PASS` + exit 0 | — |
 
@@ -1056,9 +1085,11 @@ HUD 全部控件、标题/暂停/结算三屏、三件套音频、真实 glb 资
 | 改动位置 | 必跑 |
 |---|---|
 | `sim/**` | 单测 + 全部 headless 探针 + `probe_golden` |
-| `game/main.gd` | `probe_input` + `probe_ui_flow` + `probe_smoke` + `probe_touch` |
-| `game/view.gd` / `game/view_*.gd` | `probe_sync` + `probe_scene` + `probe_shots`/`check_shots` |
-| `game/hud.gd` / `screens.gd` | `probe_hud` + `probe_ui_flow` + `probe_touch`（触屏可点） |
+| `game/main.gd` | `probe_input` + `probe_ui_flow` + `probe_smoke` + `probe_touch` + `probe_save` |
+| `game/view.gd` / `game/view_*.gd` | `probe_sync` + `probe_scene` + `probe_shots`/`check_shots` + `probe_audio`（改 `view_audio` 时） |
+| `game/hud.gd` / `screens.gd` | `probe_hud` + `probe_ui_flow` + `probe_touch`（触屏可点）+ `probe_save` |
+| `game/save_io.gd` / `game/user_settings.gd` | `probe_save` + `probe_audio`（改 bus 逻辑时） |
+| `sim/save.gd` | `run_tests`（test_save）+ `probe_save` + `probe_golden`（不触碰模拟路径的护栏） |
 | `assets/**` | `probe_asset` + `probe_model` + `selfcheck` |
 | `tests/**` | 单测 |
 | `export_presets.cfg` | 双端各出一次包 + `--selfcheck` |
@@ -1437,6 +1468,52 @@ D3 数值定稿时结合本轮回试玩一并评估。
 不逐字节比对旧 post）；`shots/*` 全部重出并目视确认——外圈=连续旷野缓坡（无台阶
 圈）、岩脊/盆地/插口可辨、核心下「暗色椭圆」经排查为集结的 blade 敌（非网格瑕疵）。
 
+### 11.8 UI 补全：存档 / 设置 / 退出 / 安卓返回（2026-10-16）
+
+**需求（用户直令）**：补全「开始/继续/退出/存档/设置」界面与按钮 + 移动端适配。
+**用户拍板**：3 槽位 + 存档列表（「继续对局」进读档列表、「保存进度」进存档列表）；
+音乐/音效滑杆 + 全屏开关（Android 隐藏该行）；安卓返回键路由 + 新触屏探针；
+退出二次确认。零新美术，沿 HUD 大盘色板。
+
+**存档**：新 `sim/save.gd`（encode/decode/inspect）——标量 + grid `cells/hgt`(base64)
++ units(10 列)/buildings(7 列) 行表 + next-id（canonical 不含、必须存）+ hero +
+meta（run 供读档重放蓝图）；int64（seed/rng.state）以十进制**字符串**存（JSON number
+走 double 丢精度）；四重校验（格式/schema=5/剧本指纹 `0x02d81d2a`/canonical checksum），
+decode 重建世界后逐位对拍，不一致拒载。
+**关键确定性修复**：encode 时若世界处于摊销补场窗口（`rebuilding` 或 `field_rev !=
+grid.rev`），先 `world._rebuild_field_sync()` 补完再存——否则暂停存档落在补场中途、
+读档续跑与不存档直跑漂移（补场为派生态，零指纹影响；`probe_golden` 16 指纹复核不变）。
+`game/save_io.gd` 管 3 槽位 I/O（user://save_slotN.json）；损坏档先做花括号结构预检
+再 JSON 解析（截断/垃圾档判坏且不刷引擎报错）。
+**UI**：`screens.gd` 重写为五屏 + 确认弹窗——标题（开始/继续/设置/玩法说明/退出）、
+暂停（继续/保存进度/设置/重开/回标题）、存档列表（load|save 双模式；load 可删带二次
+确认；槽卡「槽 N · 第 W 波/开局 · mm:ss · 保存时刻」）、设置、结算；「继续对局」无档禁用
+（损坏档也算非空——进列表可删）。
+
+**设置**：新 `game/user_settings.gd`——user://settings.cfg；BGM/SFX 具名 bus
+（滑杆 0..100 → 线性增益 → dB；0 = -80dB 静音；默认 100 保现状响度）；全屏开关
+PC 生效（Android/headless 跳过）；`view_audio` 四 SFX 池 + 环境音路由 SFX bus、
+BGM 走 BGM bus；`main._ready` 启动即 `apply_all(load_cfg())`。
+
+**退出 / 安卓返回**：标题「退出游戏」+ 二次确认（确定 → `_quit_game`：停音频 +
+0.5s 延时退，防活动播放对象直接 quit 的 Playback 泄漏）；Android 返回 =
+`NOTIFICATION_WM_GO_BACK_REQUEST` 通知 + 非键盘 `ui_cancel` 动作双入口 →
+`main._android_back_handle()`（80ms 去抖）：确认弹窗=取消；暂停↔继续；进行中=暂停；
+存档/设置=回上级；结算=回标题；标题=退出确认。桌面 ESC 语义不变（标题/结算 ESC
+仍不响应；键盘 Esc 事件统一换算为同一路由）。
+
+**测试**：单测 88→100（`test_save.gd` 12 例：往返/续跑 900 与 1600 tick 指纹对拍/
+rng 序列/next-id/hgt 保真/篡改·版本·截断拒载/inspect 三态）；新探针 `probe_save`
+（74 断言：接线/保存/覆盖确认/读档恢复 tick·run·供给·实体/删除/损坏档/设置落盘+bus dB+
+全屏/退出确认 spy/安卓返回六路由+去抖）+ `probe_touch`（29 断言：合成 ScreenTouch 驱动
+开始→暂停→继续→重开 + 22 按钮触达尺寸矩阵 ≥36px）。既有探针断言零改动（纯新增）。
+负对照 ×2 实跑：断 `main.save_game` 接线 → `[SAVE] FAIL`（新保存路径断言成片失败）；
+关 `sim/save.gd` 终审校验 → 单测 `passed=98 failed=2`（恰为两条 tamper 用例）。
+
+**证据**：`logs/gates-20261016-ui/`（全 21 闸绿：19 探针 + run_tests + check_shots，
+stderr 零 ERROR；`shots/title.png` 改版 + 新增 `shots/slots.png`/`shots/settings.png`
+目视确认）；决策补充 = `save.gd` 头注释（补场同步修复）。
+
 ---
 
 ## 12. AI 任务卡模板（派活时照抄）
@@ -1450,7 +1527,7 @@ D3 数值定稿时结合本轮回试玩一并评估。
             除非任务本身就是 D4 的重录>
 - 实现要求：<引用 §5 相关条款>
 - 验收命令（注意哪些必须窗口模式，见 §2.1）：
-    <godot> --headless --path <P> -s res://tests/run_tests.gd      # 期望 passed=88 failed=0
+    <godot> --headless --path <P> -s res://tests/run_tests.gd      # 期望 passed=100 failed=0
     <godot> --path <P> -s res://tests/probes/probe_xxx.gd                       # 期望 [XXX] PASS
 - 证据要求：stdout 原文 + exit code + （涉及画面时）截图且必须目视
 - 失败预案：<该任务在 §7.11 砍单顺序里的位置>

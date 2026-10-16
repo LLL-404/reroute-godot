@@ -5,6 +5,8 @@ extends Node3D
 
 const Blueprint = preload("res://game/blueprint.gd")
 const Selfcheck = preload("res://game/selfcheck.gd")
+const UserSettings = preload("res://game/user_settings.gd")
+const SaveIO = preload("res://game/save_io.gd")
 
 const TICK_DT := 1.0 / 20.0
 const MAX_CATCHUP := 5 # 单帧最多补的 tick 数（追平上限，超出丢弃积压）
@@ -35,6 +37,7 @@ var rmb_panning := false # 右键拖拽平移中
 var rmb_last := Vector2.ZERO # 右键拖拽上一帧位置（用位置差算位移，不依赖 relative）
 ## HUD 命中区提供者（R5 注入；未注入 = 无 HUD 区域）
 var hud_regions_provider: Callable
+var _last_back_ms := 0 # Android 返回键双入口（通知 / ui_cancel 动作）去抖时间戳
 
 
 ## 初始化：建 HUD/壳、开新局、显示标题屏；自检模式触发 export 验收
@@ -42,6 +45,7 @@ func _ready() -> void:
 	view = $View
 	_setup_hud()
 	_setup_shell()
+	UserSettings.apply_all(UserSettings.load_cfg()) # 启动即应用玩家设置（音量 bus / 全屏）
 	new_game()
 	hud.set_visible_hud(false)
 	shell.open_title() # 启动即标题：标题屏压着静态战场（母版口径，paused 初值 true）
@@ -94,6 +98,9 @@ func _setup_shell() -> void:
 		"resume": Callable(self, "resume_game"),
 		"to_title": Callable(self, "to_title"),
 		"pause": Callable(self, "pause_game"),
+		"quit": Callable(self, "_quit_game"),
+		"load_slot": Callable(self, "load_game"),
+		"save_slot": Callable(self, "save_game"),
 	}, hud)
 
 
@@ -138,6 +145,85 @@ func to_title() -> void: # 暂停/结算 → 标题：备一局新的压着静�
 	view.bgm(false)
 	new_game()
 	shell.open_title()
+
+
+# ---------------- 存档 / 退出 / Android 返回 ----------------
+
+## 读档开局：还原世界 + 蓝图视觉（Blueprint.pick 按存档 run 重放），直接进对局。
+## 坏档/旧档读档失败返回 false（由存档页显示原因）。
+func load_game(slot: int) -> bool:
+	var w := SaveIO.load_slot(slot)
+	if w == null:
+		return false
+	var meta := SaveIO.slot_meta(slot)
+	run_index = int(meta.get("run", run_index))
+	sc = w.sc
+	world = w
+	view.set_heat(false)
+	var picked: Array = Blueprint.pick(run_index)
+	view.apply_blueprint(picked[0], picked[1])
+	view.is_ore = Callable(sc, "is_ore")
+	view.build_terrain(world.grid)
+	view.sync(world)
+	acc = 0.0
+	drag_start = Vector2i(-1, -1)
+	heat_on = false
+	over_shown = false
+	if hud != null:
+		hud.reset()
+		hud.set_heat_vis(false)
+	start_match()
+	print("[Game] 读档 槽=", slot, " run=", run_index, " tick=", world.tick_count)
+	return true
+
+
+## 存档（仅进行中可存；返回布尔给存档页反馈）。
+func save_game(slot: int) -> bool:
+	if world == null or world.outcome != World.RUNNING:
+		return false
+	var ok := SaveIO.save_slot(slot, world, run_index)
+	print("[Game] 存档 槽=", slot, " ok=", ok, " tick=", world.tick_count)
+	return ok
+
+
+## 退出游戏（二次确认在壳层；抵达此处即退）。收尾口径同 selfcheck：全停音频 +
+## 等混音周期回收，避免带活动播放对象直接 quit 报 Playback 泄漏。
+func _quit_game() -> void:
+	print("[Game] 退出游戏")
+	view.stop_all_audio()
+	await get_tree().create_timer(0.5).timeout
+	get_tree().quit(0)
+
+
+## Android 返回键统一路由（通知 / ui_cancel 动作双入口，80ms 去抖防双触发）。
+## 语义与 Esc 一致：暂停↔继续；进行中=暂停；存档/设置=回上级；结算=回标题；
+## 标题=退出确认（桌面 Esc 在标题仍不响应，两者互不影响）。
+func _android_back_handle() -> void:
+	var now := Time.get_ticks_msec()
+	if now - _last_back_ms < 80:
+		return
+	_last_back_ms = now
+	if shell == null:
+		return
+	if shell.confirm_open():
+		shell.close_confirm()
+		return
+	var page: String = shell.current_page()
+	if page == "pause":
+		resume_game()
+	elif page == "":
+		pause_game()
+	elif page == "title":
+		shell.open_quit_confirm()
+	elif page == "gameover":
+		to_title()
+	else:
+		shell.handle_key(KEY_ESCAPE)
+
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_WM_GO_BACK_REQUEST:
+		_android_back_handle()
 
 
 func _on_hud_mode(m: String) -> void:
@@ -233,7 +319,7 @@ func _update_camera(dt: float) -> void:
 # ---------------- 输入（移植 main.lua：拖拽放墙/塔、点覆盖层挖矿、点建筑拆除） ----------------
 
 ## 输入分发：鼠标按下/抬起（拖拽/点击/右键平移/滚轮缩放）、鼠标移动、键盘（TAB 热层、
-## WASD/QE 相机、Esc 路由）。
+## WASD/QE 相机、Esc 路由）。Android 返回键可能以 ui_cancel 动作事件形态抵达，一并路由。
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton:
 		var mb: InputEventMouseButton = event
@@ -263,13 +349,19 @@ func _unhandled_input(event: InputEvent) -> void:
 		if not mk.pressed:
 			cam_keys.erase(mk.keycode)
 			return
-		if shell != null and shell.handle_key(mk.keycode):
+		var kc := mk.keycode
+		if kc == KEY_ESCAPE or mk.is_action(&"ui_cancel"):
+			kc = KEY_ESCAPE # 安卓返回键的键事件形态统一按 Esc 语义路由
+		if shell != null and shell.handle_key(kc):
 			return
 		if mk.keycode == KEY_TAB:
 			toggle_heat()
 			return
 		if CAM_KEYS.has(mk.keycode):
 			cam_keys[mk.keycode] = true
+	elif event.is_action_pressed("ui_cancel"):
+		_android_back_handle() # 安卓返回的动作事件形态（非键盘）
+		get_viewport().set_input_as_handled()
 
 
 ## 相机操控是否可用（标题/暂停/结算冻结；滚轮缩放与 WASD 同口径）

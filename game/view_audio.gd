@@ -5,6 +5,7 @@ extends RefCounted
 
 const SFX_POOL_N := 4 # 母版 4 个轮换源，避免同帧多音互相掐断
 const AUDIO_DIR := "res://assets/audio/sfx/"
+const UserSettings = preload("res://game/user_settings.gd") # bus 名 + 音量应用（设置页共用）
 
 var host: Node3D
 
@@ -28,16 +29,21 @@ func _init(p_host: Node3D) -> void:
 ## （ObjectDB 泄漏 + resources still in use，实测）——接口/资源/状态断言照常可测。
 func _setup_audio() -> void:
 	audio_on = DisplayServer.get_name() != "headless"
+	# 用户音量 bus（BGM/SFX）：先确保存在再路由，设置页只改 bus 音量、不动逐音增益
+	UserSettings.ensure_bus(UserSettings.BGM_BUS)
+	UserSettings.ensure_bus(UserSettings.SFX_BUS)
 	var sroot := Node.new()
 	sroot.name = "SFX"
 	host.add_child(sroot)
 	for i in SFX_POOL_N:
 		var p := AudioStreamPlayer.new()
 		p.name = "sfx" + str(i + 1)
+		p.bus = UserSettings.SFX_BUS
 		sroot.add_child(p)
 		sfx_players.append(p)
 	sfx_amb = AudioStreamPlayer.new()
 	sfx_amb.name = "amb"
+	sfx_amb.bus = UserSettings.SFX_BUS
 	sroot.add_child(sfx_amb)
 	var amb: AudioStream = _load_stream("dungeon_ambience.mp3")
 	if amb != null:
@@ -50,6 +56,7 @@ func _setup_audio() -> void:
 			sfx_amb.play()
 	bgm_player = AudioStreamPlayer.new()
 	bgm_player.name = "bgm"
+	bgm_player.bus = UserSettings.BGM_BUS
 	sroot.add_child(bgm_player)
 
 

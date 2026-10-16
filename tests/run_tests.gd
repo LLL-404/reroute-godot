@@ -27,6 +27,7 @@ func _initialize() -> void:
 	preload("res://tests/test_flowfield.gd").new().register(kit)
 	preload("res://tests/test_scenario.gd").new().register(kit)
 	preload("res://tests/test_world.gd").new().register(kit)
+	preload("res://tests/test_save.gd").new().register(kit)
 	preload("res://tests/test_verify.gd").new().register(kit)
 
 	var ok := kit.run()

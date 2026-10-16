@@ -1,11 +1,15 @@
 extends CanvasLayer
 
-# 界面壳（移植 reroute/scripts/screens.lua + ScreenManager 的页栈语义，砍掉未用的弹窗/toast）：
-# 标题 / 暂停 / 结算三屏。游戏流转即屏状态：进行中 = current_page()==""；
-# 暂停 = "pause"；结算 = "gameover"；回标题 = "title"。
-# 页面懒建缓存复用；切换带 0.18s 淡入；按钮回调由 main 注入。
+# 界面壳（移植 reroute/scripts/screens.lua + ScreenManager 的页栈语义）：标题 / 暂停 / 结算
+# / 存档（3 槽，读|存双模式）/ 设置（音量+全屏）五屏 + 通用确认弹窗。
+# 游戏流转即屏状态：进行中 = current_page()==""；暂停 = "pause"；结算 = "gameover"；
+# 标题 = "title"；存档页 = "slots"；设置页 = "settings"。
+# 页面懒建缓存复用；切换带 0.18s 淡入；按钮回调由 main 注入；存档/设置模块直接 preload。
 # 口径说明：母版 Shell.resume 走 ScreenManager:Back()，而 Back 在"栈<=1 拒绝"的保护下
 # 无法弹出单元素栈（对局=空栈模型下的疑点）；本版按 Shell 自身注释"弹栈到空"语义实现 resume=close_all。
+
+const SaveIO = preload("res://game/save_io.gd")
+const UserSettings = preload("res://game/user_settings.gd")
 
 var S := 1.0
 var cb: Dictionary = {}
@@ -19,8 +23,20 @@ var tips_panel: PanelContainer
 var go_title: Label
 var go_body: Label
 
+# 存档页状态
+var slots_mode := "load" # load | save
+var slots_from := "title" # 返回目标页
+# 设置页状态
+var settings_from := "title"
+var _cfg: Dictionary = {}
 
-## 初始化：注入回调、HUD 引用、缩放、层级、宿主控件
+# 确认弹窗
+var confirm_layer: Control = null
+var confirm_text: Label = null
+var _confirm_cb := Callable()
+
+
+## 初始化：注入回调、HUD 引用、缩放、层级、宿主控件、确认弹窗
 func init(callbacks: Dictionary, hud_ref) -> void:
 	cb = callbacks
 	hud = hud_ref
@@ -33,12 +49,14 @@ func init(callbacks: Dictionary, hud_ref) -> void:
 	host.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	host.theme = hud.theme
 	add_child(host)
+	_build_confirm()
 
 
 # ---------------- 公开 API（对齐母版 Shell） ----------------
 
 func open_title() -> void:
 	_ensure("title")
+	_refresh_title()
 	_show("title")
 
 
@@ -57,6 +75,7 @@ func close_all() -> void:
 	for k in pages:
 		pages[k].visible = false
 	current = ""
+	_hide_confirm()
 
 
 func open_gameover(won: bool, world) -> void:
@@ -67,19 +86,55 @@ func open_gameover(won: bool, world) -> void:
 	_show("gameover")
 
 
+## 存档页（mode: "load" 读档（标题进入） / "save" 存档（暂停进入）；from = 返回目标页）
+func open_slots(mode: String, from: String) -> void:
+	_ensure("slots")
+	slots_mode = mode
+	slots_from = from
+	var head: Label = pages["slots"].find_child("label_slot_head", true, false)
+	head.text = "读档" if mode == "load" else "存档"
+	var status: Label = pages["slots"].find_child("label_slot_status", true, false)
+	status.text = "选择槽位开始对局" if mode == "load" else "选择槽位保存当前进度"
+	_refresh_slots()
+	_show("slots")
+
+
+## 设置页（from = 返回目标页）
+func open_settings(from: String) -> void:
+	_ensure("settings")
+	settings_from = from
+	_load_settings_into_ui()
+	_show("settings")
+
+
+## 退出确认（标题「退出游戏」按钮 / Android 返回键共用）
+func open_quit_confirm() -> void:
+	open_confirm("确定退出游戏？", func() -> void: cb["quit"].call())
+
+
 func current_page() -> String:
 	return current
 
 
-## Esc 路由：暂停屏=继续；进行中（空态）=暂停；标题/结算不响应。返回 true 表示已消费。
+## Esc 路由：确认弹窗=取消；暂停=继续；进行中=暂停；存档/设置=回上级；
+## 标题/结算不响应。返回 true 表示已消费。
 func handle_key(keycode: int) -> bool:
 	if keycode != KEY_ESCAPE:
 		return false
+	if confirm_open():
+		close_confirm()
+		return true
 	if current == "pause":
 		cb["resume"].call()
 		return true
 	elif current == "":
 		cb["pause"].call()
+		return true
+	elif current == "slots":
+		_show(slots_from)
+		return true
+	elif current == "settings":
+		_show(settings_from)
 		return true
 	return false
 
@@ -87,6 +142,82 @@ func handle_key(keycode: int) -> bool:
 ## 对齐母版 Shell.update 的调用点（Godot 信号模型无需延迟队列，保留空实现）。
 func update() -> void:
 	pass
+
+
+# ---------------- 确认弹窗 ----------------
+
+func confirm_open() -> bool:
+	return confirm_layer != null and confirm_layer.visible
+
+
+func close_confirm() -> void:
+	_hide_confirm()
+
+
+func open_confirm(text: String, fn: Callable) -> void:
+	confirm_text.text = text
+	_confirm_cb = fn
+	confirm_layer.visible = true
+
+
+func _hide_confirm() -> void:
+	if confirm_layer != null:
+		confirm_layer.visible = false
+	_confirm_cb = Callable()
+
+
+func _resolve_confirm(ok: bool) -> void:
+	var fn := _confirm_cb
+	_hide_confirm()
+	if ok and fn.is_valid():
+		fn.call()
+
+
+func _build_confirm() -> void:
+	confirm_layer = Control.new()
+	confirm_layer.name = "ConfirmLayer"
+	confirm_layer.set_anchors_preset(Control.PRESET_FULL_RECT)
+	confirm_layer.mouse_filter = Control.MOUSE_FILTER_STOP # 吃指针：弹窗下页面不可点
+	confirm_layer.visible = false
+	var veil := ColorRect.new()
+	veil.color = Color8(8, 10, 16, 185)
+	veil.set_anchors_preset(Control.PRESET_FULL_RECT)
+	veil.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	confirm_layer.add_child(veil)
+	var center := CenterContainer.new()
+	center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	center.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	confirm_layer.add_child(center)
+	var card := PanelContainer.new()
+	card.custom_minimum_size = Vector2(300.0 * S, 0)
+	card.add_theme_stylebox_override("panel", _flat(C["card"], C["border"], int(13 * S)))
+	center.add_child(card)
+	var margin := MarginContainer.new()
+	for side in ["left", "right", "top", "bottom"]:
+		margin.add_theme_constant_override("margin_" + side, int(22 * S))
+	var col := VBoxContainer.new()
+	col.add_theme_constant_override("separation", int(16 * S))
+	col.alignment = BoxContainer.ALIGNMENT_CENTER
+	margin.add_child(col)
+	confirm_text = _label("", 15.0 * S, C["text"])
+	confirm_text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	confirm_text.custom_minimum_size = Vector2(256.0 * S, 0)
+	confirm_text.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	col.add_child(confirm_text)
+	var row := HBoxContainer.new()
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", int(12 * S))
+	var okb := _button("确定", true, 116.0 * S, 40.0 * S, 12.0 * S, func() -> void:
+		_resolve_confirm(true))
+	okb.name = "btn_confirm_ok"
+	var canc := _button("取消", false, 116.0 * S, 40.0 * S, 12.0 * S, func() -> void:
+		_resolve_confirm(false))
+	canc.name = "btn_confirm_cancel"
+	row.add_child(okb)
+	row.add_child(canc)
+	col.add_child(row)
+	card.add_child(margin)
+	add_child(confirm_layer) # 晚于 host 添加 → 永远盖在页面之上
 
 
 # ---------------- 页面构建 ----------------
@@ -110,7 +241,7 @@ func _label(text: String, fs: float, color: Color) -> Label:
 	return l
 
 
-func _button(text: String, primary: bool, w: float, h: float, fs: float, fn: Callable) -> Button:
+func _button(text: String, primary: bool, w: float, h: float, fs: float, fn: Callable, pad_left: float = -1.0) -> Button:
 	var b := Button.new()
 	b.text = text
 	b.custom_minimum_size = Vector2(w, h)
@@ -122,13 +253,21 @@ func _button(text: String, primary: bool, w: float, h: float, fs: float, fn: Cal
 	b.add_theme_color_override("font_color", c_text)
 	b.add_theme_color_override("font_hover_color", c_text)
 	b.add_theme_color_override("font_pressed_color", c_text)
+	b.add_theme_color_override("font_disabled_color", C["muted"])
 	var bg_n: Color = Color8(85, 105, 232) if primary else C["btn"]
 	var bg_h: Color = Color8(104, 122, 239) if primary else C["btn_hover"]
 	var bg_p: Color = Color8(65, 86, 209) if primary else C["btn_pressed"]
 	var bd: Color = Color8(85, 105, 232) if primary else C["border"]
-	b.add_theme_stylebox_override("normal", _flat(bg_n, bd, 9))
-	b.add_theme_stylebox_override("hover", _flat(bg_h, bd, 9))
-	b.add_theme_stylebox_override("pressed", _flat(bg_p, bd, 9))
+	var sb_n := _flat(bg_n, bd, 9)
+	var sb_h := _flat(bg_h, bd, 9)
+	var sb_p := _flat(bg_p, bd, 9)
+	if pad_left >= 0.0:
+		sb_n.content_margin_left = pad_left
+		sb_h.content_margin_left = pad_left
+		sb_p.content_margin_left = pad_left
+	b.add_theme_stylebox_override("normal", sb_n)
+	b.add_theme_stylebox_override("hover", sb_h)
+	b.add_theme_stylebox_override("pressed", sb_p)
 	b.pressed.connect(fn)
 	return b
 
@@ -153,7 +292,7 @@ func _build_title() -> Control:
 	center.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	page.add_child(center)
 	var col := VBoxContainer.new()
-	col.add_theme_constant_override("separation", int(16 * S))
+	col.add_theme_constant_override("separation", int(14 * S))
 	col.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	center.add_child(col)
 
@@ -165,10 +304,25 @@ func _build_title() -> Control:
 	btn_start.name = "btn_start"
 	col.add_child(btn_start)
 
+	var btn_continue := _button("继续对局", false, 220.0 * S, 42.0 * S, 12.0 * S, func() -> void:
+		open_slots("load", "title"))
+	btn_continue.name = "btn_continue"
+	col.add_child(btn_continue)
+
+	var btn_settings := _button("设置", false, 220.0 * S, 40.0 * S, 12.0 * S, func() -> void:
+		open_settings("title"))
+	btn_settings.name = "btn_settings"
+	col.add_child(btn_settings)
+
 	var btn_tips := _button("玩法说明", false, 220.0 * S, 40.0 * S, 12.0 * S, func() -> void:
 		tips_panel.visible = not tips_panel.visible)
 	btn_tips.name = "btn_tips"
 	col.add_child(btn_tips)
+
+	var btn_quit := _button("退出游戏", false, 220.0 * S, 40.0 * S, 12.0 * S, func() -> void:
+		open_quit_confirm())
+	btn_quit.name = "btn_quit"
+	col.add_child(btn_quit)
 
 	tips_panel = PanelContainer.new()
 	tips_panel.name = "panel_tips"
@@ -213,13 +367,21 @@ func _build_pause() -> Control:
 	for side in ["left", "right", "top", "bottom"]:
 		margin.add_theme_constant_override("margin_" + side, int(26 * S))
 	var col := VBoxContainer.new()
-	col.add_theme_constant_override("separation", int(12 * S))
+	col.add_theme_constant_override("separation", int(11 * S))
 	col.alignment = BoxContainer.ALIGNMENT_CENTER
 	col.add_child(_label("暂停", 22.0 * S, C["text"]))
 	var btn_resume := _button("继续", true, 220.0 * S, 42.0 * S, 12.0 * S, func() -> void:
 		cb["resume"].call())
 	btn_resume.name = "btn_resume"
 	col.add_child(btn_resume)
+	var btn_save := _button("保存进度", false, 220.0 * S, 42.0 * S, 12.0 * S, func() -> void:
+		open_slots("save", "pause"))
+	btn_save.name = "btn_save"
+	col.add_child(btn_save)
+	var btn_settings := _button("设置", false, 220.0 * S, 40.0 * S, 12.0 * S, func() -> void:
+		open_settings("pause"))
+	btn_settings.name = "btn_settings_pause"
+	col.add_child(btn_settings)
 	var btn_restart := _button("重开本局", false, 220.0 * S, 42.0 * S, 12.0 * S, func() -> void:
 		cb["restart"].call())
 	btn_restart.name = "btn_restart"
@@ -270,6 +432,242 @@ func _build_gameover() -> Control:
 	return page
 
 
+func _build_slots() -> Control:
+	var page := _page_base(Color8(8, 10, 16, 160))
+	page.name = "page_slots"
+	var center := CenterContainer.new()
+	center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	center.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	page.add_child(center)
+	var pcard := PanelContainer.new()
+	pcard.custom_minimum_size = Vector2(390.0 * S, 0)
+	pcard.add_theme_stylebox_override("panel", _flat(C["card"], C["border"], int(14 * S)))
+	center.add_child(pcard)
+	var margin := MarginContainer.new()
+	for side in ["left", "right", "top", "bottom"]:
+		margin.add_theme_constant_override("margin_" + side, int(24 * S))
+	var col := VBoxContainer.new()
+	col.add_theme_constant_override("separation", int(10 * S))
+	col.alignment = BoxContainer.ALIGNMENT_CENTER
+	var head := _label("读档", 20.0 * S, C["text"])
+	head.name = "label_slot_head"
+	col.add_child(head)
+	for i in range(1, SaveIO.SLOT_N + 1):
+		var row := HBoxContainer.new()
+		row.alignment = BoxContainer.ALIGNMENT_CENTER
+		row.add_theme_constant_override("separation", int(8 * S))
+		var b := _button("槽 %d · 空" % i, false, 268.0 * S, 36.0 * S, 11.0 * S, _on_slot_pressed.bind(i), 10.0 * S)
+		b.name = "btn_slot%d" % i
+		b.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		row.add_child(b)
+		var del := _button("删除", false, 62.0 * S, 36.0 * S, 10.0 * S, _on_slot_delete.bind(i))
+		del.name = "btn_slot_del%d" % i
+		row.add_child(del)
+		col.add_child(row)
+	var status := _label("", 10.0 * S, C["muted"])
+	status.name = "label_slot_status"
+	col.add_child(status)
+	var btn_back := _button("返回", false, 220.0 * S, 40.0 * S, 12.0 * S, func() -> void:
+		_show(slots_from))
+	btn_back.name = "btn_slots_back"
+	col.add_child(btn_back)
+	margin.add_child(col)
+	pcard.add_child(margin)
+	return page
+
+
+func _build_settings() -> Control:
+	var page := _page_base(Color8(8, 10, 16, 160))
+	page.name = "page_settings"
+	var center := CenterContainer.new()
+	center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	center.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	page.add_child(center)
+	var pcard := PanelContainer.new()
+	pcard.custom_minimum_size = Vector2(390.0 * S, 0)
+	pcard.add_theme_stylebox_override("panel", _flat(C["card"], C["border"], int(14 * S)))
+	center.add_child(pcard)
+	var margin := MarginContainer.new()
+	for side in ["left", "right", "top", "bottom"]:
+		margin.add_theme_constant_override("margin_" + side, int(24 * S))
+	var col := VBoxContainer.new()
+	col.add_theme_constant_override("separation", int(12 * S))
+	col.alignment = BoxContainer.ALIGNMENT_CENTER
+	col.add_child(_label("设置", 20.0 * S, C["text"]))
+
+	var row_music := HBoxContainer.new()
+	row_music.alignment = BoxContainer.ALIGNMENT_CENTER
+	row_music.add_theme_constant_override("separation", int(10 * S))
+	var lbl_music := _label("音乐音量", 12.0 * S, C["muted"])
+	lbl_music.custom_minimum_size = Vector2(88.0 * S, 0)
+	row_music.add_child(lbl_music)
+	var sld_music := HSlider.new()
+	sld_music.name = "sld_music"
+	sld_music.min_value = UserSettings.VOL_MIN
+	sld_music.max_value = UserSettings.VOL_MAX
+	sld_music.step = 1
+	sld_music.custom_minimum_size = Vector2(180.0 * S, 24.0 * S)
+	sld_music.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	row_music.add_child(sld_music)
+	var val_music := _label("100", 12.0 * S, C["text"])
+	val_music.name = "lbl_music_val"
+	val_music.custom_minimum_size = Vector2(38.0 * S, 0)
+	row_music.add_child(val_music)
+	col.add_child(row_music)
+
+	var row_sfx := HBoxContainer.new()
+	row_sfx.alignment = BoxContainer.ALIGNMENT_CENTER
+	row_sfx.add_theme_constant_override("separation", int(10 * S))
+	var lbl_sfx := _label("音效音量", 12.0 * S, C["muted"])
+	lbl_sfx.custom_minimum_size = Vector2(88.0 * S, 0)
+	row_sfx.add_child(lbl_sfx)
+	var sld_sfx := HSlider.new()
+	sld_sfx.name = "sld_sfx"
+	sld_sfx.min_value = UserSettings.VOL_MIN
+	sld_sfx.max_value = UserSettings.VOL_MAX
+	sld_sfx.step = 1
+	sld_sfx.custom_minimum_size = Vector2(180.0 * S, 24.0 * S)
+	sld_sfx.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	row_sfx.add_child(sld_sfx)
+	var val_sfx := _label("100", 12.0 * S, C["text"])
+	val_sfx.name = "lbl_sfx_val"
+	val_sfx.custom_minimum_size = Vector2(38.0 * S, 0)
+	row_sfx.add_child(val_sfx)
+	col.add_child(row_sfx)
+
+	var row_fs := HBoxContainer.new()
+	row_fs.name = "row_fullscreen"
+	row_fs.alignment = BoxContainer.ALIGNMENT_CENTER
+	row_fs.add_theme_constant_override("separation", int(10 * S))
+	var lbl_fs := _label("全屏", 12.0 * S, C["muted"])
+	lbl_fs.custom_minimum_size = Vector2(88.0 * S, 0)
+	row_fs.add_child(lbl_fs)
+	var chk_fs := CheckButton.new()
+	chk_fs.name = "chk_fullscreen"
+	chk_fs.focus_mode = Control.FOCUS_NONE
+	row_fs.add_child(chk_fs)
+	col.add_child(row_fs)
+
+	var btn_back := _button("返回", false, 220.0 * S, 40.0 * S, 12.0 * S, func() -> void:
+		_show(settings_from))
+	btn_back.name = "btn_settings_back"
+	col.add_child(btn_back)
+	margin.add_child(col)
+	pcard.add_child(margin)
+
+	# 行为接线：滑杆/开关改值即应用 + 落盘（user://settings.cfg）
+	sld_music.value_changed.connect(func(v: float) -> void:
+		_cfg["music"] = int(v)
+		val_music.text = str(int(v))
+		_apply_settings())
+	sld_sfx.value_changed.connect(func(v: float) -> void:
+		_cfg["sfx"] = int(v)
+		val_sfx.text = str(int(v))
+		_apply_settings())
+	chk_fs.toggled.connect(func(on: bool) -> void:
+		_cfg["fullscreen"] = on
+		UserSettings.apply_video(_cfg)
+		UserSettings.save_cfg(_cfg))
+	return page
+
+
+# ---------------- 存档页行为 ----------------
+
+## 标题「继续对局」可用性：有任何非空槽位（含损坏档——进列表可删）即亮。
+func _refresh_title() -> void:
+	var btn: Button = pages["title"].find_child("btn_continue", true, false)
+	btn.disabled = not SaveIO.has_any()
+
+
+func _refresh_slots() -> void:
+	var page: Control = pages["slots"]
+	for info in SaveIO.list_slots():
+		var slot: int = info["slot"]
+		var row: Button = page.find_child("btn_slot%d" % slot, true, false)
+		row.text = _slot_row_text(info)
+		var empty: bool = info.get("empty", true)
+		row.disabled = empty if slots_mode == "load" else false
+		var del: Button = page.find_child("btn_slot_del%d" % slot, true, false)
+		del.visible = slots_mode == "load" and not empty
+
+
+func _slot_row_text(info: Dictionary) -> String:
+	var slot: int = info["slot"]
+	if info.get("empty", true):
+		return "槽 %d · 空" % slot
+	if not info.get("ok", false):
+		return "槽 %d · %s" % [slot, str(info.get("reason", "无效存档"))]
+	var m: Dictionary = info.get("meta", {})
+	var wave: int = int(m.get("wave", 0))
+	var wtext := "开局" if wave <= 0 else "第 %d 波" % wave
+	var t: int = int(m.get("time_s", 0))
+	var saved := str(m.get("saved_text", ""))
+	var tail := "" if saved == "" else " · " + saved
+	return "槽 %d · %s · %d:%02d%s" % [slot, wtext, t / 60, t % 60, tail]
+
+
+func _set_slot_status(text: String) -> void:
+	var status: Label = pages["slots"].find_child("label_slot_status", true, false)
+	status.text = text
+
+
+func _on_slot_pressed(slot: int) -> void:
+	var info := SaveIO.slot_info(slot)
+	if slots_mode == "load":
+		if info.get("empty", true):
+			return
+		if not info.get("ok", false):
+			_set_slot_status(str(info.get("reason", "存档损坏")))
+			return
+		var ok: bool = cb["load_slot"].call(slot)
+		if not ok:
+			_set_slot_status("存档损坏或版本不符")
+			_refresh_slots()
+	else:
+		if info.get("empty", true):
+			_do_save(slot)
+		else:
+			open_confirm("覆盖槽 %d 的存档？" % slot, func() -> void:
+				_do_save(slot))
+
+
+func _do_save(slot: int) -> void:
+	var ok: bool = cb["save_slot"].call(slot)
+	_set_slot_status("已保存到槽 %d" % slot if ok else "存档写入失败")
+	_refresh_slots()
+
+
+func _on_slot_delete(slot: int) -> void:
+	open_confirm("删除槽 %d 的存档？" % slot, func() -> void:
+		SaveIO.delete_slot(slot)
+		_set_slot_status("已删除槽 %d" % slot)
+		_refresh_slots())
+
+
+# ---------------- 设置页行为 ----------------
+
+func _load_settings_into_ui() -> void:
+	_cfg = UserSettings.load_cfg()
+	var page: Control = pages["settings"]
+	var sld_music: HSlider = page.find_child("sld_music", true, false)
+	var sld_sfx: HSlider = page.find_child("sld_sfx", true, false)
+	var val_music: Label = page.find_child("lbl_music_val", true, false)
+	var val_sfx: Label = page.find_child("lbl_sfx_val", true, false)
+	var chk_fs: CheckButton = page.find_child("chk_fullscreen", true, false)
+	var row_fs: Control = page.find_child("row_fullscreen", true, false)
+	sld_music.set_value_no_signal(_cfg["music"])
+	sld_sfx.set_value_no_signal(_cfg["sfx"])
+	val_music.text = str(_cfg["music"])
+	val_sfx.text = str(_cfg["sfx"])
+	chk_fs.set_pressed_no_signal(_cfg["fullscreen"])
+	row_fs.visible = OS.get_name() != "Android" # Android 恒全屏，隐藏该行
+
+
+func _apply_settings() -> void:
+	UserSettings.apply_audio(_cfg)
+	UserSettings.save_cfg(_cfg)
+
+
 # ---------------- 页切换 ----------------
 
 ## 懒建页面（首次调用时构建并缓存）
@@ -284,17 +682,23 @@ func _ensure(name: String) -> Control:
 			p = _build_pause()
 		"gameover":
 			p = _build_gameover()
+		"slots":
+			p = _build_slots()
+		"settings":
+			p = _build_settings()
 	p.visible = false
 	host.add_child(p)
 	pages[name] = p
 	return p
 
 
-## 显示指定页面（其余隐藏，0.18s 淡入）
+## 显示指定页面（其余隐藏，0.18s 淡入）；回标题时顺带刷新「继续对局」可用性。
 func _show(name: String) -> void:
 	for k in pages:
 		pages[k].visible = (k == name)
 	current = name
+	if name == "title":
+		_refresh_title()
 	var p: Control = pages[name]
 	p.modulate.a = 0.0
 	var t := create_tween()

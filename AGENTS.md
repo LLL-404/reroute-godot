@@ -12,9 +12,9 @@ Engineering 保真度极高：模拟核心是**确定性**的，有 16 指纹黄
 
 | 路径 | 管什么 |
 |---|---|
-| `sim/` | 模拟核心十模块，纯逻辑、**无浮点、无渲染**：`lua64`(语义 shim) / `canon` / `rng` / `grid` / `flowfield` / `scenario` / `sim`(数值表) / `world` / `verify` / `golden_baseline` |
-| `game/` | 表现层，只读模拟：`main`(主循环/输入) / `view`(3D 门面) + 组件 `view_core`/`view_terrain`/`view_entities`/`view_audio`（D5-1 拆分 2026-10-15） / `models` / `blueprint` / `hud` / `screens` / `selfcheck` |
-| `tests/` | 单测 88 例 + **17 个验收探针**（`tests/probes/`，公共夹具 `probe_kit.gd`，D5-2 2026-10-15） |
+| `sim/` | 模拟核心十模块，纯逻辑、**无浮点、无渲染**：`lua64`(语义 shim) / `canon` / `rng` / `grid` / `flowfield` / `scenario` / `sim`(数值表) / `world` / `verify` / `golden_baseline` / `save`(存档编解码) |
+| `game/` | 表现层，只读模拟：`main`(主循环/输入) / `view`(3D 门面) + 组件 `view_core`/`view_terrain`/`view_entities`/`view_audio`（D5-1 拆分 2026-10-15） / `models` / `blueprint` / `hud` / `screens`(五屏+确认弹窗) / `save_io`(槽位 I/O) / `user_settings`(音量/全屏) / `selfcheck` |
+| `tests/` | 单测 100 例 + **19 个验收探针**（`tests/probes/`，公共夹具 `probe_kit.gd`，D5-2 2026-10-15） |
 | `tools/` | Python 工具：`check_shots.py` / `convert_all.py` / `umd2_to_gltf.py` / `verify_glb.py` |
 | `assets/` | `audio/sfx`(19 mp3) / `fonts`(Noto Sans SC) / `models`(glb) |
 | `docs/` | 开发方案（权威）、审计报告、`devlogs/` |
@@ -41,13 +41,13 @@ GODOT="D:/G/game/Godot_v4.7.2-stable_mono_win64/Godot_v4.7.2-stable_mono_win64_c
 P="D:/G/game/games/reroute-godot"
 
 # headless 安全：单测 + 模拟模块探针 + 场景构建
-"$GODOT" --headless --path "$P" -s res://tests/run_tests.gd                    # 88 单测
+"$GODOT" --headless --path "$P" -s res://tests/run_tests.gd                    # 100 单测
 for p in golden scene sim grid flow scenario world; do
   "$GODOT" --headless --path "$P" -s res://tests/probes/probe_$p.gd
 done
 
 # 必须窗口模式（涉及屏幕坐标/渲染纹理，headless 下必然失败或空转不退出）
-for p in sync input hud ui_flow smoke shots audio asset model orient; do
+for p in sync input hud ui_flow smoke shots audio asset model orient save touch; do
   "$GODOT" --path "$P" -s res://tests/probes/probe_$p.gd
 done
 
@@ -61,7 +61,7 @@ python tools/check_shots.py    # 截图像素校验
 1. **无头 CLI 用 `_console.exe` 变体**，普通 `.exe` 不输出 stdout。
 2. **`--headless` 下根视口只有 64×64**。凡涉及屏幕坐标或渲染纹理的探针
    （`sync` / `input` / `hud` / `ui_flow` / `smoke` / `shots` / `audio` /
-   `asset` / `model` / `orient`）**必须窗口模式运行**。
+   `asset` / `model` / `orient` / `save` / `touch`）**必须窗口模式运行**。
 
 ## 五、调试陷阱（都会伪装成「挂起」）
 
@@ -143,6 +143,14 @@ python tools/check_shots.py    # 截图像素校验
   **基线第二次重录：世界由 LOST@4926 变 WON@6400（核心余 784），指纹 12→16（400..6400）。**
   全 19 闸绿 + 负对照 2 份（证据 `logs/gates-20261016-world64/`）；`probe_scene`/`probe_input`
   新增结构/缩放断言；决策记录 = 方案 §11.7。
+- UI 补全：存档 / 设置 / 退出 / 安卓返回（2026-10-16）**已完成**：新 `sim/save.gd`
+  （encode/decode/inspect 四重校验；encode 遇摊销补场窗口先 `_rebuild_field_sync()`——
+  确定性关键修复）+ `game/save_io.gd`（3 槽位 user://save_slotN.json）+ `game/user_settings.gd`
+  （user://settings.cfg；BGM/SFX bus；全屏）；`screens.gd` 重写为五屏 + 确认弹窗；
+  `main.gd` 接线读档/存档/退出/安卓返回（GO_BACK 通知 + `ui_cancel` 动作双入口，80ms 去抖）；
+  `view_audio` 按 bus 路由。单测 88→100（`test_save.gd` 12 例）；新探针 `probe_save`(74)/
+  `probe_touch`(29)；负对照 ×2（断存档接线→`[SAVE] FAIL`；关终审校验→单测 98/2 恰两条
+  tamper 用例）；全 21 闸绿（证据 `logs/gates-20261016-ui/`）；决策记录 = 方案 §11.8。
 - 历史审计报告（`docs/*-20261015.md`）按**快照原则保持原样**，不要顺着结构整理去改它们。
 
 ---

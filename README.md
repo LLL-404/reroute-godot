@@ -2,8 +2,9 @@
 
 《改道》从 UrhoX + Lua 迁移到 **Godot 4.7.2 stable (mono)** 的工程。
 
-> **当前状态（2026-10-14）**：模拟核心与表现层**均已完成**，游戏可完整游玩
-> （标题 → 对局 → 暂停/结算三屏闭环，3D 视图 + HUD + 音频 + 真实模型资产）。
+> **当前状态（2026-10-16）**：模拟核心与表现层**均已完成**，游戏可完整游玩
+> （五屏 UI：标题 / 对局 / 暂停 / 结算 / 存档 / 设置 —— 3 槽位存档、音量与全屏设置、
+> 退出二次确认、安卓返回键路由；3D 视图 + HUD + 音频 + 真实模型资产）。
 >
 > **交付目标**：2026 TapTap 聚光灯 21 天游戏创作挑战（主题「涌现」）。
 > 官方建议 **10-18 前提交**，硬截止 **10-21**。目标 **Android + Windows 双端**
@@ -30,7 +31,7 @@ P="D:/G/game/games/reroute-godot"
 "$GODOT" --path "$P"
 
 # 全部自动化闸（窗口模式的必须去掉 --headless）
-"$GODOT" --headless --path "$P" -s res://tests/run_tests.gd   # 88 单测
+"$GODOT" --headless --path "$P" -s res://tests/run_tests.gd   # 100 单测
 "$GODOT" --headless --path "$P" -s res://tests/probes/probe_golden.gd      # 黄金回放 16 指纹
 "$GODOT" --headless --path "$P" -s res://tests/probes/probe_scene.gd       # 主场景构建
 "$GODOT" --path "$P" -s res://tests/probes/probe_sync.gd                   # 视觉同步对拍
@@ -38,6 +39,8 @@ P="D:/G/game/games/reroute-godot"
 "$GODOT" --path "$P" -s res://tests/probes/probe_hud.gd                    # HUD
 "$GODOT" --path "$P" -s res://tests/probes/probe_ui_flow.gd                # 三屏流转
 "$GODOT" --path "$P" -s res://tests/probes/probe_smoke.gd                  # 全局冒烟（跑完整一局）
+"$GODOT" --path "$P" -s res://tests/probes/probe_save.gd                   # 存档/设置/退出/安卓返回
+"$GODOT" --path "$P" -s res://tests/probes/probe_touch.gd                  # 触屏可点 + 按钮触达尺寸
 ```
 
 ### ⚠️ 两条必须记住的规矩
@@ -45,7 +48,8 @@ P="D:/G/game/games/reroute-godot"
 1. **无头 CLI 用 `_console.exe` 变体**，普通 `.exe` 不输出 stdout。
 2. **`--headless` 下根视口只有 64×64**。凡涉及屏幕坐标或渲染纹理的探针
    （`probe_input` / `probe_sync` / `probe_hud` / `probe_ui_flow` / `probe_smoke` /
-   `probe_shots` / `probe_audio` / `probe_asset` / `probe_model` / `probe_orient`）
+   `probe_shots` / `probe_audio` / `probe_asset` / `probe_model` / `probe_orient` /
+   `probe_save` / `probe_touch`）
    **必须窗口模式运行**，否则必然失败或空转不退出。
 
 ## 二、目录
@@ -54,7 +58,7 @@ P="D:/G/game/games/reroute-godot"
 |---|---|
 | `sim/` | 模拟核心十模块：`lua64`(语义 shim) / `canon` / `rng` / `grid` / `flowfield` / `scenario` / `sim`(数值表) / `world` / `verify` / `golden_baseline`。纯逻辑、无渲染、无浮点 |
 | `game/` | 表现层：`main`(主循环/输入) / `view`(3D 门面；D5-1 拆分后 = 门面 + `view_core`/`view_terrain`/`view_entities`/`view_audio`) / `models`(资产) / `blueprint`(程序化地形) / `hud` / `screens` / `selfcheck` |
-| `tests/` | 单测套件 + 验收探针：`kit.gd`(记录式断言) + `run_tests.gd`(入口) + 6 模块用例 + `stub_scenario` 夹具；`tests/probes/` = 17 个验收探针，同时是全链路冒烟入口 |
+| `tests/` | 单测套件 + 验收探针：`kit.gd`(记录式断言) + `run_tests.gd`(入口) + 7 模块用例 + `stub_scenario` 夹具；`tests/probes/` = 19 个验收探针，同时是全链路冒烟入口 |
 | `assets/` | 音频 19 个 mp3、中文字体、10 个 glb 模型 |
 | `tools/` | Python 工具：`check_shots.py`(截图像素校验) / `umd2_to_gltf.py` / `verify_glb.py` |
 | `docs/` | 开发方案（权威） |
@@ -68,6 +72,10 @@ P="D:/G/game/games/reroute-godot"
 
 相机：`WASD` 平移、鼠标右键拖拽平移（跟手）、`Q/E` 旋转、滚轮缩放（0.6–1.8×）；`TAB` 热层；
 `Esc` 暂停。窗口缩放会取景回默认北向视角（平移/旋转/缩放重置）。
+
+菜单：标题「继续对局」进读档列表（无档禁用）、「设置」调音乐/音效/全屏、「退出游戏」二次确认；
+暂停「保存进度」写 3 槽位（覆盖有确认，读档列表可删）。存档在 `user://save_slotN.json`、
+设置在 `user://settings.cfg`。Android 返回键 = 暂停↔继续 / 返回上级（标题 = 退出确认）。
 
 ## 四、移植纪律（全部从踩坑中来，改代码前必读）
 
