@@ -265,7 +265,7 @@
 
 → 结论：**3 篇都只能当素材库，不能直接发。** 每篇需按 §0.4 的三段结构重排。
 
-**② AI 资产说明**（`cashline/docs/AI-ASSETS.md`，45 行）
+**② AI 资产说明**（`cashline/docs/AI-ASSETS.md`；2026-10-16 已按 Godot 交付物重写，本节保留改造前评估）
 
 这份**质量很高、可直接改造**，结构与官方「素材使用声明」高度对应：
 
@@ -281,7 +281,7 @@
 ——**Godot 版必须改成 Godot 4.7.2 stable (mono)**，否则与提交物不符。
 
 其余待核对：**模型数量**（文中按 Maker 口径，Godot 侧为 10 个 glb）——须按 Godot
-工程实测重新点数。
+工程实测重新点数。✅ **2026-10-16 已按 Godot 交付物全文重写**（见 D0-6 行）。
 
 > ✅ **音效条数无需修改**（2026-10-15 复核）：本文原写「文中写 18 条，实测 19 个 mp3」
 > 是**误判**。`AI-ASSETS.md:24-25` 原文是「音效 全部 **18** 条」**加**「战斗音乐 对局
@@ -290,14 +290,14 @@
 
 **③ 素材现状（Godot 工程实测）**
 
-- 音频：`assets/audio/sfx/` 19 个 mp3（18 音效 + 1 BGM）
+- 音频：`assets/audio/sfx/` **29 个 mp3**（27 音效 + 2 BGM；10-16 D1-7 后）
 - 模型：`assets/models/` 10 个 glb（zerg_worker / zerg_blade / zerg_king / gold_pile×4 /
   rubble×3）+ 配套 D/N 贴图
 - 字体：`assets/fonts/NotoSansSC-Regular.otf` + `OFL.txt`（**SIL OFL 1.1，已合规**。
   2026-10-14 替换掉原 `simhei.ttf`——中易黑体是商业字体，授权不含随包再分发。
   台账见 `CREDITS.md`，对外声明见 `THIRD-PARTY-NOTICES.txt`）
-- 截图：`shots/` **15 张**（`game/heat/ghost/title/gameover/hud/asset_*/model_*/
-  orient_cross/smoke_*`）→ **五图素材可直接从这批里选**
+- 截图：`shots/` **19 张**（`game/heat/ghost/title/gameover/hud/asset_*/model_*/
+  orient_cross/smoke_*` 等）；详情页五图 + 实机副本另置 `shots/store/`（D2-5）→ **五图素材可直接从这批里选**
 
 ---
 
@@ -831,7 +831,7 @@ HUD 全部控件、标题/暂停/结算三屏、三件套音频、真实 glb 资
 | D0-3 Android 环境清点 | Godot Android 导出模板（`4.7.2.stable.mono`）、Android SDK（platform-tools + build-tools）、JDK 17、adb 是否就位；缺什么装什么。✅ **2026-10-16 补做**：cmdline-tools + licenses + platform-tools + build-tools 34.0.0/35.0.0 + platforms 34/35 装入 `%LOCALAPPDATA%/Android/Sdk`；JDK 21（Adoptium jdk-21.0.12.101）配入 editor settings（实测可导出，17 亦可） |
 | D0-4 keystore | 生成 debug keystore（本轮用 debug 签名即可）。✅ **2026-10-16 补做**：`%APPDATA%/Godot/keystores/debug.keystore`（androiddebugkey），配入 editor settings（预设不内嵌路径，走全局回退） |
 | D0-5 **开发者日志 ①** | ✅ **成稿已就绪**：`docs/devlogs/01-开篇-放墙改道.md`（三段结构 + 配图 + 标签齐备，可直接发布）。发布位置：自己的动态 / 聚光灯论坛（`https://www.taptap.cn/app/710826/topic`）；游戏页面建好后可编辑挪回自己游戏论坛 |
-| D0-6 素材使用声明初稿 | 按官方飞书模板重排 `cashline/docs/AI-ASSETS.md`（见 §0.5 ②）。**先修 §五 的引擎错误：UrhoX → Godot 4.7.2**；数字按 Godot 工程重新点数 |
+| D0-6 素材使用声明初稿 | ✅ **2026-10-16 完成**：`cashline/docs/AI-ASSETS.md` 已按 Godot 交付物全文重写（§五 引擎改 Godot 4.7.2 stable (mono)；数字按 Godot 工程实测：29 音频 / 10 glb / 图标五件套 / 详情页五图；64² 与 21 闸口径，见 §0.5 ②） |
 
 **出口**：Android 环境清单确认完毕；日志 ① 已发（三段结构 + 标签 + 配图）；素材声明已修引擎项。
 
@@ -1610,7 +1610,7 @@ MCP 侧需以 `target_dir` 显式指定项目（无目录参数时 `maker_status
 
 **证据**：`logs/gates-20261016-d17/`（21 闸绿：run_tests 100/0 + 7 headless 探针 + 12 窗口探针 +
 check_shots 25/0；`nc-d17.*` 负对照与 `audio-post-nc.*` 恢复件齐）。素材登记：本仓 `CREDITS.md`
-§3.2/§3.5 + §7.4b 清单；对外件 `cashline/docs/AI-ASSETS.md` 待同批补行。
+§3.2/§3.5 + §7.4b 清单；对外件 `cashline/docs/AI-ASSETS.md` 已同批补行（2026-10-16）。
 
 **遗留**：双端 release 包（D2-1）目视验收（图标并入；D2-5 已收盘，见 §11.11）——打包段进展见 §11.12（Windows 已签名出包 + Android 正式包与提审件封装完毕；**Windows 目视验收已通过（双击能启动）、Android 装机待设备**）。
 
@@ -1633,7 +1633,7 @@ check_shots 25/0；`nc-d17.*` 负对照与 `audio-post-nc.*` 恢复件齐）。�
 对齐 §0.3 E 口径），覆盖对局全景 / 威胁热层 / 改道预览 / 波次中期 / 20:9 移动端。
 
 **归置与登记**：副本入 `shots/store/`（`shots/*` 排除出包，不进 pck；副本即提审上传源）；
-登记 CREDITS §3.6；对外件 `cashline/docs/AI-ASSETS.md` 与 D1-7 素材**同批**补行。
+登记 CREDITS §3.6；对外件 `cashline/docs/AI-ASSETS.md` 与 D1-7 素材**同批**补行（2026-10-16 收盘）。
 
 **遗留**：用户侧上传详情页（五图 + 实机图从本仓副本取）。
 

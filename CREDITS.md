@@ -200,10 +200,10 @@ Android `launcher_icons` 主图 + 自适应前后景）。D1-7 产。
 - 后者结构见 `cashline/docs/AI-ASSETS.md`（五段式：AI 生成 / 程序生成 / AI 辅助编写 /
   纯人工 / 引擎与第三方），那份是**对外交付件**。
 - 两处**必须口径一致**，以 `assets/` 实测数字为准（本文件 §三 即实测值）：
-  - 音频 **29 条**（10-16 D1-7 后；AI-ASSETS.md 对外件需**同批**补登记：+10 音频 + 图标套件 + 详情页五图）
+  - 音频 **29 条**（10-16 D1-7 后；AI-ASSETS.md 对外件已**同批**补登记：+10 音频 + 图标套件 + 详情页五图，2026-10-16 收盘）
   - 模型 **10 个 glb**
   - 详情页素材 **5 张 AI 图 + 5 张实机图**（10-16 D2-5；副本 `shots/store/`，见 §3.6）
-  - AI-ASSETS.md §五 目前写「引擎：UrhoX」，**Godot 版必须改成 Godot 4.7.2 stable (mono)**
+  - AI-ASSETS.md §五 已改「引擎：Godot 4.7.2 stable (mono)」（2026-10-16 核实）
 - 本文件新增任何外部素材后，AI-ASSETS.md §五 要**同批**补一行。
 
 ### 三份文件的分工
@@ -229,3 +229,4 @@ OFL 的再分发义务就没履行（本文 §一 规则 2「登记 ≠ 履行�
 | 2026-10-14 | **R-1 已解决**：`simhei.ttf` → `NotoSansSC-Regular.otf`（OFL-1.1）；随包 `OFL.txt` + 新增 `THIRD-PARTY-NOTICES.txt` 并加入 `include_filter`；代码 2 处路径更新、selfcheck 断言强化为字形存在性；全闸回归通过，pck 内 simhei 残留 0 处。§二 修正：Fab/Sketchfab 等站**并非只有写实资源**，风格化/低模/卡通/体素包均大量存在，真实约束是风格一致性而非来源。新增 R-4（export_filter 过宽，待单独裁定） |
 | 2026-10-16 | D1-7 制造积分素材入库：+10 mp3（9 音效 + 结算 BGM，台账 19→29）+ 图标套件 `assets/icon/`（icon2_core 定稿，主图/192/自适应前后景/ico）。新增 §3.5；§3.2/§3.4 计数与 §五 口径同步；对外件 `cashline/docs/AI-ASSETS.md` 待同批补行 |
 | 2026-10-16 | D2-5 详情页素材归置：`shots/store/` 新增 AI 五图（头图 `store_header` + 宣传 `promo_redirect`/`promo_economy`/`promo_ambush`/`promo_barrage`）+ 实机图 5 张副本；新增 §3.6；§五 口径同步 |
+| 2026-10-16 | 对外件收盘：`cashline/docs/AI-ASSETS.md` 按 Godot 交付物全文重写（29 音频 / 10 glb / 图标五件套 / 详情页五图；§五 引擎改 Godot 4.7.2 mono），§五 两条待办勾销 |
