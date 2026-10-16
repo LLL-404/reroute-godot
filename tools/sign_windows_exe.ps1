@@ -1,4 +1,4 @@
-# 导出包复签脚本（D2-1）：
+﻿# 导出包复签脚本（D2-1）：
 #   用法：powershell -ExecutionPolicy Bypass -File tools/sign_windows_exe.ps1 -ExePath export/game.exe
 #   取自本机证书库 Cert:\CurrentUser\My 的自签代码签名证书（CN=Reroute）签名导出 exe；
 #   证书材料在仓外 D:\G\game\keystores\（reroute-codesign.pfx/.cer），说明见方案 §11.12。
