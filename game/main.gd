@@ -278,16 +278,24 @@ func _process(dt: float) -> void:
 			steps += 1
 		if steps == MAX_CATCHUP:
 			acc = 0.0
-	elif not paused and not over_shown:
-		over_shown = true
-		hud.set_visible_hud(false)
-		shell.open_gameover(world.outcome == World.WON, world)
+	_check_outcome()
 	view.sync(world)
 	update_ghost()
 	_update_camera(dt)
 	if not paused or shell.current_page() == "pause":
 		hud.update(world) # 暂停时仍刷（面板静置）；标题/结算下 HUD 已整体隐藏
 	shell.update()
+
+
+## 终局触发（胜/负）：结算屏 + 胜负音 + 结算 BGM；「未暂停且未展示过」时执行一次。
+func _check_outcome() -> void:
+	if world == null or world.outcome == World.RUNNING or paused or over_shown:
+		return
+	over_shown = true
+	hud.set_visible_hud(false)
+	shell.open_gameover(world.outcome == World.WON, world)
+	view.play_sound("match_win.mp3" if world.outcome == World.WON else "match_lose.mp3", 0.85)
+	view.bgm_settlement(true)
 
 
 ## 相机操控：WASD 平移 / QE 旋转（右键拖拽在 _unhandled_input 里直接跟手）。
@@ -448,9 +456,14 @@ func set_mode(m: String) -> void:
 		hud.set_mode(m)
 
 
-## 在指定格执行当前模式对应的命令
+## 在指定格执行当前模式对应的命令（填/挖成功 → 对应地形音；D1-7）。
 func apply_mode_at(m: String, x: int, y: int) -> void:
+	var h_before: int = world.grid.get_h(x, y)
 	world.apply_command({ "kind": m, "x": x, "y": y })
+	if m == "fill" and world.grid.get_h(x, y) > h_before:
+		view.play_sound("terrain_fill.mp3", 0.8)
+	elif m == "lower" and world.grid.get_h(x, y) < h_before:
+		view.play_sound("terrain_lower.mp3", 0.8)
 
 
 ## 鼠标按下：记录拖拽起点（墙/塔）或立即执行单格操作（挖矿/填/挖/拆/英雄）

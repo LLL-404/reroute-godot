@@ -832,7 +832,7 @@ HUD 全部控件、标题/暂停/结算三屏、三件套音频、真实 glb 资
 | D1-4 触屏拖线 | 拖拽放墙/塔在触屏下可用（按下 → 拖动 → 抬起） | `probe_touch` 覆盖拖线路径。✅ **2026-10-16**：相位 6 全链路对拍（4 格墙/-40 供给/drag_start 清空/同 run 逐字节一致） |
 | D1-5 DPI 与安全区 | 按 §6.5 的分辨率策略处理 Android 的 DPR 与刘海/手势区；HUD `S` 缩放需在窄屏下不越界 | 至少在 1 个 16:9 与 1 个 20:9 分辨率下目视截图。✅ **2026-10-16**：`stretch=canvas_items+expand` + `hud.safe` 安全区（探针注入制）；`shots/game_20x9.png`（20:9）与 `game_narrow.png`（窄屏 S=1.176）目视过；probe_hud 63→69，负对照 ×2（见 §11.9） |
 | D1-6 触屏拖线 | 拖拽放墙/塔在触屏下可用（按下 → 拖动 → 抬起） | `probe_touch` 覆盖拖线路径。✅ 同 D1-4（原文两行重复，一并收口） |
-| D1-7 **制造积分消耗** | 按 §7.4b 清单生成刚需素材（**图标 + 音效**），产出落 `.maker/assets/` 后搬入 `assets/` | 图标已接入导出预设；音效已接入 `view.gd`。⏳ **阻塞**：Maker 项目未绑定（需 `taptap-maker init` 选「改道」App）——待用户；素材清单见 §7.4b |
+| D1-7 **制造积分消耗** | 按 §7.4b 清单生成刚需素材（**图标 + 音效**），产出落 `.maker/assets/` 后搬入 `assets/` | ✅ **2026-10-16 完成**：Maker 绑定 `reroute-maker`（App「改道」）；图标（icon2_core → `assets/icon/` 五件套 → `config/icon` + 双端导出预设）；9 音效 + 结算 BGM 入库并接线（`probe_audio` 38→56 + 负对照 bad=3 + 全 21 闸绿）。详见 §11.10 |
 | D1-8 **日志 ②** | 建议：Android 移植 / 触屏适配的踩坑记录 | 已发（带标签 + 配图） |
 
 **出口**：Android 全量包可启动、可操作、可完成一局。**若 D1 结束仍跑不通 → 触发 §7.11 预案。**
@@ -854,20 +854,22 @@ HUD 全部控件、标题/暂停/结算三屏、三件套音频、真实 glb 资
 **两条生成路径**：
 
 1. **网页版**：`maker.taptap.cn` → 「改道」项目 → 对话里描述需要的素材。
-2. **本地 Maker MCP**（官网「本地开发模式」）：用支持 MCP 的 AI 工具在本地目录直接调
-   Maker 的资源生成工具。⚠️ 当前**未配置**（`mcp.json` 只有 `godot`），要先用得先接。
+2. **本地 Maker MCP**（官网「本地开发模式」）：✅ **已接入并绑定（2026-10-16）**——本地项目
+   `D:\G\game\games\reroute-maker`（`taptap-maker init` 绑 App「改道」id `aff101b1-…`；
+   同机另有通用 maker-game 项目，**勿选**）。参考图路径按 **Maker 项目根**解析，跨目录引用要传绝对路径。
 
-产出落 `.maker/assets/`（PNG / MP3 / MP4 通用格式）→ **可直接进 Godot**；
+产出落 `reroute-maker/assets/`（PNG / MP3 通用格式）→ 挑选后**复制**进本仓 `assets/`
+（音效文件名即接口，`view_audio` 按名加载；**可直接进 Godot**）；
 `.mdl` 是 UrhoX 专有格式，需 `tools/umd2_to_gltf.py` 转。
 
 **生成清单（按「改动成本 × 收益」排序）**
 
 | 优先 | 项 | 数量 | 预算 | 改动成本 | 说明 |
 |---|---|---|---|---|---|
-| ★★★ | **App 图标** | 1（多试 3–5 版） | 58×5=290 | 无 | **当前完全缺失**。Android 启动图标 + Windows exe 图标 + 详情页图标都要。出 1024×1024 后手动导多尺寸 |
-| ★★★ | **音效补齐** | 7 条 | 70 | 极低 | 只需在 `view.gd` 加 `play_sound`。缺：**放墙 / 拆建筑 / 填高 / 挖低 / 波次开始 / 核心受击 / 胜负** |
-| ★★☆ | **详情页素材** | 头图 1 + 宣传图 4 | 290 | 无 | 官方五图素材硬要求。实机图从 `shots/` 选，宣传头图建议 AI 生成 |
-| ★★☆ | **BGM 补 1 首** | 1 | 84 | 极低 | 现有仅 `bgm_reroute.mp3` 一首，标题屏与对局共用。补 1 首给结算屏 |
+| ★★★ | **App 图标** | 1（多试 3–5 版） | 58×5=290 | 无 | ✅ **2026-10-16 完成**：9 版候选（icon1–5 + reroute_icon_a–d），用户选定 **icon2_core**；导出套件 `assets/icon/` 接入 `config/icon` + Windows/Android 预设。（原：当前完全缺失，Android/Windows/详情页都要） |
+| ★★★ | **音效补齐** | 7 条 | 70 | 极低 | ✅ **2026-10-16 完成**：实做 9 条（原 7 类 + 塔开火/拆除细分，另有 `wave_horn` 替换借用的蛮王吼），接线全绿见 §11.10 |
+| ★★☆ | **详情页素材** | 头图 1 + 宣传图 4 | 290 | 无 | 🔶 已生成 4 张（`store_header` + `promo_ambush` / `promo_economy` / `promo_redirect`，在 reroute-maker）——盘点选用并入 D2-5；实机图从 `shots/` 选 |
+| ★★☆ | **BGM 补 1 首** | 1 | 84 | 极低 | ✅ **2026-10-16 完成**：`bgm_settlement.mp3` 生成并接入（D2-6 提前，三态 BGM 齐） |
 | ★☆☆ | **塔 / 墙 / 核心 3D 模型** | 3–5 | 120–200 | **中高** | 当前是程序化 `BoxMesh`（方块）。换模型观感提升最大，但要改 `view.gd` 渲染路径 → **只在 D5 有余量时做** |
 | ★☆☆ | **宣传视频** | 1 | 226 | 无 | 讲解视频官方必交。不自录的话可用 AI 生成片段 |
 
@@ -878,9 +880,10 @@ HUD 全部控件、标题/暂停/结算三屏、三件套音频、真实 glb 资
 1. **不要为了花而花。** 先做刚需（图标 + 音效）。余额作废是小事，生成一堆用不上的素材才是浪费。
 2. 生成素材**必须登记进 `素材使用声明`**（官方硬要求，见 §0.3 C）。
 3. ⚠️ 「**AI 美术占比 >50% 不能参评最佳美术**」—— 本作不冲该奖，无影响；日后若想冲需重估。
-4. 现有 19 个 mp3 里**只有 7 个被代码引用**（`orc_chief_roar` / `mining_gold_hit` /
-   `build_stone_place` / `zerg_death` / `orc_death` / `dungeon_ambience` / `bgm_reroute`）。
-   补音效时**别重复生成已有的**，先补真正缺的 7 类。
+4. （2026-10-16 更新）29 个 mp3 里 **17 个被代码引用**——原 7 个（`orc_chief_roar` /
+   `mining_gold_hit` / `build_stone_place` / `zerg_death` / `orc_death` / `dungeon_ambience` /
+   `bgm_reroute`）+ 本轮新接 10 个（见 §11.10）。补音效时**别重复生成已有的**；
+   刚需已齐，剩余可选项见上表 ★☆☆。
 
 **时点**：图标 + 音效 + 详情页素材在 **D1–D2 做完**（这两天本来就在出包）；
 3D 模型看 D5 余量。
@@ -893,8 +896,8 @@ HUD 全部控件、标题/暂停/结算三屏、三件套音频、真实 glb 资
 | D2-2 包体裁剪 | ✅ 已完成（见 §7.12）：`export_presets.cfg` 设 `exclude_filter="tests/*,shots/*,tools/*"` | 包体下降，功能不受影响 |
 | D2-3 真人试玩 | **至少 2 人各玩 2 局**，记录：卡在哪、什么时候看不懂、哪一步最无聊、第一局结局 | 书面记录（这决定 D3 的全部内容） |
 | D2-4 引导复核 | 确认左下提示徽章与标题屏「玩法说明」是否足够；试玩者是否 5 秒内看懂「放墙改道」 | 试玩记录里的原话 |
-| D2-5 **详情页素材** | 按 §7.4b 生成头图 + 宣传图；实机图从 `shots/` 选 5 张 | 五图素材齐备（官方硬要求） |
-| D2-6 **BGM 补齐** | 按 §7.4b 补 1 首结算 BGM，接入 `view.gd` | 标题/对局/结算三态各有 BGM |
+| D2-5 **详情页素材** | 按 §7.4b 生成头图 + 宣传图；实机图从 `shots/` 选 5 张 | 🔶 素材已生成 4 张（reroute-maker：`store_header` + `promo_ambush` / `promo_economy` / `promo_redirect`）——盘点选用 + 定实机图 → 五图齐备（官方硬要求） |
+| D2-6 **BGM 补齐** | 按 §7.4b 补 1 首结算 BGM，接入 `view.gd` | ✅ **2026-10-16 提前完成**：`bgm_settlement.mp3`（loop）经 `view.bgm_settlement` → `main._check_outcome` 接入；标题/对局/结算三态 BGM 齐（probe_audio 3 条断言锁定） |
 | D2-7 **日志 ③** | 建议：真人试玩的第一批反馈 | 已发（带标签 + 配图） |
 
 **出口**：可玩包能发给别人；有 2 人以上的试玩记录。
@@ -1550,6 +1553,49 @@ HUD 不越界/无遮挡；`check_shots.py` 增两张尺寸+关键色校验（25 
 **证据**：`logs/gates-20261016-d1/`（21 闸绿：run_tests 100/0 + 7 headless 探针 +
 12 窗口探针 + check_shots 25/0；负对照 ×3：nc-safe bad=5 / nc-touch bad=4 /
 nc-pushinput bad=4）。
+
+### 11.10 D1-7 制造积分素材（图标 + 音效）与接线（2026-10-16）
+
+**Maker 绑定（解除原阻塞）**：本地 Maker MCP 生成必须落「改道」App 绑定的项目 → 本地项目
+`D:\G\game\games\reroute-maker`（`taptap-maker init --app-id aff101b1-0170-4d6f-bc05-ffef7baafcec`
+绑定「改道」；同机另有通用 maker-game 项目 —— **勿选**）。PAT 落 `~/.taptap-maker/pat.json`；
+MCP 侧需以 `target_dir` 显式指定项目（无目录参数时 `maker_status_lite` 会误判「未绑定」）。
+产物在 `reroute-maker/assets/`，挑选后**复制**进本仓 `assets/`；参考图跨目录引用须传绝对路径。
+
+**图标**：共 9 版候选（早前会话 icon1_sandbox…icon5_zigzag + 本轮 reroute_icon_a–d，后者首跑
+因相对路径误解析失败、改绝对路径后 4/4 成功），用户选定 **icon2_core**。导出套件 `assets/icon/`：
+`icon_master.png`（1024 主图）+ `icon_192.png`（Android 主图标）+ `adaptive_fg_432.png` /
+`adaptive_bg_432.png`（自适应前后景）+ `icon.ico`（Windows）；接线 = `project.godot config/icon`
++ `export_presets.cfg`（Windows `icon`/`console_wrapper_icon`、Android `launcher_icons`）。
+图标无探针断言面（并入 D2-1 双端包目视验收）。
+
+**音效 10 条（9 SFX + 1 结算 BGM）**，接线点（全在既有播放链上，零新接口）：
+
+- **波次号角**：`orc_chief_roar.mp3` → 专用 `wave_horn.mp3`（语义修正：旧版借蛮王吼叫；
+  probe_audio 既有断言目标同步换名，仍 1 响 / 60t 节流）。
+- **放塔 / 放墙**：原统一「落石」音拆二——放塔沿用 `build_stone_place.mp3`、放墙 `wall_place.mp3`；
+  建筑循环内**帧内去重**（一帧拖多格只响一次；同帧双墙去重有断言）。
+- **拆除**：`building_remove.mp3`（检测 = 建筑从活表消失；拆墙/塔塌同源）。
+- **填高 / 挖低**：`terrain_fill.mp3` / `terrain_lower.mp3`（`main.apply_mode_at` 前后 H 比较，
+  仅实际生效才响）。
+- **塔开火**：`tower_shot.mp3`（检测 = 建筑 `cooldown` 回跳；冷却递减序中任何回跳必为新射击）。
+- **核心受击**：`core_hit.mp3`（核心 hp 下降检测 + **30t 节流**防多敌同啃叠音；首次建档不响）。
+- **胜负 + 结算 BGM**：`match_win.mp3` / `match_lose.mp3`（0.85 增益）+
+  `bgm_settlement.mp3`（loop，音量 0.40）。`view_audio` 重构为 `_bgm_play` 通播 +
+  `bgm_settlement(enabled)`；`main._check_outcome()` 抽取原 `_process` 内联终局分支（语义等价），
+  兼顾胜负音与结算 BGM 切入。接线期曾遇 `view.gd` 两个 `bgm_settlement` 声明并存 parse error
+  （import 失败）→ 去重保留 `enabled` 版。
+
+**测试**：`probe_audio` 38→**56** 断言（+18：放墙 / 同帧双墙去重 / 拆除 / 填挖 / 塔火 /
+核心受击 / 胜负 + 结算 BGM 切入·循环态；floor 25→50）；`selfcheck` ALL_MP3 19→29。
+**负对照实跑**：断塔火检测 + 核心受击 + 结算 BGM 调用 → `bad=3`（恰 3 条对应断言红，其余 53 绿），
+恢复后 56/0。
+
+**证据**：`logs/gates-20261016-d17/`（21 闸绿：run_tests 100/0 + 7 headless 探针 + 12 窗口探针 +
+check_shots 25/0；`nc-d17.*` 负对照与 `audio-post-nc.*` 恢复件齐）。素材登记：本仓 `CREDITS.md`
+§3.2/§3.5 + §7.4b 清单；对外件 `cashline/docs/AI-ASSETS.md` 待同批补行。
+
+**遗留**：D2-5 详情页素材盘点选用；双端 release 包（D2-1）目视验收图标。
 
 ---
 

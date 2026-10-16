@@ -12,6 +12,7 @@ config_version=5
 
 config/name="改道 Godot"
 config/description="放墙改道 —— Godot 移植版（sim 核先行，表现层跟进）"
+config/icon="res://assets/icon/icon_master.png"
 run/main_scene="res://game/main.tscn"
 config/features=PackedStringArray("4.7")
 

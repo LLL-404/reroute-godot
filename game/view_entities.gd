@@ -14,6 +14,7 @@ const Z_ATTACK := 18
 const Z_HURT := 10
 const Z_DEATH := 28
 const Z_YAW := PI / 2.0 # 模型朝向修正（截面校准：模型 yaw=π/2 时头朝 +Z；母版 UrhoX 口径 0 在 Godot 下差 90°）
+const CORE_HIT_THROTTLE := 30 # 核心受击音节流（tick）：多敌同时啃核心时不叠音
 # 敌人 kind → 资产形态（照母版 view3d.ZFORM：虫群 → blade，蛮兽 → king）
 const ZFORM := { 1: 2, 2: 3 }
 
@@ -48,6 +49,8 @@ var _height_rev := -1
 var _hero_cd := 0
 var _units_n := 0
 var _horn_tick := -999
+var _core_hp := -1 # 核心血量缓存（受击音检测；-1 = 未建档）
+var _core_hit_tick := -999 # 最近核心受击音节流点
 var _stat_solids := 0
 
 
@@ -92,6 +95,8 @@ func build_terrain(pgrid: Grid) -> void:
 	_hero_cd = 0
 	_units_n = 0
 	_horn_tick = -999
+	_core_hp = -1
+	_core_hit_tick = -999
 
 	var n_solid := 0
 	for y in pgrid.h:
@@ -176,15 +181,20 @@ func sync(world: World) -> void:
 			nd.free()
 			cover_nodes.erase(k)
 
-	# 出怪号角：单位数跳升 = 新一波进场上；60 tick 节流防连发
+	# 波次号角：单位数跳升 = 新一波进场上；60 tick 节流防连发（D1-7 换 wave_horn 专用音）
 	var n_units := world.units.size()
 	if n_units > _units_n and (world.tick_count - _horn_tick) > 60:
-		audio.play_sound("orc_chief_roar.mp3", 0.45)
+		audio.play_sound("wave_horn.mp3", 0.7)
 		_horn_tick = world.tick_count
 	_units_n = n_units
 
-	# 建筑（剪影：容器贴地 + 多盒组合；施工中整体压扁 0.35，完工弹起）
+	# 建筑（剪影：容器贴地 + 多盒组合；施工中整体压扁 0.35，完工弹起）。
+	# 音效四路：新建（墙/塔，帧内去重）/ 拆除（含塌墙）/ 塔开火（cd 跳升）/ 核心受击（掉血+节流）。
 	var seen_ids := {}
+	var placed_wall := false
+	var placed_tower := false
+	var removed_any := false
+	var tower_fired := false
 	for b in world.buildings:
 		if int(b["hp"]) > 0:
 			var bid: int = b["id"]
@@ -207,10 +217,25 @@ func sync(world: World) -> void:
 				else:
 					core._part(node, 0.0, 0.525, 0.0, 0.94, 1.05, 0.94, "wall")
 					core._part(node, 0.0, 1.190, 0.0, 1.00, 0.28, 1.00, "wall_cap")
-				entry = { "node": node, "kind": kind }
+				entry = { "node": node, "kind": kind, "cd": int(b["cooldown"]) }
 				building_nodes[bid] = entry
-				if kind != Sim.B_CORE:
-					audio.play_sound("build_stone_place.mp3", 0.8)
+				if kind == Sim.B_TOWER:
+					placed_tower = true
+				elif kind == Sim.B_WALL:
+					placed_wall = true
+			elif int(entry["kind"]) == Sim.B_TOWER:
+				# 塔开火=冷却跳升（0 → 20）；递减序中任何回跳都只可能是刚射击
+				var cdn: int = int(b["cooldown"])
+				if cdn > int(entry["cd"]):
+					tower_fired = true
+				entry["cd"] = cdn
+			if int(b["kind"]) == Sim.B_CORE:
+				# 核心受击=血量下降；30t 节流防多敌同啃叠音（首次建档不响）
+				var chp: int = int(b["hp"])
+				if _core_hp >= 0 and chp < _core_hp and (world.tick_count - _core_hit_tick) > CORE_HIT_THROTTLE:
+					audio.play_sound("core_hit.mp3", 0.8)
+					_core_hit_tick = world.tick_count
+				_core_hp = chp
 			var w := core.cell_to_world(int(b["x"]), int(b["y"]))
 			var by := terrain.ground_y(int(b["x"]), int(b["y"]))
 			var bnode: Node3D = entry["node"]
@@ -223,6 +248,16 @@ func sync(world: World) -> void:
 			var nd2: Node = entry2["node"]
 			nd2.free()
 			building_nodes.erase(bid2)
+			if int(entry2["kind"]) != Sim.B_CORE:
+				removed_any = true
+	if placed_tower:
+		audio.play_sound("build_stone_place.mp3", 0.8)
+	elif placed_wall:
+		audio.play_sound("wall_place.mp3", 0.8)
+	if removed_any:
+		audio.play_sound("building_remove.mp3", 0.8)
+	if tower_fired:
+		audio.play_sound("tower_shot.mp3", 0.6)
 
 	# 英雄（腿/躯干/双肩/头 四盒合成，行走起伏 + 朝向；插值口径同单位）
 	var h: Dictionary = world.hero

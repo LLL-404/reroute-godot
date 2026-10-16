@@ -14,8 +14,8 @@
 
 # 二进制：逐个点名，不靠 git 的启发式猜。
 # 清单来源是本仓索引的实测分类（git ls-files --cached --eol）——
-# 现测被判为"非文本"的 65 个文件只落在五个后缀上：
-# png 25、mp3 19、jpg 10、glb 10、otf 1。
+# 现测被判为"非文本"的 84 个文件只落在六个后缀上：
+# png 33、mp3 29、jpg 10、glb 10、ico 1、otf 1。
 # 其余后缀（import / uid / gd / cs / out / md / py / cfg / tscn / sln / godot /
 # csproj）实测全部按文本处理，别往 binary 里加。
 *.png binary
@@ -24,6 +24,7 @@
 *.bmp binary
 *.gif binary
 *.webp binary
+*.ico binary
 *.mp3 binary
 *.wav binary
 *.ogg binary

@@ -1,9 +1,10 @@
 extends ProbeKit
 
 # C7 判定：音频三件套（窗口模式运行；headless 音频驱动为 Dummy，播放态不作数）。
-# 链路：19 个 mp3 导入齐全 → 池结构（4 轮换 + 环境 + BGM）→ 环境音自启动循环 →
+# 链路：29 个 mp3 导入齐全 → 池结构（4 轮换 + 环境 + BGM）→ 环境音自启动循环 →
 #      轮换/音量/缺失静默接口 → BGM 开关 → 真实事件触发链
-#      （开战 BGM 自动开 / 放塔落石 / 出怪号角 / 击杀死亡 / 挖矿金击 / 技能怒吼 / 回标题停 BGM）。
+#      （开战 BGM 自动开 / 放塔落石 / 放墙落墙 / 拆除 / 填高 / 挖低 / 波次号角 / 塔开火 /
+#        核心受击 / 击杀死亡 / 挖矿金击 / 技能怒吼 / 胜负音 / 结算 BGM / 回标题停 BGM）。
 # 跑法（cwd=reroute-godot）：godot -s res://tests/probes/probe_audio.gd
 const ALL_MP3 := [
 	"bgm_reroute.mp3",
@@ -25,6 +26,16 @@ const ALL_MP3 := [
 	"zerg_king_roar.mp3",
 	"zerg_step.mp3",
 	"zerg_worker_chitter.mp3",
+	"bgm_settlement.mp3",
+	"building_remove.mp3",
+	"core_hit.mp3",
+	"match_lose.mp3",
+	"match_win.mp3",
+	"terrain_fill.mp3",
+	"terrain_lower.mp3",
+	"tower_shot.mp3",
+	"wall_place.mp3",
+	"wave_horn.mp3",
 ]
 
 func _initialize() -> void:
@@ -46,7 +57,7 @@ func _initialize() -> void:
 			longest = maxf(longest, s.get_length())
 		else:
 				fail("mp3 未导入：" + name)
-	cmp_int(loaded, ALL_MP3.size(), "19 个 mp3 全部可加载")
+	cmp_int(loaded, ALL_MP3.size(), "29 个 mp3 全部可加载")
 	check(longest > 1.0, "最长音频时长 > 1s（实测 %.2fs）" % longest)
 
 	# ---- 2. 池结构（SFX 根 + 4 轮换 + 环境 + BGM）----
@@ -87,14 +98,14 @@ func _initialize() -> void:
 	cmp_int(view._sfx_next, n_before, "缺失文件不占轮换槽")
 	check(not view.sfx_log.has("no_such_file.mp3"), "缺失文件零日志")
 
-	# ---- 5. 19 个名字全部可播（含 BGM/环境文件兼作 SFX；接口无报错）----
+	# ---- 5. 29 个名字全部可播（含 BGM/环境文件兼作 SFX；接口无报错）----
 	for name2 in ALL_MP3:
 		view.play_sound(name2, 0.8)
 	var missed := 0
 	for name3 in ALL_MP3:
 		if not view.sfx_log.has(name3):
 			missed += 1
-	cmp_int(missed, 0, "19 个名字全部进日志（无静默失败）")
+	cmp_int(missed, 0, "29 个名字全部进日志（无静默失败）")
 
 	# ---- 6. BGM 接口 ----
 	view.bgm(true)
@@ -119,14 +130,14 @@ func _initialize() -> void:
 		view.sync(w)
 	cmp_int(_cnt(view, "build_stone_place.mp3") - c0, 1, "放塔 → 落石音 1 次")
 
-	# 出怪 → 号角（母版 view3d L664：单位数跳升 + 60t 节流）
-	var c1: int = _cnt(view, "orc_chief_roar.mp3")
+	# 波次 → 号角（母版 view3d L664：单位数跳升 + 60t 节流；D1-7 换 wave_horn 专用音）
+	var c1: int = _cnt(view, "wave_horn.mp3")
 	var spawn_cell: Vector2i = _find_open(w, 4, 32, 44, 44)
 	check(spawn_cell.x >= 0, "出怪格扫描")
 	if spawn_cell.x >= 0:
 		w.apply_command({ "kind": "spawn", "x": spawn_cell.x, "y": spawn_cell.y, "speed": 4, "kind_id": Sim.E_SWARM })
 		view.sync(w)
-	cmp_int(_cnt(view, "orc_chief_roar.mp3") - c1, 1, "出怪 → 号角 1 次")
+	cmp_int(_cnt(view, "wave_horn.mp3") - c1, 1, "波次 → 号角 1 次")
 
 	# 击杀 → 死亡音（母版 view3d L861：实体从活表消失）
 	var c2: int = _cnt(view, "zerg_death.mp3")
@@ -151,12 +162,100 @@ func _initialize() -> void:
 	main._on_hud_skill()
 	cmp_int(_cnt(view, "orc_chief_roar.mp3") - c4, 1, "技能 → 怒吼 1 次")
 
+	# ---- 8. D1-7 新音效事件链 ----
+	# 放墙 → wall_place（建筑登记检测）
+	var c5: int = _cnt(view, "wall_place.mp3")
+	var wall_cell: Vector2i = _find_open(w, 0, 0, 63, 63)
+	check(wall_cell.x >= 0, "墙格扫描")
+	if wall_cell.x >= 0:
+		w.apply_command({ "kind": "wall", "x": wall_cell.x, "y": wall_cell.y })
+		view.sync(w)
+	cmp_int(_cnt(view, "wall_place.mp3") - c5, 1, "放墙 → 落墙音 1 次")
+
+	# 同帧连放两墙（一次 sync）→ 帧内去重 1 次
+	var c5b: int = _cnt(view, "wall_place.mp3")
+	var wall2: Vector2i = _find_open(w, 0, 0, 63, 63)
+	if wall2.x >= 0:
+		w.apply_command({ "kind": "wall", "x": wall2.x, "y": wall2.y })
+	var wall3: Vector2i = _find_open(w, 0, 0, 63, 63)
+	check(wall2.x >= 0 and wall3.x >= 0, "双墙格扫描")
+	if wall3.x >= 0:
+		w.apply_command({ "kind": "wall", "x": wall3.x, "y": wall3.y })
+		view.sync(w)
+	cmp_int(_cnt(view, "wall_place.mp3") - c5b, 1, "同帧双墙 → 落墙音去重 1 次")
+
+	# 拆墙 → building_remove（拆除/塌墙同源：建筑消失即响）
+	var c6: int = _cnt(view, "building_remove.mp3")
+	if wall_cell.x >= 0:
+		w.apply_command({ "kind": "remove", "x": wall_cell.x, "y": wall_cell.y })
+		view.sync(w)
+	cmp_int(_cnt(view, "building_remove.mp3") - c6, 1, "拆墙 → 拆除音 1 次")
+
+	# 填高/挖低 → terrain_fill / terrain_lower（main.apply_mode_at 变更检测）
+	var c7: int = _cnt(view, "terrain_fill.mp3")
+	var flat_cell: Vector2i = _find_flat(w)
+	check(flat_cell.x >= 0, "填挖格扫描")
+	if flat_cell.x >= 0:
+		main.apply_mode_at("fill", flat_cell.x, flat_cell.y)
+	cmp_int(_cnt(view, "terrain_fill.mp3") - c7, 1, "填高 → 填高音 1 次")
+	var c8: int = _cnt(view, "terrain_lower.mp3")
+	if flat_cell.x >= 0:
+		main.apply_mode_at("lower", flat_cell.x, flat_cell.y)
+	cmp_int(_cnt(view, "terrain_lower.mp3") - c8, 1, "挖低 → 挖低音 1 次")
+
+	# 塔开火 → tower_shot（冷却跳升检测；白盒补完施工 + 射程内放敌）
+	var c10: int = _cnt(view, "tower_shot.mp3")
+	var tw_cell: Vector2i = _find_open(w, 0, 0, 63, 63)
+	check(tw_cell.x >= 0, "塔格扫描(开火)")
+	if tw_cell.x >= 0:
+		w.apply_command({ "kind": "tower", "x": tw_cell.x, "y": tw_cell.y })
+		for b3 in w.buildings:
+			if int(b3["x"]) == tw_cell.x and int(b3["y"]) == tw_cell.y:
+				b3["build_left"] = 0
+				b3["cooldown"] = 0
+		view.sync(w)
+		var sp2: Vector2i = _find_near(w, tw_cell.x, tw_cell.y, 3)
+		check(sp2.x >= 0, "塔火目标格扫描")
+		if sp2.x >= 0:
+			w.apply_command({ "kind": "spawn", "x": sp2.x, "y": sp2.y, "speed": 4, "kind_id": Sim.E_SWARM })
+		w.tick()
+		view.sync(w)
+	cmp_int(_cnt(view, "tower_shot.mp3") - c10, 1, "塔开火 → 射击音 1 次")
+
+	# 核心受击 → core_hit（血量下降 + 30t 节流）
+	var c9: int = _cnt(view, "core_hit.mp3")
+	var core_b: Dictionary = {}
+	for b4 in w.buildings:
+		if int(b4["kind"]) == Sim.B_CORE:
+			core_b = b4
+	check(not core_b.is_empty(), "核心建筑定位")
+	if not core_b.is_empty():
+		core_b["hp"] = int(core_b["hp"]) - 50
+		w.tick()
+		view.sync(w)
+	cmp_int(_cnt(view, "core_hit.mp3") - c9, 1, "核心受击 → 受击音 1 次")
+
+	# 胜负 → match_win / match_lose + 结算 BGM 切入
+	var c11: int = _cnt(view, "match_win.mp3")
+	w.outcome = World.WON
+	main._check_outcome()
+	cmp_int(_cnt(view, "match_win.mp3") - c11, 1, "胜局 → 胜利音 1 次")
+	check(String(view.bgm_player.stream.resource_path).ends_with("bgm_settlement.mp3"), "结算 BGM 切入")
+	check(view.bgm_on and view.bgm_player.playing, "结算 BGM 播放中")
+	var bmp := view.bgm_player.stream as AudioStreamMP3
+	check(bmp != null and bmp.loop, "结算 BGM 循环开")
+	var c12: int = _cnt(view, "match_lose.mp3")
+	main.over_shown = false
+	w.outcome = World.LOST
+	main._check_outcome()
+	cmp_int(_cnt(view, "match_lose.mp3") - c12, 1, "负局 → 失败音 1 次")
+
 	# 回标题 → BGM 停；环境音仍在（母版 main.lua L187）
 	main.to_title()
 	check(view.bgm_on == false and not view.bgm_player.playing, "to_title → BGM 停")
 	check(view.sfx_amb.playing, "回标题后环境音仍播")
 
-	finish("AUDIO", 25)
+	finish("AUDIO", 50)
 
 
 # ---------------- 扫描辅助 ----------------
@@ -186,6 +285,47 @@ func _find_ore_cover(view, world) -> Vector2i:
 					continue
 				if view.cover_nodes.has(x * 1000 + y):
 					return Vector2i(x, y)
+	return Vector2i(-1, -1)
+
+
+## 可填可挖的平地格（passable、无建筑、无单位、非英雄格、H_MIN < h < H_MAX）
+func _find_flat(world) -> Vector2i:
+	for y in 64:
+		for x in 64:
+			if not world.grid.passable(x, y):
+				continue
+			if world.building_at(x, y) != null:
+				continue
+			if not world.cell_vacant(x, y):
+				continue
+			var hr: Dictionary = world.hero
+			if x == int(hr["x"]) and y == int(hr["y"]):
+				continue
+			var hh: int = world.grid.get_h(x, y)
+			if hh <= Sim.H_MIN or hh >= Sim.H_MAX:
+				continue
+			return Vector2i(x, y)
+	return Vector2i(-1, -1)
+
+
+## 指定格邻域（半径 r）内的空格（塔火目标用）
+func _find_near(world, cx: int, cy: int, r: int) -> Vector2i:
+	for dy in range(-r, r + 1):
+		for dx in range(-r, r + 1):
+			var x := cx + dx
+			var y := cy + dy
+			if x < 0 or y < 0 or x >= 64 or y >= 64:
+				continue
+			if not world.grid.passable(x, y):
+				continue
+			if world.building_at(x, y) != null:
+				continue
+			if not world.cell_vacant(x, y):
+				continue
+			var hr: Dictionary = world.hero
+			if x == int(hr["x"]) and y == int(hr["y"]):
+				continue
+			return Vector2i(x, y)
 	return Vector2i(-1, -1)
 
 

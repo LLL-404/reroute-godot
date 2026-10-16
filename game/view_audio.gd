@@ -91,18 +91,28 @@ func play_sound(sname: String, gain: float = 0.8) -> void:
 
 ## 对局 BGM 开关（bgm_reroute.mp3，looped；曲子缺失静默）。
 func bgm(enabled: bool) -> void:
+	_bgm_play("bgm_reroute.mp3", enabled, 0.34)
+
+
+## 结算 BGM 开关（bgm_settlement.mp3，looped；终局接替对局 BGM，重开/回标题由 bgm() 覆盖）。
+func bgm_settlement(enabled: bool) -> void:
+	_bgm_play("bgm_settlement.mp3", enabled, 0.40)
+
+
+## BGM 通播：换曲 + 循环 + 音量；缺失静默；bgm_on 同步诊断态（探针断言用）。
+func _bgm_play(fname: String, enabled: bool, gain: float) -> void:
 	if bgm_player == null:
 		return
 	bgm_on = enabled
 	if enabled:
-		var s: AudioStream = _load_stream("bgm_reroute.mp3")
+		var s: AudioStream = _load_stream(fname)
 		if s == null:
 			return
 		var s_mp3 := s as AudioStreamMP3
 		if s_mp3 != null:
 			s_mp3.loop = true
 		bgm_player.stream = s
-		bgm_player.volume_db = linear_to_db(0.34)
+		bgm_player.volume_db = linear_to_db(gain)
 		if audio_on:
 			bgm_player.play()
 	else:

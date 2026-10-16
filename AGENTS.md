@@ -16,7 +16,7 @@ Engineering 保真度极高：模拟核心是**确定性**的，有 16 指纹黄
 | `game/` | 表现层，只读模拟：`main`(主循环/输入) / `view`(3D 门面) + 组件 `view_core`/`view_terrain`/`view_entities`/`view_audio`（D5-1 拆分 2026-10-15） / `models` / `blueprint` / `hud` / `screens`(五屏+确认弹窗) / `save_io`(槽位 I/O) / `user_settings`(音量/全屏) / `selfcheck` |
 | `tests/` | 单测 100 例 + **19 个验收探针**（`tests/probes/`，公共夹具 `probe_kit.gd`，D5-2 2026-10-15） |
 | `tools/` | Python 工具：`check_shots.py` / `convert_all.py` / `umd2_to_gltf.py` / `verify_glb.py` |
-| `assets/` | `audio/sfx`(19 mp3) / `fonts`(Noto Sans SC) / `models`(glb) |
+| `assets/` | `audio/sfx`(29 mp3) / `fonts`(Noto Sans SC) / `models`(glb) / `icon`(图标五件套) |
 | `docs/` | 开发方案（权威）、审计报告、`devlogs/` |
 | `shots/` | 验收截图产物（已 `exclude_filter` 排除出包） |
 | `logs/` | 闸的 stdout/exit 证据 |
@@ -158,7 +158,13 @@ python tools/check_shots.py    # 截图像素校验
   （**不写 ScreenTouch 分支**：`push_input` 旁路换算 / `parse_input_event` 走全链路，实测对拍逐字节一致）；
   `probe_touch` 29→39。安全区 = `hud.safe` + `set_safe_insets_override()`（probe_hud 63→69）；
   `probe_shots` 增 20:9/窄屏目视件；`check_shots.py` 25 项。负对照 ×3（nc-safe bad=5 /
-  nc-touch bad=4 / nc-pushinput bad=4）。证据 `logs/gates-20261016-d1/`；决策记录 = 方案 §11.9。
+  nc-touch   bad=4 / nc-pushinput bad=4）。证据 `logs/gates-20261016-d1/`；决策记录 = 方案 §11.9。
+- 制造积分素材（D1-7，2026-10-16）**已完成**：Maker 绑定 `D:\G\game\games\reroute-maker`
+  （App「改道」）；图标 icon2_core → `assets/icon/` 五件套（`config/icon` + Windows/Android
+  导出预设）；10 音效入库并接线（`view_entities`：波次号角换 `wave_horn`、建筑四路
+  [放塔/放墙帧内去重、拆除、塔开火=cooldown 回跳]、核心受击 30t 节流；`main._check_outcome`
+  结算链 + `bgm_settlement`）。`probe_audio` 38→56、`selfcheck` 29 mp3；负对照 bad=3；
+  全 21 闸绿（证据 `logs/gates-20261016-d17/`）；决策记录 = 方案 §11.10。
 - 历史审计报告（`docs/*-20261015.md`）按**快照原则保持原样**，不要顺着结构整理去改它们。
 
 ---

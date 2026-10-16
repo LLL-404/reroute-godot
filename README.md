@@ -59,7 +59,7 @@ P="D:/G/game/games/reroute-godot"
 | `sim/` | 模拟核心十模块：`lua64`(语义 shim) / `canon` / `rng` / `grid` / `flowfield` / `scenario` / `sim`(数值表) / `world` / `verify` / `golden_baseline`。纯逻辑、无渲染、无浮点 |
 | `game/` | 表现层：`main`(主循环/输入) / `view`(3D 门面；D5-1 拆分后 = 门面 + `view_core`/`view_terrain`/`view_entities`/`view_audio`) / `models`(资产) / `blueprint`(程序化地形) / `hud` / `screens` / `selfcheck` |
 | `tests/` | 单测套件 + 验收探针：`kit.gd`(记录式断言) + `run_tests.gd`(入口) + 7 模块用例 + `stub_scenario` 夹具；`tests/probes/` = 19 个验收探针，同时是全链路冒烟入口 |
-| `assets/` | 音频 19 个 mp3、中文字体、10 个 glb 模型 |
+| `assets/` | 音频 29 个 mp3、中文字体、10 个 glb 模型、图标套件 |
 | `tools/` | Python 工具：`check_shots.py`(截图像素校验) / `umd2_to_gltf.py` / `verify_glb.py` |
 | `docs/` | 开发方案（权威） |
 | `export_presets.cfg` | Windows Desktop 导出预设 |

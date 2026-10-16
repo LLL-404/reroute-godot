@@ -130,6 +130,11 @@ func bgm(enabled: bool) -> void:
 	audio.bgm(enabled)
 
 
+## 结算 BGM 开关（→ view_audio）
+func bgm_settlement(enabled: bool) -> void:
+	audio.bgm_settlement(enabled)
+
+
 ## 全停音频（→ view_audio）
 func stop_all_audio() -> void:
 	audio.stop_all_audio()

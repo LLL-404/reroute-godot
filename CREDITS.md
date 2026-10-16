@@ -76,7 +76,7 @@
 | `rubble_brown.glb` / `rubble_gray.glb` / `rubble_sand.glb` | 瓦砾堆三变体 | 同上 | 项目自有 | 无 |
 | `*_00_D.jpg` / `*_00_N.png`（8 组） | PBR 漫反射 / 法线贴图 | 同上 | 项目自有 | 无 |
 
-### 3.2 音频 `assets/audio/sfx/` —— 19 个 mp3
+### 3.2 音频 `assets/audio/sfx/` —— 29 个 mp3
 
 | 文件 | 内容 | 来源 | 许可 | 署名义务 |
 |---|---|---|---|---|
@@ -84,8 +84,10 @@
 | `zerg_death` / `zerg_hurt` / `zerg_step` / `zerg_worker_chitter` / `zerg_blade_attack` / `zerg_king_roar` | 虫族 6 条 | 自有 AI 云端音效生成 | 项目自有 | 无 |
 | `orc_death` / `orc_hurt` / `orc_step` / `orc_worker_effort` / `orc_warrior_attack` / `orc_chief_roar` | 兽人族 6 条 | 同上 | 项目自有 | 无 |
 | `gold_collect` / `mining_gold_hit` / `build_stone_place` / `room_door_open` / `room_fire_loop` / `dungeon_ambience` | 场景与环境 6 条 | 同上 | 项目自有 | 无 |
+| `wall_place` / `building_remove` / `terrain_fill` / `terrain_lower` / `wave_horn` / `core_hit` / `tower_shot` / `match_win` / `match_lose` | D1-7 补齐 9 条（放墙 / 拆除 / 填高 / 挖低 / 波次号角 / 核心受击 / 塔开火 / 胜负） | 自有 AI 云端音效生成（TapTap Maker 制造积分） | 项目自有 | 无 |
+| `bgm_settlement.mp3` | 结算 BGM（循环；D2-6 提前完成） | 自有 AI 云端音乐生成（TapTap Maker 制造积分） | 项目自有 | 无 |
 
-合计 19 条（1 BGM + 18 音效）。
+合计 29 条（2 BGM + 27 音效）。
 
 ### 3.3 字体 `assets/fonts/` —— 2 个文件
 
@@ -101,15 +103,29 @@ OFL 的「保留字体名称（Reserved Font Name）」条款。
 > 前身：`simhei.ttf`（中易黑体 SimHei，微软 Windows 系统字体）——**商业字体，授权面向系统内
 > 使用，不含随软件嵌入/再分发**。已于 2026-10-14 替换为 Noto Sans SC。详见 §四 R-1。
 
-### 3.4 截图 `shots/` —— 15 张
+### 3.4 截图 `shots/` —— 19 张
 
 自产运行截图（`game` / `heat` / `ghost` / `title` / `gameover` / `hud` / `asset_close` /
 `asset_game` / `model_blade_close` / `model_render` / `model_render_top` / `models_all` /
-`orient_cross` / `smoke_end` / `smoke_mid`）。来源：本机实跑。许可：项目自有。署名义务：无。
+`orient_cross` / `smoke_end` / `smoke_mid` / `slots` / `settings` / `game_20x9` /
+`game_narrow`）。来源：本机实跑。许可：项目自有。署名义务：无。
 
 > 数量更正：本文初版写 13 张，系照抄 `docs/DEVELOPMENT-PLAN.md` 而未实测。
 > `ls shots/*.png | wc -l` = **15**。已同步修正开发方案。教训即本文 §一 的口径——
-> 数量类陈述一律以实测为准。
+> 数量类陈述一律以实测为准。10-16 更新：UI 补全轮 +2（`slots`/`settings`）、
+> D1 轮 +2（`game_20x9`/`game_narrow`）→ 现 **19**。
+
+### 3.5 图标 `assets/icon/` —— 5 个文件
+
+| 文件 | 内容 | 来源 | 许可 | 署名义务 |
+|---|---|---|---|---|
+| `icon_master.png` | 主图 1024×1024（icon2_core 定稿） | 自有 AI 图像生成（TapTap Maker 制造积分） | 项目自有 | 无 |
+| `icon_192.png` | 512×512 导出（Android 主图标，Godot 缩放至 192） | 同上 | 项目自有 | 无 |
+| `adaptive_fg_432.png` / `adaptive_bg_432.png` | Android 自适应前/后景层 | 同上 | 项目自有 | 无 |
+| `icon.ico` | Windows exe 图标（多尺寸） | 同上 | 项目自有 | 无 |
+
+接线：`project.godot config/icon` + `export_presets.cfg`（Windows `icon`/`console_wrapper_icon`、
+Android `launcher_icons` 主图 + 自适应前后景）。D1-7 产。
 
 ---
 
@@ -166,7 +182,7 @@ OFL 的「保留字体名称（Reserved Font Name）」条款。
 - 后者结构见 `cashline/docs/AI-ASSETS.md`（五段式：AI 生成 / 程序生成 / AI 辅助编写 /
   纯人工 / 引擎与第三方），那份是**对外交付件**。
 - 两处**必须口径一致**，以 `assets/` 实测数字为准（本文件 §三 即实测值）：
-  - 音频 **19 条**（AI-ASSETS.md 文中写 18 条，需按实测口径修正）
+  - 音频 **29 条**（10-16 D1-7 后；AI-ASSETS.md 对外件需**同批**补登记：+10 音频 + 图标套件）
   - 模型 **10 个 glb**
   - AI-ASSETS.md §五 目前写「引擎：UrhoX」，**Godot 版必须改成 Godot 4.7.2 stable (mono)**
 - 本文件新增任何外部素材后，AI-ASSETS.md §五 要**同批**补一行。
@@ -192,3 +208,4 @@ OFL 的再分发义务就没履行（本文 §一 规则 2「登记 ≠ 履行�
 |---|---|
 | 2026-10-14 | 建档。登记现有素材三类（10 glb + 19 mp3 + 1 字体 + 13 截图），四源裁决表定稿，R-1（simhei.ttf 随包分发）列为阻塞项 |
 | 2026-10-14 | **R-1 已解决**：`simhei.ttf` → `NotoSansSC-Regular.otf`（OFL-1.1）；随包 `OFL.txt` + 新增 `THIRD-PARTY-NOTICES.txt` 并加入 `include_filter`；代码 2 处路径更新、selfcheck 断言强化为字形存在性；全闸回归通过，pck 内 simhei 残留 0 处。§二 修正：Fab/Sketchfab 等站**并非只有写实资源**，风格化/低模/卡通/体素包均大量存在，真实约束是风格一致性而非来源。新增 R-4（export_filter 过宽，待单独裁定） |
+| 2026-10-16 | D1-7 制造积分素材入库：+10 mp3（9 音效 + 结算 BGM，台账 19→29）+ 图标套件 `assets/icon/`（icon2_core 定稿，主图/192/自适应前后景/ico）。新增 §3.5；§3.2/§3.4 计数与 §五 口径同步；对外件 `cashline/docs/AI-ASSETS.md` 待同批补行 |
