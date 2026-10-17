@@ -51,7 +51,7 @@ func init(callbacks: Dictionary, hud_ref) -> void:
 	host.name = "ScreenHost"
 	host.set_anchors_preset(Control.PRESET_FULL_RECT)
 	host.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	host.theme = hud.theme
+	host.theme = UiStyle.build_theme(C, S)
 	add_child(host)
 	_build_confirm()
 
@@ -194,7 +194,7 @@ func _build_confirm() -> void:
 	confirm_layer.add_child(center)
 	var card := PanelContainer.new()
 	card.custom_minimum_size = Vector2(300.0 * S, 0)
-	card.add_theme_stylebox_override("panel", _flat(C["card"], C["gold_lo"], 2, 1))
+	card.theme_type_variation = UiStyle.CARD_VAR
 	center.add_child(card)
 	var margin := MarginContainer.new()
 	for side in ["left", "right", "top", "bottom"]:
@@ -248,8 +248,7 @@ func _serif_title(text: String, fs: float, color: Color, gap: float = 12.0) -> H
 ## 卡片内金标题条（文明 6 式：暗底 + 衬线金字 + 底缘金线）。
 func _title_bar(label: Label, bar_h: float = 38.0) -> Panel:
 	var p := Panel.new()
-	var sb := _flat(UiStyle.TITLE_BAR_BG, C["gold_lo"], 2, 1)
-	p.add_theme_stylebox_override("panel", sb)
+	p.theme_type_variation = UiStyle.TITLEBAR_VAR
 	p.custom_minimum_size = Vector2(0, bar_h * S)
 	label.set_anchors_preset(Control.PRESET_FULL_RECT)
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -276,19 +275,13 @@ func _button(text: String, primary: bool, w: float, h: float, fs: float, fn: Cal
 	b.focus_mode = Control.FOCUS_NONE
 	b.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	b.add_theme_font_size_override("font_size", int(fs))
-	var st := UiStyle.button_states(C, primary) # 四态+字色全由工厂派生（主/次钮语义在工厂）
-	b.add_theme_color_override("font_color", st["font_color"])
-	b.add_theme_color_override("font_hover_color", st["font_hover_color"])
-	b.add_theme_color_override("font_pressed_color", st["font_pressed_color"])
-	b.add_theme_color_override("font_disabled_color", st["font_disabled_color"])
-	b.add_theme_stylebox_override("normal", st["normal"])
-	b.add_theme_stylebox_override("hover", st["hover"])
-	b.add_theme_stylebox_override("pressed", st["pressed"])
-	b.add_theme_stylebox_override("disabled", st["disabled"])
-	if pad_left >= 0.0:
-		st["normal"].content_margin_left = pad_left
-		st["hover"].content_margin_left = pad_left
-		st["pressed"].content_margin_left = pad_left
+	# 发射器 a：字色/四态样式盒全走主题变体（UiStyle.build_theme），不再逐钮 override
+	b.theme_type_variation = UiStyle.BTN_PRIMARY_VAR if primary else UiStyle.BTN_MENU_VAR
+	if pad_left >= 0.0: # 逐实例左距：复制共享样式盒成专用副本（避免污染主题）
+		for k in ["normal", "hover", "pressed"]:
+			var sb: StyleBoxFlat = UiStyle.get_theme().get_stylebox(k, b.theme_type_variation).duplicate()
+			sb.content_margin_left = pad_left
+			b.add_theme_stylebox_override(k, sb)
 	b.pressed.connect(fn)
 	return b
 
@@ -307,9 +300,7 @@ func _page_base(veil: Color) -> Control:
 
 ## 滑杆金化：暗槽 + 古金边 + 已过段亮金（grabber 图标走默认主题，不引贴图）。
 func _style_slider(s: HSlider) -> void:
-	s.add_theme_stylebox_override("slider", _flat(C["track"], C["gold_lo"], 2, 1))
-	s.add_theme_stylebox_override("grabber_area", _flat(C["gold"], Color(0, 0, 0, 0), 2, 0))
-	s.add_theme_stylebox_override("grabber_area_highlight", _flat(C["gold_hi"], Color(0, 0, 0, 0), 2, 0))
+	s.theme_type_variation = UiStyle.SLIDER_VAR
 
 
 func _build_title() -> Control:
@@ -398,7 +389,7 @@ func _build_title() -> Control:
 	tips_panel.custom_minimum_size = Vector2(340.0 * S, 0)
 	tips_panel.visible = false
 	tips_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	tips_panel.add_theme_stylebox_override("panel", _flat(C["card"], C["gold_lo"], 2, 1))
+	tips_panel.theme_type_variation = UiStyle.CARD_VAR
 	var margin := MarginContainer.new()
 	for side in ["left", "right", "top", "bottom"]:
 		margin.add_theme_constant_override("margin_" + side, int(16 * S))
@@ -445,7 +436,7 @@ func _build_pause() -> Control:
 	page.add_child(center)
 	var pcard := PanelContainer.new()
 	pcard.custom_minimum_size = Vector2(320.0 * S, 0)
-	pcard.add_theme_stylebox_override("panel", _flat(C["card"], C["gold_lo"], 2, 1))
+	pcard.theme_type_variation = UiStyle.CARD_VAR
 	center.add_child(pcard)
 	var margin := MarginContainer.new()
 	for side in ["left", "right", "top", "bottom"]:
@@ -489,7 +480,7 @@ func _build_gameover() -> Control:
 	page.add_child(center)
 	var pcard := PanelContainer.new()
 	pcard.custom_minimum_size = Vector2(400.0 * S, 0)
-	pcard.add_theme_stylebox_override("panel", _flat(C["card"], C["gold_lo"], 2, 1))
+	pcard.theme_type_variation = UiStyle.CARD_VAR
 	center.add_child(pcard)
 	var margin := MarginContainer.new()
 	for side in ["left", "right", "top", "bottom"]:
@@ -527,7 +518,7 @@ func _build_slots() -> Control:
 	page.add_child(center)
 	var pcard := PanelContainer.new()
 	pcard.custom_minimum_size = Vector2(440.0 * S, 0)
-	pcard.add_theme_stylebox_override("panel", _flat(C["card"], C["gold_lo"], 2, 1))
+	pcard.theme_type_variation = UiStyle.CARD_VAR
 	center.add_child(pcard)
 	var margin := MarginContainer.new()
 	for side in ["left", "right", "top", "bottom"]:
@@ -573,7 +564,7 @@ func _build_settings() -> Control:
 	page.add_child(center)
 	var pcard := PanelContainer.new()
 	pcard.custom_minimum_size = Vector2(440.0 * S, 0)
-	pcard.add_theme_stylebox_override("panel", _flat(C["card"], C["gold_lo"], 2, 1))
+	pcard.theme_type_variation = UiStyle.CARD_VAR
 	center.add_child(pcard)
 	var margin := MarginContainer.new()
 	for side in ["left", "right", "top", "bottom"]:

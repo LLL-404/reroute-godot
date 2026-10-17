@@ -16,6 +16,61 @@ const TITLE_VEIL_TOP := Color8(10, 9, 6, 0)     # 标题页幕布渐变（顶→
 const TITLE_VEIL_MID := Color8(10, 9, 6, 107)
 const TITLE_VEIL_BOTTOM := Color8(10, 9, 6, 240)
 
+# —— 发射器 a：type variations 名（screens 面：按钮/卡片/标题条/滑杆只写名字接入主题） ——
+const BTN_PRIMARY_VAR := "PrimaryButton"   # 主钮：金底深字 + 底缘 3px 暗金压边
+const BTN_MENU_VAR := "MenuButton"         # 次钮/菜单钮：深底金细边 + hover 亮金字
+const CARD_VAR := "DarkCard"               # 菜单卡片面板
+const TITLEBAR_VAR := "TitleBar"           # 卡内衬线标题条
+const SLIDER_VAR := "GoldSlider"           # HSlider 三件套（暗槽/亮金已过段）
+
+const NO_BORDER := Color(0, 0, 0, 0)
+const FONT_PATH := "res://assets/fonts/NotoSansSC-Regular.otf"
+
+static var _theme: Theme = null  # 按 S 缓存的共享主题（hud 与 shell 同源单实例）
+static var _theme_s := -1.0
+static var _font: FontFile = null
+
+
+## 共享主题实例访问器（供逐实例改动前 duplicate 样式盒：UiStyle.get_theme().get_stylebox(...)）。
+static func get_theme() -> Theme:
+	return _theme
+
+
+## 运行时主题（发射器 a）：默认字体 + 变体样式。S 变化时重建（窗口 resize 由调用方重入）。
+## 注意：返回共享实例——逐实例改动（如 pad_left）必须 duplicate 样式盒后走 override。
+static func build_theme(C: Dictionary, S: float) -> Theme:
+	if _theme != null and is_equal_approx(_theme_s, S):
+		return _theme
+	var t := Theme.new()
+	if _font == null:
+		_font = load(FONT_PATH)
+	t.default_font = _font
+	t.default_font_size = int(11 * S)
+	# 按钮：主/次两组变体（样式盒 + 全部字色由 button_states 派生，与 hud 探针面同参数）
+	for pair in [[BTN_PRIMARY_VAR, true], [BTN_MENU_VAR, false]]:
+		var varname: String = pair[0]
+		var st := button_states(C, pair[1])
+		t.set_type_variation(varname, "Button")
+		for k in ["normal", "hover", "pressed", "disabled"]:
+			t.set_stylebox(k, varname, st[k])
+		t.set_color("font_color", varname, st["font_color"])
+		t.set_color("font_hover_color", varname, st["font_hover_color"])
+		t.set_color("font_pressed_color", varname, st["font_pressed_color"])
+		t.set_color("font_disabled_color", varname, st["font_disabled_color"])
+	# 卡片 / 标题条 / 滑杆
+	t.set_type_variation(CARD_VAR, "Panel")
+	t.set_stylebox("panel", CARD_VAR, flat(C["card"], C["gold_lo"], 2, 1))
+	t.set_type_variation(TITLEBAR_VAR, "Panel")
+	t.set_stylebox("panel", TITLEBAR_VAR, flat(TITLE_BAR_BG, C["gold_lo"], 2, 1))
+	t.set_type_variation(SLIDER_VAR, "HSlider")
+	t.set_stylebox("slider", SLIDER_VAR, flat(C["track"], C["gold_lo"], 2, 1))
+	t.set_stylebox("grabber_area", SLIDER_VAR, flat(C["gold"], NO_BORDER, 2, 0))
+	t.set_stylebox("grabber_area_highlight", SLIDER_VAR, flat(C["gold_hi"], NO_BORDER, 2, 0))
+	_theme = t
+	_theme_s = S
+	return t
+
+
 
 ## 基础 StyleBoxFlat：纯色 + 边框 + 圆角（沿用 v2.1 口径）。
 static func flat(bg: Color, border: Color, radius: int, border_w: int = 1) -> StyleBoxFlat:
