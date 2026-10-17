@@ -5,6 +5,8 @@ extends CanvasLayer
 # 确定性状态机：不用 Tween——_process(dt) 累加 t，一切 alpha/位置/转速/光强由 t 解析求值，
 # skip 只改推进速率；probe_intro 可 set_process(false) 后手动喂固定 dt 精确断言相位。
 # 硬上限 DUR_MAX=4.0（用户口径：动画 4 秒以内）；本设计终值 DUR=3.4s。
+# 性能口径（2026-10-17 提速）：① 主世界停画（第 1 帧暖机后隐藏，T_P3 恢复）；
+# ② 子视口 0.7× 降分辨率拉伸；③ 首拍预热一帧（材质/泛光管线编译藏进黑场）。
 
 const ModelsScript = preload("res://game/models.gd")
 const UiStyle = preload("res://game/ui_style.gd")
@@ -20,6 +22,7 @@ const DUR := 3.4
 const DUR_MAX := 4.0
 const SKIP_FAST := 25.0 # skip 后时间快进倍率（剩余淡出 <0.2s 压完）
 const UI_FADE := 0.6 # P4 整体淡出时长（解析引用 DUR-T_P4，勿改两者不一致）
+const SUB_SCALE := 0.7 # 子视口渲染分辨率倍率（软画场景：晶体/泛光/金尘；3D pass 像素省 ~51%）
 
 const COL_JADE := Color8(96, 255, 208)
 const COL_GOLD_HI := Color8(224, 198, 140)
@@ -46,6 +49,10 @@ var _old_mouse: int = -1
 var _vp_w := 1280
 var _vp_h := 720
 var _dark: Dictionary = {} # 色板（外部注入 hud.DARK；缺 key 回退内置默认）
+var _world: Node3D = null # 主世界 3D 挂点（main.view；探针直挂 root 时为 null → 停画逻辑跳过）
+var _world_hidden := false # 当前是否处于主世界停画窗口
+var _prewarmed := false # 首拍预热帧已下发
+var _ticks := 0 # _process 拍数（第 2 拍起停画主世界）
 
 
 func _init() -> void:
@@ -60,6 +67,14 @@ func begin(sfx_cb: Callable = Callable(), dark: Dictionary = {}) -> void:
 		_vp_w = int(vw.x)
 		_vp_h = int(vw.y)
 
+	# 主世界 3D 挂点：main.view（Node3D）。停画不在 begin 立即做——第 1 帧留给它把
+	# 材质/阴影管线编译进启动帧（口径如旧），第 2 拍起隐藏（_process）。
+	var hp := get_parent()
+	if hp != null:
+		var w = hp.get("view")
+		if w is Node3D:
+			_world = w
+
 	_root = Control.new()
 	_root.name = "IntroRoot"
 	_root.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -70,6 +85,8 @@ func begin(sfx_cb: Callable = Callable(), dark: Dictionary = {}) -> void:
 	_tex = TextureRect.new()
 	_tex.name = "IntroTex"
 	_tex.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_tex.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_tex.stretch_mode = TextureRect.STRETCH_SCALE # 子视口 0.7× 拉伸回全屏（默认线性过滤）
 	_tex.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_root.add_child(_tex)
 
@@ -83,8 +100,8 @@ func begin(sfx_cb: Callable = Callable(), dark: Dictionary = {}) -> void:
 	_sub = SubViewport.new()
 	_sub.name = "IntroWorld"
 	_sub.own_world_3d = true
-	_sub.size = Vector2i(_vp_w, _vp_h)
-	_sub.render_target_update_mode = SubViewport.UPDATE_DISABLED # P0 不渲染（省一次全屏）
+	_sub.size = Vector2i(maxi(1, int(float(_vp_w) * SUB_SCALE)), maxi(1, int(float(_vp_h) * SUB_SCALE)))
+	_sub.render_target_update_mode = SubViewport.UPDATE_DISABLED # 首拍 _process 预热一帧后回关，P1 起常开
 	_sub.handle_input_locally = false
 	_root.add_child(_sub)
 	_build_3d()
@@ -332,11 +349,23 @@ func _out_alpha() -> float:
 func _process(dt: float) -> void:
 	if done:
 		return
+	_ticks += 1
+	var step := minf(dt, 0.1) # 钳制长停滞（首帧管线编译/系统卡顿）：相位不跳拍
 	if skipping:
-		t += dt * SKIP_FAST # 快进：剩余淡出按 25× 速率压缩
+		t += step * SKIP_FAST # 快进：剩余淡出按 25× 速率压缩
 	else:
-		t += dt
+		t += step
 	t = minf(t, DUR_MAX)
+
+	# 主世界停画窗口：第 2 拍起隐藏（第 1 帧留它暖机，编译进启动帧），T_P3 恢复——
+	# 恢复后的首帧重绘/阴影全部盖在开屏底下，P4 揭示时已是熟帧。探针直挂时 _world=null 全跳过。
+	if _world != null:
+		if _ticks == 2: # 单次触发：第 1 帧暖机后隐藏，避免恢复后再次命中
+			_world.visible = false
+			_world_hidden = true
+		elif _world_hidden and t >= T_P3:
+			_world.visible = true
+			_world_hidden = false
 
 	# 字/线/标语的几何按 t 解析；skip 时 out 直接压到 0，视觉瞬时收尾
 	var out := _out_alpha()
@@ -370,9 +399,15 @@ func _process(dt: float) -> void:
 			b = 1.0 - clampf((t - T_P1) / (T_P3 - T_P1), 0.0, 1.0)
 		_black.color.a = minf(b, out)
 
-	# 3D：渲染开关/光强/转速/推近（P1 起）
+	# 3D：预热/渲染开关/光强/转速/推近（P1 起）
 	if _sub != null:
-		_sub.render_target_update_mode = SubViewport.UPDATE_ALWAYS if t >= T_P1 else SubViewport.UPDATE_DISABLED
+		if t >= T_P1:
+			_sub.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+		elif not _prewarmed:
+			_prewarmed = true # 首拍预热一帧（黑幕盖着）：晶体材质/泛光管线在 P1 前编译完
+			_sub.render_target_update_mode = SubViewport.UPDATE_ONCE
+		else:
+			_sub.render_target_update_mode = SubViewport.UPDATE_DISABLED
 	if t >= T_P1:
 		var k := clampf((t - T_P1) / (T_P3 - T_P1), 0.0, 1.0) # 浮现进度
 		(_sub.get_meta("key") as DirectionalLight3D).light_energy = 0.8 * k
@@ -406,6 +441,9 @@ func _exit_tree() -> void:
 	if _old_mouse >= 0:
 		Input.mouse_mode = _old_mouse
 	_old_mouse = -1
+	# 安全网：任何路径退出（跳过收尾/外部强杀）都必须恢复主世界渲染
+	if _world != null and is_instance_valid(_world) and not _world.visible:
+		_world.visible = true
 
 
 ## 输入总吞：任意按键/点击/触摸 → 触发跳过；鼠标移动不触发。

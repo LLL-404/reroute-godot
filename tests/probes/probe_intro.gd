@@ -1,6 +1,7 @@
 extends ProbeKit
 
-## 开屏动画探针（窗口模式）：门控（探针模式零出现）+ intro 状态机（确定性相位/吞输入/跳过/自毁）。
+## 开屏动画探针（窗口模式）：门控（探针模式零出现）+ intro 状态机（确定性相位/吞输入/跳过/自毁）
+## + 性能口径（首拍预热帧 / 主世界停画与恢复 / 隐藏态退出安全网）。
 ## 判定：exit 0 + stdout 含 `[INTRO] PASS`。跑法：godot --path <P> -s res://tests/probes/probe_intro.gd
 
 const IntroScript = preload("res://game/intro.gd")
@@ -89,8 +90,50 @@ func _initialize() -> void:
 	var gone2 := not is_instance_valid(intro2)
 	check(gone2, "无输入 t>DUR 自动自毁")
 
+	# ---- E. 预热帧语义：首拍 UPDATE_ONCE（黑幕盖着编译），次拍回关 ----
+	var intro3 = IntroScript.new()
+	get_root().add_child(intro3)
+	intro3.set_process(false)
+	intro3.begin(Callable(), {})
+	check(intro3._sub.render_target_update_mode == SubViewport.UPDATE_DISABLED, "预热前：P0 关")
+	intro3._process(1.0 / 60.0)
+	check(intro3._sub.render_target_update_mode == SubViewport.UPDATE_ONCE, "首拍：预热一帧")
+	intro3._process(1.0 / 60.0)
+	check(intro3._sub.render_target_update_mode == SubViewport.UPDATE_DISABLED, "预热后：回关")
+	intro3.free()
+
+	# ---- F. 主世界停画：第 1 拍可见（暖机帧）→ 第 2 拍隐藏 → 安全网/T_P3 恢复 ----
+	var main2: Node = load("res://game/main.tscn").instantiate()
+	get_root().add_child(main2)
+	for _i in 5:
+		await process_frame
+	main2.set_process(false)
+	var intro4 = IntroScript.new()
+	main2.add_child(intro4)
+	intro4.set_process(false)
+	intro4.begin(Callable(), {})
+	check(intro4._world == main2.view, "挂到主世界 3D 根（main.view）")
+	intro4._process(1.0 / 60.0)
+	check(main2.view.visible, "第 1 拍主世界仍可见（暖机帧）")
+	intro4._process(1.0 / 60.0)
+	check(not main2.view.visible, "第 2 拍起主世界停画")
+	intro4.free()
+	check(main2.view.visible, "隐藏态退出→安全网恢复世界")
+	var intro5 = IntroScript.new()
+	main2.add_child(intro5)
+	intro5.set_process(false)
+	intro5.begin(Callable(), {})
+	intro5._process(1.0 / 60.0)
+	intro5._process(1.0 / 60.0)
+	check(not main2.view.visible, "二次实例第 2 拍同样停画")
+	await _drive(intro5, 2.6) # t≈2.63 ≥ T_P3
+	check(intro5.phase() == 3, "推进到 P3")
+	check(main2.view.visible, "T_P3 主世界恢复渲染")
+	intro5.free()
+	main2.free()
+
 	# ---- 汇总 ----
-	finish("INTRO", 20, "")
+	finish("INTRO", 36, "")
 
 
 ## 手动推进 dt（确定性）：固定 60Hz 喂 _process，不依赖真实帧时。

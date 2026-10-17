@@ -259,6 +259,11 @@ python tools/check_shots.py    # 截图像素校验
   主循环三类自动跳过（探针零影响）；stinger mp3 29→30 mp3；boot_splash 灭默认 Logo。
   新 `probe_intro`(26) + 负对照（关输入吞 bad=3 FAIL）→ **全 22 闸** + check_shots 25/0 +
   lint 全绿。证据 `logs/gates-20261017-intro/`；决策记录 = 方案 §11.24。
+  **性能提速轮（10-17 晚，用户反馈开屏不流畅/风扇狂转）**：主世界停画（第 1 帧暖机→
+  第 2 拍隐藏→T_P3 恢复，退出安全网）+ 子视口 0.7× 拉伸 + 首拍预热帧（编译藏进黑幕）
+  + dt 钳 0.1——开屏 p99 8.5→5.2ms、P0.5 绘制 52→30、vmem 247→227MB；probe_intro
+  26→36（探针咬出「恢复后重复命中隐藏分支」真 bug 已修）；全 22 闸复验绿，证据
+  `logs/gates-20261017-intro-perf/`。残留：标题 idle 240fps 满速（全局限帧另行拍板）。
 
 ---
 

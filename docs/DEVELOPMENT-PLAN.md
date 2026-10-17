@@ -2148,14 +2148,28 @@ ui-lint PASS；19 张受击截图终版重出。
 - **启动屏**：`project.godot` + `boot_splash/bg_color` 深黑 + `show_image=false`
   （灭 Godot 默认 Logo，冷启动全程无外牌）。
 
-**闸**：新 `probe_intro`(26 checks) → **全 22 闸**（单测 104/0 + headless 8 + 窗口 13 +
+**闸**：新 `probe_intro`（性能轮后 36 checks） → **全 22 闸**（单测 104/0 + headless 8 + 窗口 13 +
 check_shots 25/0）+ check_ui_lint 3/0 全绿；负对照 = 关输入吞实跑 bad=3 FAIL 复原（证据
 `logs/gates-20261017-intro/`），闸清单 AGENTS 同步 20→21 探针 / 12→13 窗口。
 **目视**：probe P2/P3 + 真实播放三帧（0.9 黑暗浮现 / 2.0 亮起金字渐入 / 3.1 淡出透出标题）复核过。
 
+**性能提速（2026-10-17 晚，用户反馈「开屏整段不流畅/风扇狂转」）**：实测 = 显示器 240Hz
+vsync 满速渲染（开屏与标题 idle 均 240fps）+ 开屏双份全屏 3D（主世界含阴影/雾照渲）+ P1
+首帧编译尖峰（p99 8.48ms / max 23.6ms）。三改：① **主世界停画**——第 1 帧留 `main.view`
+暖机（编译进启动帧，口径如旧），第 2 拍起隐藏、T_P3 恢复（重绘/阴影首帧全盖在开屏下，
+P4 揭示已是熟帧），`_exit_tree` 安全网兜底任意路径退出；② 子视口 `SUB_SCALE=0.7` 降分辨率
++ TextureRect 拉伸（软画场景肉眼无差，探针 P2/P3 与旧证据逐帧比对无回归）；③ **首拍预热帧**
+（`UPDATE_ONCE` 把晶体材质/泛光管线编译藏进黑幕，P1 前回关）+ dt 钳 `minf(dt, 0.1)` 防长
+停滞跳拍。实测（编辑器 debug 同机同场景 before/after）：开屏 p99 8.48→5.17ms、P0.5 绘制
+调用 52→30、vmem 247→227MB、idle 不变（未动标题基线）。`probe_intro` 26→36 checks
+（+预热/停画/恢复/安全网断言；**探针咬出「恢复后 `_ticks>=2` 重复命中隐藏分支」真 bug**）。
+**残留决策**：标题 idle 仍 240fps 满速（全局限帧属产品口径，另行拍板）。证据
+`logs/gates-20261017-intro-perf/`（before/after 帧时 + e2e 四帧 + 全闸 outs）。
+
 **坑档（复用价值）**：① Sprite3D 径向渐变纹理 alpha 不按预期衰减（渐变机渲染口径），
 运行时烘焙 Image 径向 α² 是稳解；② `Image.create` 4 参宽高 mipmap 格式，勿带第 5 参；
-③ SubViewport 置 `UPDATE_DISABLED` 至 P1 省一次全屏渲染（P1 起 `UPDATE_ALWAYS`）。
+③ SubViewport 渲染开关三段式：首拍 `UPDATE_ONCE` 预热帧（黑幕内编译）→ `DISABLED` 直到
+P1 → `UPDATE_ALWAYS`（初版为「P0 全关」，性能轮改口：**编译尖峰才是卡顿源，预热比省帧重要**）。
 
 ---
 
