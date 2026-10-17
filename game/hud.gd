@@ -28,21 +28,31 @@ const FLOAT_LIFE := 18 # 0.9s（tick）
 const FLOAT_RISE := 1.4 # 每 tick 上浮像素
 const BANNER_LIFE := 40 # 横幅驻留 2s（tick）
 
-# 暗色板（Style.dark 迁移，数值同母版）
+# 帝王金黑色板（v2.1 改版，docs/UI-REDESIGN-20261017.md §2）：
+# 旧暗蓝板（Style.dark 迁移）换文明 6 式暖金调；key 全保留（探针按 key 动态取值），
+# 新增 gold 系 token 供壳层（screens.gd）与本地样式共用。
 var DARK := {
-	"bar": Color8(15, 19, 29, 216),
-	"card": Color8(18, 23, 34, 244),
-	"text": Color8(235, 239, 247, 255),
-	"muted": Color8(148, 158, 176, 255),
-	"hp": Color8(82, 200, 160, 255),
-	"supply": Color8(232, 178, 84, 255),
-	"danger": Color8(232, 96, 84, 255),
-	"border": Color8(62, 70, 88, 255),
-	"active": Color8(85, 105, 232, 255),
-	"active_border": Color8(130, 148, 240, 255),
-	"btn": Color8(30, 36, 50, 230),
-	"btn_hover": Color8(44, 52, 72, 230),
-	"btn_pressed": Color8(56, 66, 92, 230),
+	"bar": Color8(18, 16, 9, 224),
+	"card": Color8(20, 15, 8, 232),
+	"text": Color8(242, 232, 216, 255),
+	"muted": Color8(176, 164, 132, 255),
+	"hp": Color8(64, 200, 176, 255),
+	"supply": Color8(200, 168, 108, 255),
+	"danger": Color8(228, 92, 72, 255),
+	"border": Color8(150, 120, 76, 255),
+	"active": Color8(200, 168, 108, 255),
+	"active_border": Color8(224, 198, 140, 255),
+	"btn": Color8(24, 18, 10, 220),
+	"btn_hover": Color8(36, 27, 16, 236),
+	"btn_pressed": Color8(15, 11, 6, 250),
+	"gold": Color8(200, 168, 108, 255),
+	"gold_hi": Color8(224, 198, 140, 255),
+	"gold_lo": Color8(96, 76, 44, 255),
+	"edge_hi": Color8(224, 198, 140, 46),
+	"shadow": Color8(0, 0, 0, 80),
+	"track": Color8(10, 8, 5, 220),
+	"warn": Color8(180, 96, 44, 255),
+	"on_gold": Color8(43, 32, 16, 255),
 }
 
 var callbacks: Dictionary = {}
@@ -145,16 +155,16 @@ func _style_button(b: Button, w: float, h: float, fs: float) -> void:
 	b.focus_mode = Control.FOCUS_NONE
 	b.add_theme_font_size_override("font_size", int(fs))
 	b.add_theme_color_override("font_color", DARK["text"])
-	b.add_theme_color_override("font_hover_color", DARK["text"])
+	b.add_theme_color_override("font_hover_color", DARK["gold_hi"])
 	b.add_theme_color_override("font_pressed_color", DARK["text"])
 	b.add_theme_color_override("font_disabled_color", DARK["muted"])
-	var sb_n := _flat(DARK["btn"], DARK["border"], 9)
-	var sb_h := _flat(DARK["btn_hover"], DARK["border"], 9)
-	var sb_p := _flat(DARK["btn_pressed"], DARK["border"], 9)
+	var sb_n := _flat(DARK["btn"], DARK["border"], 2)
+	var sb_h := _flat(DARK["btn_hover"], DARK["active_border"], 2)
+	var sb_p := _flat(DARK["btn_pressed"], DARK["gold_lo"], 2)
 	b.add_theme_stylebox_override("normal", sb_n)
 	b.add_theme_stylebox_override("hover", sb_h)
 	b.add_theme_stylebox_override("pressed", sb_p)
-	b.add_theme_stylebox_override("disabled", _flat(DARK["btn"], DARK["border"], 9))
+	b.add_theme_stylebox_override("disabled", _flat(DARK["btn"], DARK["border"], 2))
 	b.set_meta("sb_normal", sb_n)
 
 
@@ -170,7 +180,10 @@ func _make_label(text: String, fs: float, color: Color) -> Label:
 func _build_top_bar() -> void:
 	top_bar = Panel.new()
 	top_bar.mouse_filter = Control.MOUSE_FILTER_STOP
-	top_bar.add_theme_stylebox_override("panel", _flat(DARK["bar"], Color(0, 0, 0, 0), 0, 0))
+	var sb_bar := _flat(DARK["bar"], DARK["gold_lo"], 0, 1)
+	sb_bar.set_border_width_all(0)
+	sb_bar.border_width_bottom = 1 # 底缘 1px 古金线（文明 6 式分组界）
+	top_bar.add_theme_stylebox_override("panel", sb_bar)
 	add_child(top_bar)
 	_toplevel.append(top_bar)
 
@@ -188,8 +201,20 @@ func _build_top_bar() -> void:
 	hp_bar.value = float(CORE_HP)
 	hp_bar.show_percentage = false
 	hp_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	hp_bar.add_theme_stylebox_override("background", _flat(Color(0, 0, 0, 90), Color(0, 0, 0, 0), 5, 0))
-	hp_bar.add_theme_stylebox_override("fill", _flat(DARK["hp"], Color(0, 0, 0, 0), 5, 0))
+	hp_bar.add_theme_stylebox_override("background", _flat(DARK["track"], DARK["gold_lo"], 2, 1))
+	hp_bar.add_theme_stylebox_override("fill", _flat(DARK["hp"], Color(0, 0, 0, 0), 2, 0))
+	# 25/50/75% 三道刻度线（纯装饰，随条缩放）
+	for frac in [0.25, 0.5, 0.75]:
+		var tick := ColorRect.new()
+		tick.color = Color8(0, 0, 0, 110)
+		tick.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		tick.anchor_left = frac
+		tick.anchor_right = frac
+		tick.anchor_top = 0.0
+		tick.anchor_bottom = 1.0
+		tick.offset_left = 0.0
+		tick.offset_right = 1.0
+		hp_bar.add_child(tick)
 	top_bar.add_child(hp_bar)
 
 	hp_text = _make_label("%d/%d" % [CORE_HP, CORE_HP], 11.0 * S, DARK["text"])
@@ -229,7 +254,7 @@ func _build_top_bar() -> void:
 func _build_hint() -> void:
 	hint_panel = PanelContainer.new()
 	hint_panel.mouse_filter = Control.MOUSE_FILTER_STOP
-	hint_panel.add_theme_stylebox_override("panel", _flat(Color8(16, 18, 24, 200), Color(0, 0, 0, 0), 8, 0))
+	hint_panel.add_theme_stylebox_override("panel", _flat(DARK["card"], DARK["gold_lo"], 2, 1))
 	var margin := MarginContainer.new()
 	margin.add_theme_constant_override("margin_left", int(8 * S))
 	margin.add_theme_constant_override("margin_right", int(8 * S))
@@ -277,15 +302,17 @@ func _build_banner() -> void:
 
 	banner_card = PanelContainer.new()
 	banner_card.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	banner_card.add_theme_stylebox_override("panel", _flat(DARK["card"], DARK["active_border"], 12))
+	var sb_ban := _flat(DARK["card"], DARK["gold_lo"], 2, 1)
+	sb_ban.border_width_left = 4 # 左侧 4px 金条强调（v2.1 组件规格）
+	banner_card.add_theme_stylebox_override("panel", sb_ban)
 	var margin := MarginContainer.new()
 	margin.add_theme_constant_override("margin_left", int(14 * S))
 	margin.add_theme_constant_override("margin_right", int(14 * S))
-	margin.add_theme_constant_override("margin_top", int(14 * S))
-	margin.add_theme_constant_override("margin_bottom", int(14 * S))
+	margin.add_theme_constant_override("margin_top", int(12 * S))
+	margin.add_theme_constant_override("margin_bottom", int(12 * S))
 	var col := VBoxContainer.new()
 	col.add_theme_constant_override("separation", int(4 * S))
-	banner_title = _make_label("", 17.0 * S, DARK["text"])
+	banner_title = _make_label("", 20.0 * S, DARK["gold_hi"])
 	banner_sub = _make_label("", 11.0 * S, DARK["muted"])
 	col.add_child(banner_title)
 	col.add_child(banner_sub)
@@ -297,7 +324,7 @@ func _build_banner() -> void:
 func _build_floats() -> void:
 	floats = []
 	for _i in FLOAT_N:
-		var el := _make_label("", 13.0 * S, DARK["supply"])
+		var el := _make_label("", 13.0 * S, DARK["gold_hi"])
 		el.visible = false
 		add_child(el)
 		floats.append({ "el": el, "active": false, "sx": 0.0, "sy": 0.0, "born": 0 })
@@ -432,9 +459,14 @@ func set_mode(m: String) -> void:
 	mode = m
 	for key in mode_buttons:
 		var btn: Button = mode_buttons[key]
+		var on: bool = key == m
 		var sb: StyleBoxFlat = btn.get_meta("sb_normal")
-		sb.bg_color = DARK["active"] if key == m else DARK["btn"]
-		sb.border_color = DARK["active_border"] if key == m else DARK["border"]
+		sb.bg_color = DARK["active"] if on else DARK["btn"]
+		sb.border_color = DARK["active_border"] if on else DARK["border"]
+		var fc: Color = DARK["on_gold"] if on else DARK["text"]
+		btn.add_theme_color_override("font_color", fc)
+		btn.add_theme_color_override("font_hover_color", fc)
+		btn.add_theme_color_override("font_pressed_color", fc)
 
 
 ## 热层钮点亮态（TAB / 按钮两种入口共用）。
@@ -442,6 +474,10 @@ func set_heat_vis(on: bool) -> void:
 	var sb: StyleBoxFlat = heat_btn.get_meta("sb_normal")
 	sb.bg_color = DARK["active"] if on else DARK["btn"]
 	sb.border_color = DARK["active_border"] if on else DARK["border"]
+	var fc: Color = DARK["on_gold"] if on else DARK["text"]
+	heat_btn.add_theme_color_override("font_color", fc)
+	heat_btn.add_theme_color_override("font_hover_color", fc)
+	heat_btn.add_theme_color_override("font_pressed_color", fc)
 
 
 ## 击杀赏金浮字（view 在击杀时调）：池轮转，update 里按 tick 上浮淡出。
@@ -470,7 +506,7 @@ func _update_floats(tick: int) -> void:
 			else:
 				var a := 1.0 - float(age) / float(FLOAT_LIFE)
 				el.position = Vector2(float(f["sx"]) - 14.0, float(f["sy"]) - 18.0 - float(age) * FLOAT_RISE)
-				el.add_theme_color_override("font_color", Color(DARK["supply"].r, DARK["supply"].g, DARK["supply"].b, a))
+				el.add_theme_color_override("font_color", Color(DARK["gold_hi"].r, DARK["gold_hi"].g, DARK["gold_hi"].b, a))
 
 
 ## 事件横幅（波次 / 暗门）：入场动画 + tick 驻留，update 到点熄灭。
@@ -478,7 +514,7 @@ func banner(title: String, sub: String, danger: bool = false) -> void:
 	if banner_root == null:
 		return
 	banner_title.text = title
-	banner_title.add_theme_color_override("font_color", DARK["danger"] if danger else DARK["text"])
+	banner_title.add_theme_color_override("font_color", DARK["danger"] if danger else DARK["gold_hi"])
 	banner_sub.text = sub
 	var sb: StyleBoxFlat = banner_card.get_theme_stylebox("panel")
 	sb.border_color = DARK["danger"] if danger else DARK["active_border"]
@@ -542,9 +578,9 @@ func _wave_text(world: World, sc: Scenario) -> String:
 	return "最后一波已出 · 终局 " + _fmt_time(sc.end_tick - world.tick_count)
 
 
-## 结算统计文案（R6 结算屏复用）。
+## 结算统计文案（R6 结算屏复用）。两行排版（v2.1）；探针只断言前缀与「绕行赏金」在文。
 func build_stats(world: World) -> String:
-	return "坚持 %d:%02d · 击杀 %d · 失墙 %d · 剩余供给 %d · 绕行赏金 +%d" % [
+	return "坚持 %d:%02d · 击杀 %d · 失墙 %d\n剩余供给 %d · 绕行赏金 +%d" % [
 		world.tick_count / 1200,
 		(world.tick_count / 20) % 60,
 		world.kills,

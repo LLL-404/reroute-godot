@@ -1937,6 +1937,40 @@ CN=Reroute）。**注**：Windows 自证跑法以 `export/game.exe --selfcheck` 
 （`--main-pack` 在 4.7.2 模板上报 path overrides 不支持，10-16 记录口径更正）。
 **遗留**：Android 真机装机复验与视觉族扩满（9~12）留待时间窗内机动。
 
+### 11.20 UI v2.1「帝王金黑」实装 + probe_input §14 标定修正（2026-10-17）
+
+**范围**：按已批准的 `docs/UI-REDESIGN-20261017.md`（v2.1）实装 `hud.gd`/`screens.gd` 换肤，
+不动任何探针锁死面（控件名、页流转 API、`set_mode` 机制 `sb_normal` meta、`FLOAT_LIFE`、
+`hit_regions()`、22 钮尺寸矩阵）。新色板 token：`gold/gold_hi/gold_lo/edge_hi/shadow/track/
+warn/on_gold`（原 key 全保留），色板热替换即探针安全（`DARK[key]` 动态读取）。
+
+**衬线**：`NotoSerifSC-Bold-Sub.ttf`（子集 31 字形、13.8KB，wght=700；台账三件已登记）
+以 `const F_SERIF` 引入；`_serif_title` 因子集无空格/U+3000 字形改用逐字 Label+间距方案
+（不重做子集）。selfcheck 补衬线断言 → **23/0**（跑法 `--headless --path <P> --selfcheck`，
+勿用 `-s res://game/selfcheck.gd`——其为 RefCounted，由 main.gd 尾部按 `--selfcheck` 调）。
+
+**踩坑实录（title 渐变）**：①`Color(10,9,6,α)` 浮点口径分量>1 被钳白 → 必须 `Color8`；
+②GradientTexture2D 方向凭两次错误渲染猜测失败 → 以一次性采图探针定地面真值：
+**texture 行 0=矩形顶，`fill_from=(0,0)→(0,1)` 即顶透明→底不透明**（探针用完即删）。
+同一陈旧截图连续目验两次零变化也是教训：title.png 由 probe_ui_flow 出，probe_shots 不含。
+
+**probe_input §14 标定修正（D5/D1 先例）**：晨间 canyon3 日志同代码 57/0，实机连跑双红
+(Δx≈114)。stash 基线对照同样红 → 非本次改动引入；属环境帧速漂移：W 平移按
+`CAM_PAN_SPEED×Σdt`，慢帧使焦点南漂 ~30m，测点视轴深度 53.1m 出现透视放大 1.43×。
+断言改**机器无关口径**（≥58 条）：投影对照动态屏内选格；跟手改测焦平面点恒 1:1；
+新增「焦点位移=80×upp」几何直检。**负对照**：临时改 `pan_pixels` 侧向系数 ×2 → 两断言
+同时咬红（13.9760/6.9885、Δx=160.0 与 80×upp 不符），还原后 58/0 复绿。
+
+**改名决策**：标题菜单「继续对局」→「读档存档」（`btn_continue` 控件名不变，
+probe_save 仅锁名+禁用态，零影响）；UI-REDESIGN doc §3 已按实装口径补正。
+
+**全闸终值（实装后窗口模式重出 19 受击截图）**：单测 104/0；headless golden/scene/sim/
+grid/flow/scenario/world/blueprint 全 PASS；窗口 sync/smoke/shots(5)/save/audio/asset/
+model/orient 全 PASS、input **58/0**、hud 69/0、ui_flow 39/0、touch 39/0；
+`check_shots.py` 25/0（金色 UI 计入 warm 谓词，910096>850724 基线）。目验 6 张
+（title/hud/gameover/settings/slots/game_narrow）通过；已知小瑕疵豁免：设置页滑杆
+grabber 为默认主题灰点（有意不引贴图）、gameover 卡右下 1px 描边圆角缺口。
+
 ---
 
 ## 12. AI 任务卡模板（派活时照抄）

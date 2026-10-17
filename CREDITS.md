@@ -92,12 +92,23 @@
 
 合计 29 条（2 BGM + 27 音效）。
 
-### 3.3 字体 `assets/fonts/` —— 2 个文件
+### 3.3 字体 `assets/fonts/` —— 4 个文件
 
 | 文件 | 来源 | 许可 | 署名义务 | 状态 |
 |---|---|---|---|---|
 | `NotoSansSC-Regular.otf` | Google / Noto 项目（版权 © 2014–2020 Adobe） | **`OFL-1.1`** —— 字体自身 name 表自证：`This Font Software is licensed under the SIL Open Font License, Version 1.1.` | 见下 | ✅ 已合规 |
+| `NotoSerifSC-Bold-Sub.ttf` | 同上项目（版权 © 2014–2021 Adobe）；源为本机 `NotoSerifSC-VF.ttf`（Google Fonts 系发行） | `OFL-1.1`（同 Noto 族许可文本，无 RFN 声明） | 见下 | ✅ 已合规 |
 | `OFL.txt` | 随字体分发的许可证全文（含 Adobe 版权头） | 同字体 | — | ✅ 随包 |
+
+> **`NotoSerifSC-Bold-Sub.ttf` 的加工与用途（2026-10-17，UI 改版轮）**：
+> 源为 25 MB 的可变字体，直接进包违反包体纪律。加工 = fontTools（v4.67）两步——
+> ① `varLib.instancer` 实例化 `wght=700`（Bold）；② `subset` 按用字清单子集化
+> （31 字形：改道/暂停/读档/存档/设置/防线守住了！/防线失守 + 数字标点）→ **13.8 KB**。
+> **是 Modified Version**：OFL 条款 3 触发与否取决于源许可有无 RFN 声明——Noto 项目的
+> OFL.txt **未声明保留字体名称**，故子集版保留族名合规；修改事实已在
+> `THIRD-PARTY-NOTICES.txt` §1 声明。用途仅限标题大字 + 各屏标题条（衬线），
+> 正文/按钮/数字仍用 Noto Sans SC。**若后续标题文案改字，须同步重做子集**（命令在
+> `docs/UI-REDESIGN-20261017.md` §5 与 git 记录）。
 
 **OFL-1.1 的履行方式**：OFL **不要求**把署名写进游戏内，但要求**再分发时附带许可证文本**。
 已随包放在 `assets/fonts/OFL.txt`（与字体同目录）。未对字体做任何修改，故不触发
@@ -203,7 +214,8 @@ Android `launcher_icons` 主图 + 自适应前后景）。D1-7 产。
 
 ### R-3 🟢 低 · 第三方素材面已收敛为「字体 + 4 张 CC0 纹理」
 
-替换后包内第三方素材只剩 **2 项**：字体（OFL，义务已履行）+ 地表纹理 4 张
+替换后包内第三方素材只剩 **2 类**：字体（OFL，义务已履行；10-17 增标题衬线子集
+`NotoSerifSC-Bold-Sub.ttf`，同许可同履行方式，见 §3.3）+ 地表纹理 4 张
 （CC0，零义务，10-17 引入，不参与造型）。保持这个状态。
 倒排只剩 1 天（10-18 提交），引入任何需要读 EULA、需要署名落点、需要风格适配的
 外部素材，都是负收益。
@@ -225,6 +237,7 @@ Android `launcher_icons` 主图 + 自适应前后景）。D1-7 产。
   - 音频 **29 条**（10-16 D1-7 后；AI-ASSETS.md 对外件已**同批**补登记：+10 音频 + 图标套件 + 详情页五图，2026-10-16 收盘）
   - 模型 **11 个 glb**（10-17 +`gold_ore.glb`）
   - 地表纹理 **4 张 CC0**（10-17 外部引入，见 §3.7；AI-ASSETS.md §五 引擎与第三方段**同批**补行）
+  - 字体 **2 款**（正文字体 + 标题衬线子集 `NotoSerifSC-Bold-Sub.ttf`，10-17 UI 改版轮；AI-ASSETS.md §五 **同批**补行）
   - 详情页素材 **5 张 AI 图 + 5 张实机图**（10-16 D2-5；副本 `shots/store/`，见 §3.6）
   - AI-ASSETS.md §五 已改「引擎：Godot 4.7.2 stable (mono)」（2026-10-16 核实）
 - 本文件新增任何外部素材后，AI-ASSETS.md §五 要**同批**补一行。
@@ -255,3 +268,4 @@ OFL 的再分发义务就没履行（本文 §一 规则 2「登记 ≠ 履行�
 | 2026-10-16 | 对外件收盘：`cashline/docs/AI-ASSETS.md` 按 Godot 交付物全文重写（29 音频 / 10 glb / 图标五件套 / 详情页五图；§五 引擎改 Godot 4.7.2 mono），§五 两条待办勾销 |
 | 2026-10-17 | 建筑三件 AI 直出入库（`wall_barrier`/`tower_ballista`/`core_jade`，模型台账 11→14 glb；建筑盒体拼接退役）|
 | 2026-10-17 | 美术 pass 外部引入收口：ambientCG 列入 §二裁决表（全站 CC0）；新增 §3.7 地表纹理 4 张（Ground093C/Rock061，Color+NormalGL，Roughness 裁剪不随包）；`THIRD-PARTY-NOTICES.txt` 同步补 CC0 节；模型台账 10→11 glb（`gold_ore.glb` 自有 AI 生成，矿格观感替换）；§五 / R-3 口径同步；全 21 闸绿（`logs/gates-20261017-artfinal/`）；AI-ASSETS.md §五 同批补行 |
+| 2026-10-17 | UI 改版轮字体入库：`NotoSerifSC-Bold-Sub.ttf`（Noto Serif SC VF 实例化 wght=700 + 子集 31 字形 → 13.8 KB，**Modified Version**，OFL-1.1 无 RFN 故保留族名合规；`THIRD-PARTY-NOTICES.txt` §1 补栏）；§3.3 台账 2→4 文件、§五/R-3 口径同步；AI-ASSETS.md §五 同批补行 |

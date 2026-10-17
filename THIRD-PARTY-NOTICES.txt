@@ -23,6 +23,21 @@
   本字体与其许可证 OFL.txt 均随包分发，义务已履行。
   未触发 OFL 的「保留字体名称（Reserved Font Name）」条款，因未对字体作任何修改。
 
+  名称   Noto Serif SC Bold（按需子集，仅用于标题与面板标题字）
+  文件   assets/fonts/NotoSerifSC-Bold-Sub.ttf
+  版权   Copyright © 2014-2021 Adobe (http://www.adobe.com/)
+  许可   SIL Open Font License, Version 1.1
+  许可全文   assets/fonts/OFL.txt （随包分发，即本许可所要求的附带文本）
+  许可地址   http://scripts.sil.org/OFL
+  是否修改   是（子集化，原字体族名保留「Noto Serif SC」）：
+          ① 自 Noto Serif SC 可变字体（Google Fonts / Noto 项目）以
+             fontTools varLib.instancer 实例化 wght=700（Bold）；
+          ② 以 fontTools.subset 按用字清单子集化（31 字形，约 14 KB），
+             仅保留本作标题与面板标题实际用到的字形。
+  说明：同 Noto Sans SC——OFL 义务以随包 OFL.txt 履行。源许可（Noto 项目
+  OFL.txt）未声明「保留字体名称」，故子集版保留原族名不违反 OFL §1.1 第 3 条；
+  修改事实已在 CREDITS.md 登记并在本栏声明。
+
 
 2. 地表纹理 / Terrain textures
 ------------------------------

@@ -10,6 +10,9 @@ extends CanvasLayer
 
 const SaveIO = preload("res://game/save_io.gd")
 const UserSettings = preload("res://game/user_settings.gd")
+# 标题衬线字（Noto Serif SC Bold 子集 13.8KB，31 字形；许可与加工见 CREDITS.md §3.3）。
+# 子集只含屏标题用字（改道暂停读档存档设置防线守住…），正文/按钮仍走主题默认 Noto Sans SC。
+const F_SERIF: FontFile = preload("res://assets/fonts/NotoSerifSC-Bold-Sub.ttf")
 
 var S := 1.0
 var cb: Dictionary = {}
@@ -180,7 +183,7 @@ func _build_confirm() -> void:
 	confirm_layer.mouse_filter = Control.MOUSE_FILTER_STOP # 吃指针：弹窗下页面不可点
 	confirm_layer.visible = false
 	var veil := ColorRect.new()
-	veil.color = Color8(8, 10, 16, 185)
+	veil.color = Color8(10, 9, 6, 200)
 	veil.set_anchors_preset(Control.PRESET_FULL_RECT)
 	veil.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	confirm_layer.add_child(veil)
@@ -190,7 +193,7 @@ func _build_confirm() -> void:
 	confirm_layer.add_child(center)
 	var card := PanelContainer.new()
 	card.custom_minimum_size = Vector2(300.0 * S, 0)
-	card.add_theme_stylebox_override("panel", _flat(C["card"], C["border"], int(13 * S)))
+	card.add_theme_stylebox_override("panel", _flat(C["card"], C["gold_lo"], 2, 1))
 	center.add_child(card)
 	var margin := MarginContainer.new()
 	for side in ["left", "right", "top", "bottom"]:
@@ -231,14 +234,50 @@ func _flat(bg: Color, border: Color, radius: int, border_w: int = 1) -> StyleBox
 	return sb
 
 
-func _label(text: String, fs: float, color: Color) -> Label:
+func _label(text: String, fs: float, color: Color, serif := false) -> Label:
 	var l := Label.new()
 	l.text = text
 	l.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	l.add_theme_font_size_override("font_size", int(fs))
 	l.add_theme_color_override("font_color", color)
+	if serif:
+		l.add_theme_font_override("font", F_SERIF)
 	l.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	return l
+
+
+## 衬线隔字标题：逐字 Label + 等宽间隔（子集无空格字形，用布局实现字距）。
+func _serif_title(text: String, fs: float, color: Color, gap: float = 12.0) -> HBoxContainer:
+	var row := HBoxContainer.new()
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", int(gap * S))
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	for ch in text:
+		row.add_child(_label(ch, fs, color, true))
+	return row
+
+
+## 卡片内金标题条（文明 6 式：暗底 + 衬线金字 + 底缘金线）。
+func _title_bar(label: Label, bar_h: float = 38.0) -> Panel:
+	var p := Panel.new()
+	var sb := _flat(Color8(10, 8, 5, 160), C["gold_lo"], 2, 1)
+	p.add_theme_stylebox_override("panel", sb)
+	p.custom_minimum_size = Vector2(0, bar_h * S)
+	label.set_anchors_preset(Control.PRESET_FULL_RECT)
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	label.size_flags_horizontal = Control.SIZE_FILL
+	p.add_child(label)
+	return p
+
+
+## 金分隔线（1px）。
+func _rule() -> ColorRect:
+	var r := ColorRect.new()
+	r.color = Color8(150, 120, 76, 140)
+	r.custom_minimum_size = Vector2(0, 1)
+	r.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	return r
 
 
 func _button(text: String, primary: bool, w: float, h: float, fs: float, fn: Callable, pad_left: float = -1.0) -> Button:
@@ -249,25 +288,36 @@ func _button(text: String, primary: bool, w: float, h: float, fs: float, fn: Cal
 	b.focus_mode = Control.FOCUS_NONE
 	b.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	b.add_theme_font_size_override("font_size", int(fs))
-	var c_text: Color = Color8(255, 255, 255, 255) if primary else C["text"]
-	b.add_theme_color_override("font_color", c_text)
-	b.add_theme_color_override("font_hover_color", c_text)
-	b.add_theme_color_override("font_pressed_color", c_text)
+	var sb_n: StyleBoxFlat
+	var sb_h: StyleBoxFlat
+	var sb_p: StyleBoxFlat
+	var c_txt: Color
+	if primary:
+		# 主钮：金底深字 + 底缘 3px 暗金压边（文明 6 命令钮语义）
+		c_txt = C["on_gold"]
+		sb_n = _flat(C["active"], C["gold_lo"], 2)
+		sb_n.border_width_bottom = 3
+		sb_h = _flat(C["active_border"], C["gold_lo"], 2)
+		sb_h.border_width_bottom = 3
+		sb_p = _flat(Color8(168, 138, 84, 255), C["gold_lo"], 2)
+		sb_p.border_width_bottom = 3
+	else:
+		# 次钮：透明深底 + 古金细边；悬停亮金字亮金边
+		c_txt = C["text"]
+		sb_n = _flat(C["btn"], C["border"], 2)
+		sb_h = _flat(C["btn_hover"], C["active_border"], 2)
+		sb_p = _flat(C["btn_pressed"], C["gold_lo"], 2)
+	b.add_theme_color_override("font_color", c_txt)
+	b.add_theme_color_override("font_hover_color", C["gold_hi"] if not primary else c_txt)
+	b.add_theme_color_override("font_pressed_color", c_txt)
 	b.add_theme_color_override("font_disabled_color", C["muted"])
-	var bg_n: Color = Color8(85, 105, 232) if primary else C["btn"]
-	var bg_h: Color = Color8(104, 122, 239) if primary else C["btn_hover"]
-	var bg_p: Color = Color8(65, 86, 209) if primary else C["btn_pressed"]
-	var bd: Color = Color8(85, 105, 232) if primary else C["border"]
-	var sb_n := _flat(bg_n, bd, 9)
-	var sb_h := _flat(bg_h, bd, 9)
-	var sb_p := _flat(bg_p, bd, 9)
-	if pad_left >= 0.0:
-		sb_n.content_margin_left = pad_left
-		sb_h.content_margin_left = pad_left
-		sb_p.content_margin_left = pad_left
 	b.add_theme_stylebox_override("normal", sb_n)
 	b.add_theme_stylebox_override("hover", sb_h)
 	b.add_theme_stylebox_override("pressed", sb_p)
+	b.add_theme_stylebox_override("disabled", _flat(C["btn"], C["border"], 2))
+	if pad_left >= 0.0:
+		for sb in [sb_n, sb_h, sb_p]:
+			sb.content_margin_left = pad_left
 	b.pressed.connect(fn)
 	return b
 
@@ -284,53 +334,100 @@ func _page_base(veil: Color) -> Control:
 	return page
 
 
+## 滑杆金化：暗槽 + 古金边 + 已过段亮金（grabber 图标走默认主题，不引贴图）。
+func _style_slider(s: HSlider) -> void:
+	s.add_theme_stylebox_override("slider", _flat(C["track"], C["gold_lo"], 2, 1))
+	s.add_theme_stylebox_override("grabber_area", _flat(C["gold"], Color(0, 0, 0, 0), 2, 0))
+	s.add_theme_stylebox_override("grabber_area_highlight", _flat(C["gold_hi"], Color(0, 0, 0, 0), 2, 0))
+
+
 func _build_title() -> Control:
-	var page := _page_base(Color8(8, 10, 16, 150))
+	var page := Control.new()
 	page.name = "page_title"
-	var center := CenterContainer.new()
-	center.set_anchors_preset(Control.PRESET_FULL_RECT)
-	center.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	page.add_child(center)
+	page.set_anchors_preset(Control.PRESET_FULL_RECT)
+	page.mouse_filter = Control.MOUSE_FILTER_STOP # 全屏吃指针：防穿透到战场/HUD
+
+	# 底部 55% 渐暗帷幕（战场全景可见，向下渐入帝王金黑）
+	# 注意分量口径：Color() 是 0..1 浮点，超 1 会钳成白——必须 Color8。
+	var grad := Gradient.new()
+	grad.colors = PackedColorArray([Color8(10, 9, 6, 0), Color8(10, 9, 6, 107), Color8(10, 9, 6, 240)])
+	grad.offsets = PackedFloat32Array([0.0, 0.5, 1.0])
+	var gtex := GradientTexture2D.new()
+	gtex.gradient = grad
+	# 实测采样（probe_dbg_veil，已删）：texture 行 0=矩形顶部，(0,0)→(0,1) 即顶透明→底不透明。
+	gtex.fill_from = Vector2(0, 0)
+	gtex.fill_to = Vector2(0, 1)
+	gtex.width = 64
+	gtex.height = 256
+	var veil := TextureRect.new()
+	veil.name = "title_veil"
+	veil.texture = gtex
+	veil.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	veil.anchor_left = 0.0
+	veil.anchor_right = 1.0
+	veil.anchor_top = 0.45
+	veil.anchor_bottom = 1.0
+	page.add_child(veil)
+
+	# 左对齐菜单列（x=18% 宽度 240，文明 6 主菜单口径）
 	var col := VBoxContainer.new()
-	col.add_theme_constant_override("separation", int(14 * S))
+	col.add_theme_constant_override("separation", int(12 * S))
 	col.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	center.add_child(col)
+	col.anchor_left = 0.18
+	col.anchor_right = 0.18
+	col.anchor_top = 0.0
+	col.anchor_bottom = 1.0
+	col.offset_left = 0
+	col.offset_right = int(240.0 * S)
+	col.offset_top = int(110.0 * S)
+	col.offset_bottom = int(-64.0 * S)
+	page.add_child(col)
 
-	col.add_child(_label("改 道", 46.0 * S, C["text"]))
-	col.add_child(_label("放墙改道 · 修运河，别只堵路", 13.0 * S, C["muted"]))
+	var title_row := _serif_title("改道", 54.0 * S, C["gold_hi"], 26.0)
+	title_row.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	col.add_child(title_row)
+	var tagline := _label("放墙改道 · 修运河，别只堵路", 12.0 * S, C["muted"])
+	tagline.size_flags_horizontal = Control.SIZE_FILL
+	col.add_child(tagline)
+	col.add_child(_rule())
 
-	var btn_start := _button("开始对局", true, 220.0 * S, 48.0 * S, 14.0 * S, func() -> void:
-		cb["start_match"].call())
+	var btn_start := _button("开始对局", true, 240.0 * S, 48.0 * S, 15.0 * S, func() -> void:
+		cb["start_match"].call(), 14.0 * S)
 	btn_start.name = "btn_start"
+	btn_start.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	col.add_child(btn_start)
 
-	var btn_continue := _button("继续对局", false, 220.0 * S, 42.0 * S, 12.0 * S, func() -> void:
-		open_slots("load", "title"))
+	var btn_continue := _button("读档存档", false, 240.0 * S, 42.0 * S, 12.0 * S, func() -> void:
+		open_slots("load", "title"), 14.0 * S)
 	btn_continue.name = "btn_continue"
+	btn_continue.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	col.add_child(btn_continue)
 
-	var btn_settings := _button("设置", false, 220.0 * S, 40.0 * S, 12.0 * S, func() -> void:
-		open_settings("title"))
+	var btn_settings := _button("设置", false, 240.0 * S, 42.0 * S, 12.0 * S, func() -> void:
+		open_settings("title"), 14.0 * S)
 	btn_settings.name = "btn_settings"
+	btn_settings.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	col.add_child(btn_settings)
 
-	var btn_tips := _button("玩法说明", false, 220.0 * S, 40.0 * S, 12.0 * S, func() -> void:
-		tips_panel.visible = not tips_panel.visible)
+	var btn_tips := _button("玩法说明", false, 240.0 * S, 42.0 * S, 12.0 * S, func() -> void:
+		tips_panel.visible = not tips_panel.visible, 14.0 * S)
 	btn_tips.name = "btn_tips"
+	btn_tips.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	col.add_child(btn_tips)
 
-	var btn_quit := _button("退出游戏", false, 220.0 * S, 40.0 * S, 12.0 * S, func() -> void:
-		open_quit_confirm())
+	var btn_quit := _button("退出游戏", false, 240.0 * S, 42.0 * S, 12.0 * S, func() -> void:
+		open_quit_confirm(), 14.0 * S)
 	btn_quit.name = "btn_quit"
+	btn_quit.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	col.add_child(btn_quit)
 
+	# 玩法说明浮层（菜单列右侧；默认隐藏，切换不影响列布局）
 	tips_panel = PanelContainer.new()
 	tips_panel.name = "panel_tips"
 	tips_panel.custom_minimum_size = Vector2(340.0 * S, 0)
-	tips_panel.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	tips_panel.visible = false
 	tips_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	tips_panel.add_theme_stylebox_override("panel", _flat(C["card"], C["border"], int(12 * S)))
+	tips_panel.add_theme_stylebox_override("panel", _flat(C["card"], C["gold_lo"], 2, 1))
 	var margin := MarginContainer.new()
 	for side in ["left", "right", "top", "bottom"]:
 		margin.add_theme_constant_override("margin_" + side, int(16 * S))
@@ -346,14 +443,30 @@ func _build_title() -> Control:
 		tips_col.add_child(_label(line, 10.0 * S, C["muted"]))
 	margin.add_child(tips_col)
 	tips_panel.add_child(margin)
-	col.add_child(tips_panel)
+	page.add_child(tips_panel)
+	tips_panel.reset_size()
+	var vw := get_viewport().get_visible_rect().size.x
+	tips_panel.position = Vector2(vw * 0.18 + 264.0 * S, 110.0 * S)
 
-	col.add_child(_label("GameJam 2026 · 聚光灯主题「涌现」", 9.0 * S, C["muted"]))
+	# 版本 / 赛事行（左下角）
+	var jam := _label("GameJam 2026 · 聚光灯主题「涌现」", 9.0 * S, C["muted"])
+	jam.anchor_left = 0.0
+	jam.anchor_right = 0.0
+	jam.anchor_top = 1.0
+	jam.anchor_bottom = 1.0
+	jam.offset_left = int(20.0 * S)
+	jam.offset_right = int(340.0 * S)
+	jam.offset_top = int(-30.0 * S)
+	jam.offset_bottom = int(-14.0 * S)
+	jam.vertical_alignment = VERTICAL_ALIGNMENT_BOTTOM
+	jam.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	jam.size_flags_horizontal = Control.SIZE_FILL
+	page.add_child(jam)
 	return page
 
 
 func _build_pause() -> Control:
-	var page := _page_base(Color8(8, 10, 16, 140))
+	var page := _page_base(Color8(10, 9, 6, 150))
 	page.name = "page_pause"
 	var center := CenterContainer.new()
 	center.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -361,7 +474,7 @@ func _build_pause() -> Control:
 	page.add_child(center)
 	var pcard := PanelContainer.new()
 	pcard.custom_minimum_size = Vector2(320.0 * S, 0)
-	pcard.add_theme_stylebox_override("panel", _flat(C["card"], C["border"], int(14 * S)))
+	pcard.add_theme_stylebox_override("panel", _flat(C["card"], C["gold_lo"], 2, 1))
 	center.add_child(pcard)
 	var margin := MarginContainer.new()
 	for side in ["left", "right", "top", "bottom"]:
@@ -369,24 +482,25 @@ func _build_pause() -> Control:
 	var col := VBoxContainer.new()
 	col.add_theme_constant_override("separation", int(11 * S))
 	col.alignment = BoxContainer.ALIGNMENT_CENTER
-	col.add_child(_label("暂停", 22.0 * S, C["text"]))
-	var btn_resume := _button("继续", true, 220.0 * S, 42.0 * S, 12.0 * S, func() -> void:
+	col.add_child(_title_bar(_label("暂停", 22.0 * S, C["gold_hi"], true)))
+	col.add_child(_rule())
+	var btn_resume := _button("继续", true, 240.0 * S, 44.0 * S, 14.0 * S, func() -> void:
 		cb["resume"].call())
 	btn_resume.name = "btn_resume"
 	col.add_child(btn_resume)
-	var btn_save := _button("保存进度", false, 220.0 * S, 42.0 * S, 12.0 * S, func() -> void:
+	var btn_save := _button("保存进度", false, 240.0 * S, 42.0 * S, 12.0 * S, func() -> void:
 		open_slots("save", "pause"))
 	btn_save.name = "btn_save"
 	col.add_child(btn_save)
-	var btn_settings := _button("设置", false, 220.0 * S, 40.0 * S, 12.0 * S, func() -> void:
+	var btn_settings := _button("设置", false, 240.0 * S, 42.0 * S, 12.0 * S, func() -> void:
 		open_settings("pause"))
 	btn_settings.name = "btn_settings_pause"
 	col.add_child(btn_settings)
-	var btn_restart := _button("重开本局", false, 220.0 * S, 42.0 * S, 12.0 * S, func() -> void:
+	var btn_restart := _button("重开本局", false, 240.0 * S, 42.0 * S, 12.0 * S, func() -> void:
 		cb["restart"].call())
 	btn_restart.name = "btn_restart"
 	col.add_child(btn_restart)
-	var btn_title := _button("回标题", false, 220.0 * S, 42.0 * S, 12.0 * S, func() -> void:
+	var btn_title := _button("回标题", false, 240.0 * S, 42.0 * S, 12.0 * S, func() -> void:
 		cb["to_title"].call())
 	btn_title.name = "btn_to_title"
 	col.add_child(btn_title)
@@ -396,15 +510,15 @@ func _build_pause() -> Control:
 
 
 func _build_gameover() -> Control:
-	var page := _page_base(Color8(8, 10, 16, 190))
+	var page := _page_base(Color8(10, 9, 6, 200))
 	page.name = "page_gameover"
 	var center := CenterContainer.new()
 	center.set_anchors_preset(Control.PRESET_FULL_RECT)
 	center.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	page.add_child(center)
 	var pcard := PanelContainer.new()
-	pcard.custom_minimum_size = Vector2(380.0 * S, 0)
-	pcard.add_theme_stylebox_override("panel", _flat(C["card"], C["border"], int(14 * S)))
+	pcard.custom_minimum_size = Vector2(400.0 * S, 0)
+	pcard.add_theme_stylebox_override("panel", _flat(C["card"], C["gold_lo"], 2, 1))
 	center.add_child(pcard)
 	var margin := MarginContainer.new()
 	for side in ["left", "right", "top", "bottom"]:
@@ -412,14 +526,15 @@ func _build_gameover() -> Control:
 	var col := VBoxContainer.new()
 	col.add_theme_constant_override("separation", int(14 * S))
 	col.alignment = BoxContainer.ALIGNMENT_CENTER
-	go_title = _label("", 28.0 * S, C["danger"])
+	# 胜负标题：文本/颜色由 open_gameover 注入（探针断言 色=hp|danger）；衬线字形已进子集
+	go_title = _label("", 34.0 * S, C["danger"], true)
 	col.add_child(go_title)
-	go_body = _label("", 12.0 * S, C["muted"])
+	go_body = _label("", 13.0 * S, C["text"])
 	go_body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	go_body.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	go_body.custom_minimum_size = Vector2(380.0 * S - 52.0 * S, 0)
+	go_body.custom_minimum_size = Vector2(400.0 * S - 52.0 * S, 0)
 	col.add_child(go_body)
-	var btn_again := _button("再来一局", true, 220.0 * S, 42.0 * S, 12.0 * S, func() -> void:
+	var btn_again := _button("再来一局", true, 220.0 * S, 44.0 * S, 14.0 * S, func() -> void:
 		cb["restart"].call())
 	btn_again.name = "btn_again"
 	col.add_child(btn_again)
@@ -433,15 +548,15 @@ func _build_gameover() -> Control:
 
 
 func _build_slots() -> Control:
-	var page := _page_base(Color8(8, 10, 16, 160))
+	var page := _page_base(Color8(10, 9, 6, 170))
 	page.name = "page_slots"
 	var center := CenterContainer.new()
 	center.set_anchors_preset(Control.PRESET_FULL_RECT)
 	center.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	page.add_child(center)
 	var pcard := PanelContainer.new()
-	pcard.custom_minimum_size = Vector2(390.0 * S, 0)
-	pcard.add_theme_stylebox_override("panel", _flat(C["card"], C["border"], int(14 * S)))
+	pcard.custom_minimum_size = Vector2(440.0 * S, 0)
+	pcard.add_theme_stylebox_override("panel", _flat(C["card"], C["gold_lo"], 2, 1))
 	center.add_child(pcard)
 	var margin := MarginContainer.new()
 	for side in ["left", "right", "top", "bottom"]:
@@ -449,14 +564,16 @@ func _build_slots() -> Control:
 	var col := VBoxContainer.new()
 	col.add_theme_constant_override("separation", int(10 * S))
 	col.alignment = BoxContainer.ALIGNMENT_CENTER
-	var head := _label("读档", 20.0 * S, C["text"])
+	# 动态标题（读档/存档）：open_slots 改 text，衬线字体常驻
+	var head := _label("读档", 22.0 * S, C["gold_hi"], true)
 	head.name = "label_slot_head"
-	col.add_child(head)
+	col.add_child(_title_bar(head))
+	col.add_child(_rule())
 	for i in range(1, SaveIO.SLOT_N + 1):
 		var row := HBoxContainer.new()
 		row.alignment = BoxContainer.ALIGNMENT_CENTER
 		row.add_theme_constant_override("separation", int(8 * S))
-		var b := _button("槽 %d · 空" % i, false, 268.0 * S, 36.0 * S, 11.0 * S, _on_slot_pressed.bind(i), 10.0 * S)
+		var b := _button("槽 %d · 空" % i, false, 300.0 * S, 36.0 * S, 11.0 * S, _on_slot_pressed.bind(i), 12.0 * S)
 		b.name = "btn_slot%d" % i
 		b.alignment = HORIZONTAL_ALIGNMENT_LEFT
 		row.add_child(b)
@@ -477,15 +594,15 @@ func _build_slots() -> Control:
 
 
 func _build_settings() -> Control:
-	var page := _page_base(Color8(8, 10, 16, 160))
+	var page := _page_base(Color8(10, 9, 6, 170))
 	page.name = "page_settings"
 	var center := CenterContainer.new()
 	center.set_anchors_preset(Control.PRESET_FULL_RECT)
 	center.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	page.add_child(center)
 	var pcard := PanelContainer.new()
-	pcard.custom_minimum_size = Vector2(390.0 * S, 0)
-	pcard.add_theme_stylebox_override("panel", _flat(C["card"], C["border"], int(14 * S)))
+	pcard.custom_minimum_size = Vector2(440.0 * S, 0)
+	pcard.add_theme_stylebox_override("panel", _flat(C["card"], C["gold_lo"], 2, 1))
 	center.add_child(pcard)
 	var margin := MarginContainer.new()
 	for side in ["left", "right", "top", "bottom"]:
@@ -493,7 +610,8 @@ func _build_settings() -> Control:
 	var col := VBoxContainer.new()
 	col.add_theme_constant_override("separation", int(12 * S))
 	col.alignment = BoxContainer.ALIGNMENT_CENTER
-	col.add_child(_label("设置", 20.0 * S, C["text"]))
+	col.add_child(_title_bar(_label("设置", 22.0 * S, C["gold_hi"], true)))
+	col.add_child(_rule())
 
 	var row_music := HBoxContainer.new()
 	row_music.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -508,8 +626,9 @@ func _build_settings() -> Control:
 	sld_music.step = 1
 	sld_music.custom_minimum_size = Vector2(180.0 * S, 24.0 * S)
 	sld_music.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	_style_slider(sld_music)
 	row_music.add_child(sld_music)
-	var val_music := _label("100", 12.0 * S, C["text"])
+	var val_music := _label("100", 12.0 * S, C["gold_hi"])
 	val_music.name = "lbl_music_val"
 	val_music.custom_minimum_size = Vector2(38.0 * S, 0)
 	row_music.add_child(val_music)
@@ -528,8 +647,9 @@ func _build_settings() -> Control:
 	sld_sfx.step = 1
 	sld_sfx.custom_minimum_size = Vector2(180.0 * S, 24.0 * S)
 	sld_sfx.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	_style_slider(sld_sfx)
 	row_sfx.add_child(sld_sfx)
-	var val_sfx := _label("100", 12.0 * S, C["text"])
+	var val_sfx := _label("100", 12.0 * S, C["gold_hi"])
 	val_sfx.name = "lbl_sfx_val"
 	val_sfx.custom_minimum_size = Vector2(38.0 * S, 0)
 	row_sfx.add_child(val_sfx)

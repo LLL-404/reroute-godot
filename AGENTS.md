@@ -218,6 +218,14 @@ python tools/check_shots.py    # 截图像素校验
   决策记录 = 方案 §11.19；开发者日志③草案 = `docs/devlogs/03-*.md`（待发布）。
   **注**：Windows 自证以 `export/game.exe --selfcheck` 直跑为准（`--main-pack` 在 4.7.2
   模板不支持 path overrides，10-16 记录口径更正）。
+- UI v2.1「帝王金黑」实装（2026-10-17）**已完成**：`hud.gd`/`screens.gd` 换肤（色板 token
+  `gold/gold_hi/gold_lo/...` 增量、原 key 保留 → 探针动态读色零影响）+ 衬线
+  `NotoSerifSC-Bold-Sub.ttf`（31 字形子集；`_serif_title` 逐字间距方案）；标题屏改 Civ6
+  左列菜单式（渐变压暗帷幕；坑实录 = 浮点 `Color()` 白化必 Color8 + GradientTexture2D
+  行 0=顶 `(0,0)→(0,1)`）；「继续对局」→「读档存档」（`btn_continue` 名不变）；
+  probe_input §14 断言标定改机器无关口径（透视放大 1.43× 帧速漂移根因；负对照
+  `pan_pixels` ×2 咬红后还原）。全闸绿（input 58/0、hud 69/0、ui_flow 39/0、touch 39/0、
+  selfcheck 23/0、check_shots 25/0）；19 受击截图重出 + 目验 6 张通过。
 
 ---
 

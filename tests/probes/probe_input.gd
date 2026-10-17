@@ -201,19 +201,34 @@ func _initialize() -> void:
 	var bz2: float = cam.global_transform.basis.z.x
 	check(bz2 < bz1 - 0.02, "E 右旋（bz.x %.3f→%.3f）" % [bz1, bz2])
 
-	for c2 in [Vector2i(24, 24), Vector2i(30, 20)]:
+	# 投影一致性：屏内格动态选取（W 平移量随真实帧时长漂移，固定格可能出屏——
+	# 出屏换格不判失败；判据本体 = 闭式解与引擎 unproject 逐位一致，机器速度无关）
+	var proj_ok := false
+	for c2 in [Vector2i(24, 24), Vector2i(30, 20), Vector2i(20, 30), Vector2i(28, 28)]:
 		var w2: Vector3 = view.cell_to_world(c2.x, c2.y)
 		var gy2: float = view.ground_y(c2.x, c2.y)
 		var a2: Vector2 = view.world_to_screen(w2.x, gy2, w2.z)
+		if a2.x < 0.0 or a2.x >= vp_size.x or a2.y < 0.0 or a2.y >= vp_size.y:
+			continue # 视口外（W 平移量随机器帧速漂移）：换格
 		var b2: Vector2 = cam.unproject_position(Vector3(w2.x, gy2, w2.z))
-		check(a2.x >= 0.0 and a2.distance_to(b2) < 1.0, "旋转后 world_to_screen 一致 %s (a=%s b=%s)" % [str(c2), str(a2), str(b2)])
+		check(a2.distance_to(b2) < 1.0, "旋转后 world_to_screen 一致 %s (a=%s b=%s)" % [str(c2), str(a2), str(b2)])
+		proj_ok = true
+		break
+	check(proj_ok, "旋转后至少一格屏内可做投影对照")
 
-	var wc: Vector3 = view.cell_to_world(24, 24)
-	var gyc: float = view.ground_y(24, 24)
-	var s0: Vector2 = view.world_to_screen(wc.x, gyc, wc.z)
+	# 右键拖拽跟手：拖拽是纯几何事件（无 dt 参与），1:1 只在焦平面精确成立——
+	# 故改测焦点平面点（透视放大率恒 =1；旧口径测固定格 (24,24)，其视轴深度
+	# 随 W 平移漂移 → 透视放大 1.43×，帧速慢即假失败）。附带焦点几何直检：
+	# 焦点位移必须逐位等于 80×upp（pan_pixels 的定义式）。
+	var f0: Vector3 = view.core.focus
+	var wcp: Vector3 = Vector3(f0.x, 0.0, f0.z)
+	var s0: Vector2 = view.world_to_screen(wcp.x, 0.0, wcp.z)
 	await _rmb_drag(vp_size * 0.5, Vector2(80.0, 0.0))
-	var s1: Vector2 = view.world_to_screen(wc.x, gyc, wc.z)
-	check(absf((s1.x - s0.x) - 80.0) < 25.0, "右键拖拽内容跟手（Δx=%.1f）" % (s1.x - s0.x))
+	var f1: Vector3 = view.core.focus
+	var upp: float = 2.0 * (view.core._dist * view.core._zoom) * float(view.core._fit["t45"]) / vp_size.y
+	check(absf((f0.x - f1.x) - 80.0 * upp) < 0.01, "拖拽焦点位移 = 80×upp（得 %.4f/%.4f）" % [f0.x - f1.x, 80.0 * upp])
+	var s1: Vector2 = view.world_to_screen(wcp.x, 0.0, wcp.z)
+	check(absf((s1.x - s0.x) - 80.0) < 25.0, "右键拖拽内容跟手·焦平面（Δx=%.1f）" % (s1.x - s0.x))
 
 	cmp_int(world.supply, sup_cam, "相机操控不影响供给")
 	cmp_int(world.buildings.size(), buildings_cam, "相机操控不影响建筑数")

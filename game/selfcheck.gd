@@ -64,6 +64,14 @@ func run(main) -> int:
 			if not font.has_char(c.unicode_at(0)):
 				cjk_ok = false
 	_chk(cjk_ok, "中文字体打进包且关键字形存在（非豆腐块）")
+	# 标题衬线子集（Noto Serif SC Bold，OFL-1.1，见 CREDITS §3.3）同口径自证。
+	var serif: FontFile = load("res://assets/fonts/NotoSerifSC-Bold-Sub.ttf") as FontFile
+	var serif_ok := serif != null
+	if serif_ok:
+		for c in "改道守失档":
+			if not serif.has_char(c.unicode_at(0)):
+				serif_ok = false
+	_chk(serif_ok, "标题衬线字体打进包且关键字形存在（非豆腐块）")
 
 	# ---- 1b. 真实模型资产（glb）打进包 ----
 	var model_paths := [
