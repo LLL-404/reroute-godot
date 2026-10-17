@@ -1,5 +1,7 @@
 extends Control
 
+const UiStyle = preload("res://game/ui_style.gd")
+
 # HUD（移植 reroute/scripts/hud.lua）：顶栏（核心血条/波次倒计时/供给/热层钮/暂停钮）
 # + 右下操作模式列 + 技能钮 + 波次横幅 + 击杀赏金浮字池。
 # 纯展示层：只读模拟状态；按钮回调由 main 注入。布局为绝对像素（S 缩放口径同母版），
@@ -141,12 +143,7 @@ func build(cb: Dictionary) -> void:
 # ---------------- 构建 ----------------
 
 func _flat(bg: Color, border: Color, radius: int, border_w: int = 1) -> StyleBoxFlat:
-	var sb := StyleBoxFlat.new()
-	sb.bg_color = bg
-	sb.border_color = border
-	sb.set_border_width_all(border_w)
-	sb.set_corner_radius_all(radius)
-	return sb
+	return UiStyle.flat(bg, border, radius, border_w) # 委托样式工厂（唯一真源 ui_style.gd）
 
 
 func _style_button(b: Button, w: float, h: float, fs: float) -> void:
@@ -154,27 +151,20 @@ func _style_button(b: Button, w: float, h: float, fs: float) -> void:
 	b.size = Vector2(w, h)
 	b.focus_mode = Control.FOCUS_NONE
 	b.add_theme_font_size_override("font_size", int(fs))
-	b.add_theme_color_override("font_color", DARK["text"])
-	b.add_theme_color_override("font_hover_color", DARK["gold_hi"])
-	b.add_theme_color_override("font_pressed_color", DARK["text"])
-	b.add_theme_color_override("font_disabled_color", DARK["muted"])
-	var sb_n := _flat(DARK["btn"], DARK["border"], 2)
-	var sb_h := _flat(DARK["btn_hover"], DARK["active_border"], 2)
-	var sb_p := _flat(DARK["btn_pressed"], DARK["gold_lo"], 2)
-	b.add_theme_stylebox_override("normal", sb_n)
-	b.add_theme_stylebox_override("hover", sb_h)
-	b.add_theme_stylebox_override("pressed", sb_p)
-	b.add_theme_stylebox_override("disabled", _flat(DARK["btn"], DARK["border"], 2))
-	b.set_meta("sb_normal", sb_n)
+	var st := UiStyle.button_states(DARK, false) # 四态+字色全由工厂派生
+	b.add_theme_color_override("font_color", st["font_color"])
+	b.add_theme_color_override("font_hover_color", st["font_hover_color"])
+	b.add_theme_color_override("font_pressed_color", st["font_pressed_color"])
+	b.add_theme_color_override("font_disabled_color", st["font_disabled_color"])
+	b.add_theme_stylebox_override("normal", st["normal"])
+	b.add_theme_stylebox_override("hover", st["hover"])
+	b.add_theme_stylebox_override("pressed", st["pressed"])
+	b.add_theme_stylebox_override("disabled", st["disabled"])
+	b.set_meta("sb_normal", st["normal"])
 
 
 func _make_label(text: String, fs: float, color: Color) -> Label:
-	var l := Label.new()
-	l.text = text
-	l.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	l.add_theme_font_size_override("font_size", int(fs))
-	l.add_theme_color_override("font_color", color)
-	return l
+	return UiStyle.label(text, fs, color)
 
 
 func _build_top_bar() -> void:

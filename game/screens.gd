@@ -10,6 +10,7 @@ extends CanvasLayer
 
 const SaveIO = preload("res://game/save_io.gd")
 const UserSettings = preload("res://game/user_settings.gd")
+const UiStyle = preload("res://game/ui_style.gd")
 # 标题衬线字（Noto Serif SC Bold 子集 13.8KB，31 字形；许可与加工见 CREDITS.md §3.3）。
 # 子集只含屏标题用字（改道暂停读档存档设置防线守住…），正文/按钮仍走主题默认 Noto Sans SC。
 const F_SERIF: FontFile = preload("res://assets/fonts/NotoSerifSC-Bold-Sub.ttf")
@@ -183,7 +184,7 @@ func _build_confirm() -> void:
 	confirm_layer.mouse_filter = Control.MOUSE_FILTER_STOP # 吃指针：弹窗下页面不可点
 	confirm_layer.visible = false
 	var veil := ColorRect.new()
-	veil.color = Color8(10, 9, 6, 200)
+	veil.color = UiStyle.VEIL_HEAVY
 	veil.set_anchors_preset(Control.PRESET_FULL_RECT)
 	veil.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	confirm_layer.add_child(veil)
@@ -226,24 +227,11 @@ func _build_confirm() -> void:
 # ---------------- 页面构建 ----------------
 
 func _flat(bg: Color, border: Color, radius: int, border_w: int = 1) -> StyleBoxFlat:
-	var sb := StyleBoxFlat.new()
-	sb.bg_color = bg
-	sb.border_color = border
-	sb.set_border_width_all(border_w)
-	sb.set_corner_radius_all(radius)
-	return sb
+	return UiStyle.flat(bg, border, radius, border_w) # 委托样式工厂（唯一真源 ui_style.gd）
 
 
 func _label(text: String, fs: float, color: Color, serif := false) -> Label:
-	var l := Label.new()
-	l.text = text
-	l.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	l.add_theme_font_size_override("font_size", int(fs))
-	l.add_theme_color_override("font_color", color)
-	if serif:
-		l.add_theme_font_override("font", F_SERIF)
-	l.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	return l
+	return UiStyle.label(text, fs, color, F_SERIF if serif else null, true)
 
 
 ## 衬线隔字标题：逐字 Label + 等宽间隔（子集无空格字形，用布局实现字距）。
@@ -260,7 +248,7 @@ func _serif_title(text: String, fs: float, color: Color, gap: float = 12.0) -> H
 ## 卡片内金标题条（文明 6 式：暗底 + 衬线金字 + 底缘金线）。
 func _title_bar(label: Label, bar_h: float = 38.0) -> Panel:
 	var p := Panel.new()
-	var sb := _flat(Color8(10, 8, 5, 160), C["gold_lo"], 2, 1)
+	var sb := _flat(UiStyle.TITLE_BAR_BG, C["gold_lo"], 2, 1)
 	p.add_theme_stylebox_override("panel", sb)
 	p.custom_minimum_size = Vector2(0, bar_h * S)
 	label.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -274,7 +262,7 @@ func _title_bar(label: Label, bar_h: float = 38.0) -> Panel:
 ## 金分隔线（1px）。
 func _rule() -> ColorRect:
 	var r := ColorRect.new()
-	r.color = Color8(150, 120, 76, 140)
+	r.color = UiStyle.RULE
 	r.custom_minimum_size = Vector2(0, 1)
 	r.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	return r
@@ -288,36 +276,19 @@ func _button(text: String, primary: bool, w: float, h: float, fs: float, fn: Cal
 	b.focus_mode = Control.FOCUS_NONE
 	b.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	b.add_theme_font_size_override("font_size", int(fs))
-	var sb_n: StyleBoxFlat
-	var sb_h: StyleBoxFlat
-	var sb_p: StyleBoxFlat
-	var c_txt: Color
-	if primary:
-		# 主钮：金底深字 + 底缘 3px 暗金压边（文明 6 命令钮语义）
-		c_txt = C["on_gold"]
-		sb_n = _flat(C["active"], C["gold_lo"], 2)
-		sb_n.border_width_bottom = 3
-		sb_h = _flat(C["active_border"], C["gold_lo"], 2)
-		sb_h.border_width_bottom = 3
-		sb_p = _flat(Color8(168, 138, 84, 255), C["gold_lo"], 2)
-		sb_p.border_width_bottom = 3
-	else:
-		# 次钮：透明深底 + 古金细边；悬停亮金字亮金边
-		c_txt = C["text"]
-		sb_n = _flat(C["btn"], C["border"], 2)
-		sb_h = _flat(C["btn_hover"], C["active_border"], 2)
-		sb_p = _flat(C["btn_pressed"], C["gold_lo"], 2)
-	b.add_theme_color_override("font_color", c_txt)
-	b.add_theme_color_override("font_hover_color", C["gold_hi"] if not primary else c_txt)
-	b.add_theme_color_override("font_pressed_color", c_txt)
-	b.add_theme_color_override("font_disabled_color", C["muted"])
-	b.add_theme_stylebox_override("normal", sb_n)
-	b.add_theme_stylebox_override("hover", sb_h)
-	b.add_theme_stylebox_override("pressed", sb_p)
-	b.add_theme_stylebox_override("disabled", _flat(C["btn"], C["border"], 2))
+	var st := UiStyle.button_states(C, primary) # 四态+字色全由工厂派生（主/次钮语义在工厂）
+	b.add_theme_color_override("font_color", st["font_color"])
+	b.add_theme_color_override("font_hover_color", st["font_hover_color"])
+	b.add_theme_color_override("font_pressed_color", st["font_pressed_color"])
+	b.add_theme_color_override("font_disabled_color", st["font_disabled_color"])
+	b.add_theme_stylebox_override("normal", st["normal"])
+	b.add_theme_stylebox_override("hover", st["hover"])
+	b.add_theme_stylebox_override("pressed", st["pressed"])
+	b.add_theme_stylebox_override("disabled", st["disabled"])
 	if pad_left >= 0.0:
-		for sb in [sb_n, sb_h, sb_p]:
-			sb.content_margin_left = pad_left
+		st["normal"].content_margin_left = pad_left
+		st["hover"].content_margin_left = pad_left
+		st["pressed"].content_margin_left = pad_left
 	b.pressed.connect(fn)
 	return b
 
@@ -350,7 +321,7 @@ func _build_title() -> Control:
 	# 底部 55% 渐暗帷幕（战场全景可见，向下渐入帝王金黑）
 	# 注意分量口径：Color() 是 0..1 浮点，超 1 会钳成白——必须 Color8。
 	var grad := Gradient.new()
-	grad.colors = PackedColorArray([Color8(10, 9, 6, 0), Color8(10, 9, 6, 107), Color8(10, 9, 6, 240)])
+	grad.colors = PackedColorArray([UiStyle.TITLE_VEIL_TOP, UiStyle.TITLE_VEIL_MID, UiStyle.TITLE_VEIL_BOTTOM])
 	grad.offsets = PackedFloat32Array([0.0, 0.5, 1.0])
 	var gtex := GradientTexture2D.new()
 	gtex.gradient = grad
@@ -466,7 +437,7 @@ func _build_title() -> Control:
 
 
 func _build_pause() -> Control:
-	var page := _page_base(Color8(10, 9, 6, 150))
+	var page := _page_base(UiStyle.VEIL_SOFT)
 	page.name = "page_pause"
 	var center := CenterContainer.new()
 	center.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -510,7 +481,7 @@ func _build_pause() -> Control:
 
 
 func _build_gameover() -> Control:
-	var page := _page_base(Color8(10, 9, 6, 200))
+	var page := _page_base(UiStyle.VEIL_HEAVY)
 	page.name = "page_gameover"
 	var center := CenterContainer.new()
 	center.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -548,7 +519,7 @@ func _build_gameover() -> Control:
 
 
 func _build_slots() -> Control:
-	var page := _page_base(Color8(10, 9, 6, 170))
+	var page := _page_base(UiStyle.VEIL_PAGE)
 	page.name = "page_slots"
 	var center := CenterContainer.new()
 	center.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -594,7 +565,7 @@ func _build_slots() -> Control:
 
 
 func _build_settings() -> Control:
-	var page := _page_base(Color8(10, 9, 6, 170))
+	var page := _page_base(UiStyle.VEIL_PAGE)
 	page.name = "page_settings"
 	var center := CenterContainer.new()
 	center.set_anchors_preset(Control.PRESET_FULL_RECT)
