@@ -19,7 +19,7 @@ extends RefCounted
 #   剧本指纹 0x7dea2b02 不变（默认图走字节级冻结路径，变幅仅对非默认种子生效）；
 #   结局仍为「6400 终局场清 WON」（核心余 808，击杀 236，供给余 621；采样 16 条 400..6400）。
 #   注：ProbeKit 失败行显示上限 12，重录前 16 条指纹实际全异（非 12 条）。
-#   决策记录见 docs/DEVELOPMENT-PLAN.md §12。
+#   决策记录见 docs/DEVELOPMENT-PLAN.md §11.19。
 const SEED := 20261003
 const EVERY := 400
 const FPS := [

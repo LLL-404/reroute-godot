@@ -4,7 +4,7 @@
 > **速查表与红线**，不复制权威文档内容；冲突时以方案为准。
 
 64×64 塔防，核心机制「放墙改道」：敌人绕得越远、死时赏金越高（`reward + traveled>>3`）。
-Engineering 保真度极高：模拟核心是**确定性**的，有 16 指纹黄金基线锁死行为（2026-10-16 世界程序化生成后第三次重录）。
+Engineering 保真度极高：模拟核心是**确定性**的，有 16 指纹黄金基线锁死行为（2026-10-17 六边化 + G2 后第四次重录）。世界为 **pointy-top odd-r 六边形 64×64**（奇行右移半格）。
 
 ---
 
@@ -14,7 +14,7 @@ Engineering 保真度极高：模拟核心是**确定性**的，有 16 指纹黄
 |---|---|
 | `sim/` | 模拟核心十二模块，纯逻辑、**无浮点、无渲染**：`lua64`(语义 shim) / `canon` / `rng` / `grid` / `flowfield` / `mapgen`(布局生成) / `scenario`(布局构造+校验) / `sim`(数值表) / `world` / `verify` / `golden_baseline` / `save`(存档编解码) |
 | `game/` | 表现层，只读模拟：`main`(主循环/输入) / `view`(3D 门面) + 组件 `view_core`/`view_terrain`/`view_entities`/`view_audio`（D5-1 拆分 2026-10-15） / `models` / `blueprint` / `hud` / `screens`(五屏+确认弹窗) / `save_io`(槽位 I/O) / `user_settings`(音量/全屏) / `selfcheck` |
-| `tests/` | 单测 104 例 + **19 个验收探针**（`tests/probes/`，公共夹具 `probe_kit.gd`，D5-2 2026-10-15） |
+| `tests/` | 单测 104 例 + **20 个验收探针**（`tests/probes/`，公共夹具 `probe_kit.gd`，D5-2 2026-10-15） |
 | `tools/` | Python 工具：`check_shots.py` / `convert_all.py` / `umd2_to_gltf.py` / `verify_glb.py` |
 | `assets/` | `audio/sfx`(29 mp3) / `fonts`(Noto Sans SC) / `models`(glb) / `icon`(图标五件套) |
 | `docs/` | 开发方案（权威）、审计报告、`devlogs/` |
@@ -42,7 +42,7 @@ P="D:/G/game/games/reroute-godot"
 
 # headless 安全：单测 + 模拟模块探针 + 场景构建
 "$GODOT" --headless --path "$P" -s res://tests/run_tests.gd                    # 104 单测
-for p in golden scene sim grid flow scenario world; do
+for p in golden scene blueprint sim grid flow scenario world; do
   "$GODOT" --headless --path "$P" -s res://tests/probes/probe_$p.gd
 done
 
@@ -77,7 +77,7 @@ python tools/check_shots.py    # 截图像素校验
 |---|---|
 | 16 个黄金指纹 | `sim/golden_baseline.gd` |
 | 剧本指纹 `0x7dea2b02` | `Scenario.fingerprint()` |
-| `STATE_SCHEMA = 5` | `canon.gd` / `world.canonical_bytes()` |
+| `STATE_SCHEMA = 6`（六边化后；v5 旧档拒载） | `canon.gd` / `world.canonical_bytes()` |
 
 漂移了先怀疑**实现**，不是怀疑基线。真要改：先说明为何必须改 → 重跑 `probe_golden` 采新值
 → **同一次提交里**更新基线 + 写决策记录。
@@ -207,6 +207,17 @@ python tools/check_shots.py    # 截图像素校验
   外部 21 闸全绿（除 golden——**归因另一 AI 会话正在实时修改 sim/（未提交半成品）的工作
   树污染**；干净 worktree f0033a6 复核 probe_golden PASS，与本轮无关；全 21 闸终值以
   sim 收敛后为主）。证据 `logs/gates-20261017-b3/`；决策记录 = 方案 §11.18（建筑段）。
+- 六边化全换 + G2 每局地形变幅（2026-10-17）**已完成**：模拟核心换 pointy-top odd-r 六边形
+  （`grid/flowfield/world/canon` schema 6，剧本指纹 0x7dea2b02 不变、路径长 548 在标定带）；
+  表现层六棱板场区网格（"HexField"）/棱墙/幽灵/热层/拾取全换；G2 = 玩法模板池 T0..T4
+  （`_generate_default` 字节级冻结默认种子，变幅只对非默认种子生效；咽喉行随列化 `c.y`）
+  + 视觉动机池 3→6（ochre/slate/dusk，追加序位口径保 1..3 不变；**砍单序第一批已启用**，
+  9~12 上限未扩满）；**第四次基线重录**（16 指纹全换、WON@6400 余 808/击杀 236/供给 621）。
+  新探针 `probe_blueprint`(11)；全 21 闸 + `check_shots` 25/0 + 导出件 `--selfcheck` 22/0 绿。
+  **双端包已重出**：Windows 已复签 + Android 305.9MB（CN=Reroute）。
+  决策记录 = 方案 §11.19；开发者日志③草案 = `docs/devlogs/03-*.md`（待发布）。
+  **注**：Windows 自证以 `export/game.exe --selfcheck` 直跑为准（`--main-pack` 在 4.7.2
+  模板不支持 path overrides，10-16 记录口径更正）。
 
 ---
 

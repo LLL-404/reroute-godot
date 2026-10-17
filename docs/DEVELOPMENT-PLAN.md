@@ -1885,6 +1885,60 @@ grid/world + test_* 在飞）；干净 worktree（f0033a6 checkout）复核 prob
 
 ---
 
+### 11.19 六边化全换 + G2 每局地形变幅（H1–H3 + 模板池 V1 / 动机池 V2）与基线第四次重录（2026-10-17）
+
+**需求（用户裁定链）**：①四周不要墙 → 开阔荒漠矮墙（已完成）；②「就要全换（玩法+视觉）」、
+架构优先于日程；③每局地形不一样是真实目的；④G2 完整变幅；⑤六边优先（选项 C，接受 10-21
+剩余 4~5 天高风险）；**H0 修订**：实采**尖顶 pointy-top odd-r（奇行右移半格）+ 64×64 矩形
+阵列**（方向序 0E 1NE 2NW 3W 4SW 5SE）。
+
+**H1 模拟核心（`sim/`）**：`grid` 换六边邻接表（`DX/DY` 表 + `nx/ny/to_axial/hex_dist`）；
+`flowfield` 六向等权 STRAIGHT=10（`off_e/off_o`+`par[]`、平手序号最小、切比雪夫兜底）；
+`world` 移动/`cast_shock` 轴向主轴；`canon.STATE_SCHEMA := 6`（v5 旧档拒载）。单测 104/0。
+
+**H2 验证**：剧本指纹 **0x7dea2b02 不变**；两主口裸图路径长 548 ∈ [466,630] 标定带中段；
+难度带无需重标定。
+
+**H3 表现层（`game/`）**：`view_core` 六棱板网格（CX/CZ 8.66m 间距、纵向拉伸 15%、
+`HEX_CORNERS` C0..C5、场区网格名 **"HexField"**、`world_to_cell` 精确六边包含）；棱墙只朝
+低邻画（内部）＋`WALL_EMBED` 0.5（界外双面）；ghost/热层随六棱；`main.gd` gates 公式含
+`+0.5*(y&1)` 半格；地标装饰半格对齐；`selfcheck` plain 钉 39820 复核 22/0。
+
+**V1 模板池（G2 玩法侧）**：五套布局 T0 横脊（默认）/ T1 错行双脊 / T2 弧脊 / T3 斜壁 /
+T4 獠牙翼。**冻结纪律**：默认种子走 `_generate_default`（参数流字节级冻结、恒 T0），
+其余种子走 `_generate_varied`（遗留抽取在前、模板抽取在后）；`MapGen` 暴露静态几何面
+（`band_rows/gate_rows/carved/extra_walls`）。参数域加宽：core_x 28..38 / ridge_y 39..43 /
+咽喉 15..26·38..51 间距≥15 / 盆地 1..5·50..52·6..9·7..9 / mid_y 18..23 / sparse_phase 2..7 /
+mesa 行 ry+5..48。`scenario` 新增 `template_id/_p/_barrier` 蒙版（三口径统一：几何/高度/校验）、
+`chokes` 携带口行 c.y；`verify.script_for` 咽喉行全部相对各口 c.y（T0 恒等 ⇒ 黄金脚本逐条
+不变，已在 worktree 9bb12bc 逐位实证零扰动）。check_grid 新增「屏障格非实心/咽喉缺口未开/
+咽喉口高度破例/矿格压脊」四串。
+
+**V2 动机池（G2 视觉侧）**：`blueprint.ORDER` 3→6（+ochre 赭黄 / slate 青岩 / dusk 暮紫），
+**追加序位**（1..3 轮换口径逐字节不变）；新预设各配 landmark 三件套/world/micro/palette 全参；
+新探针 `probe_blueprint`（11 断言：结构/配色域/采样有限/两两可辨/轮换/确定性；互辨阈值只对
+新预设参与配对生效——旧三角互为同系变奏是有意设计）。**砍单序第一批已启用**：视觉族取 6
+（9~12 上限未扩满，工期对冲）。
+
+**第四次基线重录（单次）**：16 指纹 400..6400 全量换新（重录前实际 16 条全异；`ProbeKit`
+失败行显示上限 12 造成「仅 12 红」假象）；结局不变 **WON@6400**（核心余 808，击杀 236，
+供给余 621）；剧本指纹 0x7dea2b02 不变。取样脚本复用 `run_world` 同循环（跳过不变量检查），
+用完即删。**探针口径注**：默认种子（run 1..3）视觉与玩法均冻结，历史截图/黄金语义对齐。
+
+**V3 全闸终值与双端重出（2026-10-17）**：单测 104/0；headless：golden 2/0、scene 16/0、
+sim 5/0、grid 40/0、flow 53/0、scenario 72/0（48 局扫段模板覆盖 5、指纹互异 ≥44）、
+world 20/0、blueprint 11/0；窗口：save 74/0、orient 1/0、asset 63/0、model 6/0、sync 1805/0、
+input 57/0、hud 69/0、ui_flow 39/0、audio 56/0、touch 39/0、shots 5/0、smoke 31/0
+（run1 LOST@4937 kills=133 towers 6/6 mismatch=0）；`check_shots` 25/0；
+导出件 `--selfcheck` 22/0。**双端包已重出**：Windows `export/game.exe` 109,550,080B 已复签
+（SIGNED=Valid）+ `game.pck` 103,722,596B（+23MB = 建筑三件 glb，预期）；Android
+`export/reroute-release.apk` 305,975,988B（keystore alias `reroute`，apksigner Signer #1
+CN=Reroute）。**注**：Windows 自证跑法以 `export/game.exe --selfcheck` 直跑为准
+（`--main-pack` 在 4.7.2 模板上报 path overrides 不支持，10-16 记录口径更正）。
+**遗留**：Android 真机装机复验与视觉族扩满（9~12）留待时间窗内机动。
+
+---
+
 ## 12. AI 任务卡模板（派活时照抄）
 
 ```markdown
