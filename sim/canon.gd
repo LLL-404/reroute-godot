@@ -3,9 +3,10 @@ extends RefCounted
 
 # 规范字节编码 + FNV-1a/32 指纹，照搬 warden/Warden.Core/Canon.cs 的口径：
 # 大端、字段定序、集合按 id 升序。本作 STATE_SCHEMA 独立从 1 起。
+# v6（2026-10-17）：六边形拓扑上线——字段布局不变，但移动/寻路语义变 ⇒ 旧档（v5 方形）拒载。
 # 常量来源：Lua 版 scripts/sim/canon.lua 逐行对照；>=2^63 的期望值已转带符号十进制
 # （GDScript 大 hex 字面量会被钳位，见 lua64.gd 头注）。
-const STATE_SCHEMA := 5
+const STATE_SCHEMA := 6
 const FNV_OFFSET := 2166136261 # 0x811C9DC5
 const FNV_PRIME := 16777619 # 0x01000193
 const MASK32 := 4294967296 # 0x100000000

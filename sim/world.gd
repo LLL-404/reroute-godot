@@ -2,6 +2,8 @@ class_name World
 extends RefCounted
 
 # 世界状态机：照搬 warden/Warden.Core/World.cs 的切片语义 + reroute/scripts/sim/world.lua。
+# 2026-10-17 六边形化：网格 = 尖顶六边 odd-r（grid.gd），流场六向等权；移动/围攻/击退
+# 全部经 Grid.nx/ny 方向表落地；震荡波击退 = 轴向主轴符号（六向）。
 # 铁律（全部照抄母体）：
 #   · 一切状态变更只经 apply_command；非法命令零状态副作用；
 #   · 终局后整体冻结（tick 与命令都不再改变状态）；
@@ -316,8 +318,8 @@ func move_units() -> void:
 		if (tick_count + unit["id"]) % unit["speed_ticks"] == 0: # 未到步点则跳过
 			var dir := field.dir_at(unit["x"], unit["y"])
 			if dir >= 0:
-				var nx: int = unit["x"] + FlowField.DX[dir]
-				var ny: int = unit["y"] + FlowField.DY[dir]
+				var nx: int = Grid.nx(unit["x"], unit["y"], dir)
+				var ny: int = Grid.ny(unit["x"], unit["y"], dir)
 				if grid.passable(nx, ny):
 					unit["x"] = nx
 					unit["y"] = ny
@@ -347,8 +349,8 @@ func stuck_branch(unit: Dictionary) -> void:
 	var sdir := siege.dir_at(unit["x"], unit["y"])
 	if sdir < 0:
 		return # 全场无可攻目标（核心已毁等）→ 原地待命
-	var mx: int = unit["x"] + FlowField.DX[sdir]
-	var my: int = unit["y"] + FlowField.DY[sdir]
+	var mx: int = Grid.nx(unit["x"], unit["y"], sdir)
+	var my: int = Grid.ny(unit["x"], unit["y"], sdir)
 	if grid.passable(mx, my):
 		unit["x"] = mx
 		unit["y"] = my
@@ -375,8 +377,9 @@ func ensure_siege() -> void:
 	siege_stamp = stamp
 
 
-## 震荡波：半径（平方距离）内敌人沿背离英雄方向击退 1 格；落点须可通行、无单位且高度边合法
-## （可震下崖、不可推上崖）。不改地形、不耗 Rng；冷却期命令为 Nop（零副作用）。
+## 震荡波：半径（平方距离口径，与拓扑无关）内敌人沿背离英雄方向击退 1 格；落点须可通行、
+## 无单位且高度边合法（可震下崖、不可推上崖）。不改地形、不耗 Rng；冷却期命令为 Nop（零副作用）。
+## 六边击退方向 = 轴向差的主轴符号（|dq|→|dr|→|ds| 平手优先，确定性）。
 func cast_shock() -> void:
 	hero["skill_cd"] = Sim.HERO["skill_cooldown"]
 	var r2: int = Sim.HERO["skill_radius"] * Sim.HERO["skill_radius"]
@@ -386,11 +389,21 @@ func cast_shock() -> void:
 		var dy: int = u["y"] - hero["y"]
 		var d2: int = dx * dx + dy * dy
 		if u["hp"] > 0 and d2 > 0 and d2 <= r2:
-			var sx := 1 if dx > 0 else (-1 if dx < 0 else 0)
-			var sy := 1 if dy > 0 else (-1 if dy < 0 else 0)
-			var nx: int = u["x"] + sx
-			var ny: int = u["y"] + sy
-			if (nx != u["x"] or ny != u["y"]) and grid.passable(nx, ny) and cell_vacant(nx, ny) and grid.get_h(nx, ny) - grid.get_h(u["x"], u["y"]) <= 1:
+			var ua := Grid.to_axial(u["x"], u["y"])
+			var ha := Grid.to_axial(hero["x"], hero["y"])
+			var dq: int = ua.x - ha.x
+			var dr: int = ua.y - ha.y
+			var ds: int = -(dq + dr)
+			var k := 0
+			if absi(dq) >= absi(dr) and absi(dq) >= absi(ds):
+				k = 0 if dq > 0 else 3 # E / W
+			elif absi(dr) >= absi(ds):
+				k = 5 if dr > 0 else 2 # SE / NW
+			else:
+				k = 4 if ds > 0 else 1 # SW / NE
+			var nx: int = Grid.nx(u["x"], u["y"], k)
+			var ny: int = Grid.ny(u["x"], u["y"], k)
+			if grid.passable(nx, ny) and cell_vacant(nx, ny) and grid.get_h(nx, ny) - grid.get_h(u["x"], u["y"]) <= 1:
 				u["x"] = nx
 				u["y"] = ny
 
@@ -417,8 +430,8 @@ func hero_tick() -> void:
 	var dir := hero_field.dir_at(hero["x"], hero["y"])
 	if dir < 0:
 		return # 不可达/被围死：原地待命
-	var nx: int = hero["x"] + FlowField.DX[dir]
-	var ny: int = hero["y"] + FlowField.DY[dir]
+	var nx: int = Grid.nx(hero["x"], hero["y"], dir)
+	var ny: int = Grid.ny(hero["x"], hero["y"], dir)
 	if grid.passable(nx, ny):
 		hero["x"] = nx
 		hero["y"] = ny
@@ -428,9 +441,9 @@ func hero_tick() -> void:
 func find_attack_target(unit: Dictionary) -> int:
 	var best = null
 	var best_score := INT64_MAX
-	for k in 8:
-		var nx: int = unit["x"] + FlowField.DX[k]
-		var ny: int = unit["y"] + FlowField.DY[k]
+	for k in 6:
+		var nx: int = Grid.nx(unit["x"], unit["y"], k)
+		var ny: int = Grid.ny(unit["x"], unit["y"], k)
 		var b = building_at(nx, ny)
 		if b != null and b["hp"] > 0:
 			var score := score_around(nx, ny)
@@ -445,8 +458,8 @@ func score_around(x: int, y: int) -> int:
 	var self_d := field.dist_at(x, y)
 	if self_d >= 0:
 		best = self_d
-	for k in 8:
-		var d := field.dist_at(x + FlowField.DX[k], y + FlowField.DY[k])
+	for k in 6:
+		var d := field.dist_at(Grid.nx(x, y, k), Grid.ny(x, y, k))
 		if d >= 0 and d < best:
 			best = d
 	return best
@@ -537,7 +550,7 @@ func judge() -> void:
 		outcome = LOST # 超时＝敌按时刻表长完，守方判负
 
 
-# ---------------- 规范状态编码（STATE_SCHEMA=5）----------------
+# ---------------- 规范状态编码（STATE_SCHEMA=6）----------------
 # tick | rng | grid | 供给/结局/开门/战果 | 单位表按 id 升序 | 建筑表按 id 升序。
 # 流场是派生态，不进指纹。
 func canonical_bytes() -> Canon.Buf:

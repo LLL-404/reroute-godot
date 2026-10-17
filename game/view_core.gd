@@ -115,27 +115,111 @@ func _part(parent: Node3D, px: float, py: float, pz: float, sx: float, sy: float
 	parent.add_child(mi)
 
 
-# ---- 坐标映射 ----
+# ---- 坐标映射（2026-10-17 六边形：pointy-top odd-r，奇行 +0.5 半格右移）----
 
-## 格子坐标 → 世界坐标（格中心）
+## 六边形局部角点（x,z；尖顶朝北：上/下顶点 ±2/3，左右平边 ±1/2）。
+## 与 sim 邻接表严格同构：E/W 同排相贴；NE/NW/SE/SW 与相邻行错半格相贴。
+## 高度 = 2×2/3（行距 1.0 的 1.5 倍），比正六边形竖向拉伸 ~15%，换回整幅 [-32,32]² 世界口径不变。
+const HEX_CORNERS := [
+	Vector2(0.0, -2.0 / 3.0),
+	Vector2(0.5, -1.0 / 3.0),
+	Vector2(0.5, 1.0 / 3.0),
+	Vector2(0.0, 2.0 / 3.0),
+	Vector2(-0.5, 1.0 / 3.0),
+	Vector2(-0.5, -1.0 / 3.0),
+]
+
+var hex_plate_mesh: ArrayMesh = null # 六边板（薄棱柱，中心原点，厚 1.0；幽灵/热层共用）
+
+
+## 格子坐标 → 世界坐标（格中心；奇行（y 为奇数）+0.5 右移 = odd-r）
 func cell_to_world(x: int, y: int) -> Vector3:
-	return Vector3(float(x) - HALF + 0.5, 0.0, float(y) - HALF + 0.5)
+	return Vector3(float(x) - HALF + 0.5 + 0.5 * float(y & 1), 0.0, float(y) - HALF + 0.5)
 
 
-## 世界坐标 → 格子坐标；界外返回 (-1, -1)
+## 世界坐标 → 格子坐标（精确六边包含判定：3×3 候选 + 逐边半平面测试）；界外/缝隙返回 (-1, -1)。
+## 注意：六边平铺在矩形边界处有半格锯齿缝隙（odd-r 固有），缝隙内点击返回 (-1,-1)。
 func world_to_cell(wx: float, wz: float) -> Vector2i:
-	var cx := int(floor(wx + HALF))
-	var cy := int(floor(wz + HALF))
-	if cx < 0 or cy < 0 or cx >= CELL_N or cy >= CELL_N:
-		return Vector2i(-1, -1)
-	return Vector2i(cx, cy)
+	var fx := int(floor(wx + HALF))
+	var fy := int(floor(wz + HALF))
+	for dy in range(-1, 2):
+		for dx in range(-1, 2):
+			var cx := fx + dx
+			var cy := fy + dy
+			if cx < 0 or cy < 0 or cx >= CELL_N or cy >= CELL_N:
+				continue
+			if _in_hex(wx, wz, cx, cy):
+				return Vector2i(cx, cy)
+	return Vector2i(-1, -1)
 
 
-## 构建 MultiMeshInstance3D（实例数组 + 材质）
-func _make_multimesh(insts: Array, mat: Material) -> MultiMeshInstance3D:
+## 点是否落在格 (x,y) 的六边形内（自然角点，不裁剪；半平面：x≤±0.5 + 四斜边 2|·|-3|·|≤2）。
+func _in_hex(wx: float, wz: float, x: int, y: int) -> bool:
+	var c := cell_to_world(x, y)
+	var lx := wx - c.x
+	var lz := wz - c.z
+	if lx > 0.5 or lx < -0.5:
+		return false
+	if 2.0 * lx - 3.0 * lz > 2.0:
+		return false
+	if -2.0 * lx - 3.0 * lz > 2.0:
+		return false
+	if 2.0 * lx + 3.0 * lz > 2.0:
+		return false
+	if -2.0 * lx + 3.0 * lz > 2.0:
+		return false
+	return true
+
+
+## 六边板网格（懒构建）：顶/底 + 6 侧；厚 1.0（±0.5）居中；横向 1.0 宽、竖向 4/3 高（贴合格口径）。
+func _ensure_hex_plate() -> void:
+	if hex_plate_mesh != null:
+		return
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var hz := 0.5
+	# 顶面扇形（CW：自顶角起顺时针；与地面网格绕序口径一致）
+	for i in 6:
+		var p0: Vector2 = HEX_CORNERS[i]
+		var p1: Vector2 = HEX_CORNERS[(i + 1) % 6]
+		st.set_normal(Vector3.UP)
+		st.add_vertex(Vector3(0.0, hz, 0.0))
+		st.add_vertex(Vector3(p0.x, hz, p0.y))
+		st.add_vertex(Vector3(p1.x, hz, p1.y))
+	# 底面扇形（反向绕序）
+	for i2 in 6:
+		var q0: Vector2 = HEX_CORNERS[i2]
+		var q1: Vector2 = HEX_CORNERS[(i2 + 1) % 6]
+		st.set_normal(Vector3.DOWN)
+		st.add_vertex(Vector3(0.0, -hz, 0.0))
+		st.add_vertex(Vector3(q1.x, -hz, q1.y))
+		st.add_vertex(Vector3(q0.x, -hz, q0.y))
+	# 侧面（法线水平，逐条面算）
+	for i3 in 6:
+		var s0: Vector2 = HEX_CORNERS[i3]
+		var s1: Vector2 = HEX_CORNERS[(i3 + 1) % 6]
+		var d := Vector3(s1.x - s0.x, 0.0, s1.y - s0.y)
+		var n := Vector3(d.z, 0.0, -d.x).normalized()
+		var a := Vector3(s0.x, hz, s0.y)
+		var b := Vector3(s1.x, hz, s1.y)
+		var a2 := Vector3(s0.x, -hz, s0.y)
+		var b2 := Vector3(s1.x, -hz, s1.y)
+		st.set_normal(n)
+		st.add_vertex(a)
+		st.add_vertex(a2)
+		st.add_vertex(b2)
+		st.set_normal(n)
+		st.add_vertex(a)
+		st.add_vertex(b2)
+		st.add_vertex(b)
+	hex_plate_mesh = st.commit()
+
+
+## 构建 MultiMeshInstance3D（实例数组 + 材质；pmesh 缺省盒体，可传六边板等）
+func _make_multimesh(insts: Array, mat: Material, pmesh: Mesh = null) -> MultiMeshInstance3D:
 	var mm := MultiMesh.new()
 	mm.transform_format = MultiMesh.TRANSFORM_3D
-	mm.mesh = box_mesh
+	mm.mesh = pmesh if pmesh != null else box_mesh
 	mm.instance_count = insts.size()
 	for i in insts.size():
 		var it: Array = insts[i]

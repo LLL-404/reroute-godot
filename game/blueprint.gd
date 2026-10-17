@@ -134,7 +134,7 @@ static func _bake_eroded(base: Callable, iters: int) -> Callable:
 
 
 ## 返回 [h_fn: Callable(wx, wz) -> float, palette: Dictionary]。
-## 地标用格子坐标换算：wz_c = y - HALF + 0.5。
+## 地标用格子坐标换算：wz_c = y - HALF + 0.5；wx_c 另加六边 odd-r 奇行 +0.5（peak/core 用）。
 ## 场外四层（g 门控渐入）：中频起伏 → 环山体（南面出怪口豁口）→ 台地原 → 远山剪影，
 ## 与场内无缝衔接；gate_x（世界坐标 x 列表）来自 anchor（当局 spawn 列）或预设缺省。
 static func compose(bp: Dictionary, seed: int, anchor: Dictionary = {}) -> Array:
@@ -230,7 +230,7 @@ static func compose(bp: Dictionary, seed: int, anchor: Dictionary = {}) -> Array
 		# 战场地标（位置可由 anchor 对齐当局 Scenario；幅度/形状由蓝图定）
 		for lm in landmarks:
 			if lm["kind"] == "peak":
-				var dx := wx - (float(lm["x"]) - HALF + 0.5)
+				var dx := wx - (float(lm["x"]) - HALF + 0.5 + 0.5 * float(int(lm["y"]) & 1)) # 六边 odd-r 奇行半格
 				var dz := wz - (float(lm["y"]) - HALF + 0.5)
 				h += float(lm["amp"]) * gauss(sqrt(dx * dx + dz * dz), float(lm["sigma"]))
 			elif lm["kind"] == "ridge":

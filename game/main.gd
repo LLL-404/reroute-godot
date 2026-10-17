@@ -248,7 +248,7 @@ func _on_hud_skill() -> void:
 func _visual_anchor() -> Dictionary:
 	var gates: Array = []
 	for s in sc.spawns:
-		gates.append(float(s.x) - 31.5) # 格 x → 世界 x（cell_to_world 口径）
+		gates.append(float(s.x) - 31.5 + 0.5 * float(s.y & 1)) # 格 x → 世界 x（六边 odd-r：奇行 +0.5）
 	return {
 		"ridge_y": sc.ridge_y + 1,
 		"basin_y": float(sc.basin_rect.position.y) + float(sc.basin_rect.size.y - 1) * 0.5,

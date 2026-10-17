@@ -10,9 +10,10 @@ extends RefCounted
 # （_rim_scale，对齐当局 spawn 列），场外配色按高度岩化。
 # 2026-10-17 三平面贴图：_ground_mat → ShaderMaterial（ground093c/rock061 CC0），
 # 顶点色 a 位 = 岩石权值（沙/岩纹理按权混法线+色），rgb 维持既有分带/层理/抖动。
-# 顶点高规则：场内采样点 = 邻接格顶高的 max（格顶 = 蓝图高 + 模拟层 1.2m/级 + SOLID 抬升），
-# 场外采样点 = 蓝图高度函数直取；网格一次建成（场外数据蓝图期内静态），
-# 高度变化（挖/填/落墙）只重算场内区并与静态区合并重建 surface。
+# 2026-10-17 六边化（H3）：场区渲染由「lattice 邻格 max-blend」改为**逐格六棱板网格**
+# （_rebuild_hex：顶面 = 每格 7 顶点扇形 + 坡度法线；棱墙 = 朝低邻侧，界外壁双面 + 埋深 0.5）。
+# lattice 网格保留场外渐进环 + **场内区改取蓝图高度函数平滑直填**（内部面片整体跳过，
+# 只留最外圈 1 环缝合场外；欠缝/半格锯齿为 odd-r 固有，接受）。高度变化只重建六边网格。
 
 const ViewCoreScript = preload("res://game/view_core.gd")
 const Blueprint = preload("res://game/blueprint.gd")
@@ -42,6 +43,12 @@ const OUT_RINGS := 54 # i=1..54 → 最远 ±260.96
 const SOLID_BUMP := 1.6 # SOLID 格在网格内的抬升（原柱体口径：顶 = ground_y + 1.6）
 const RIM_BUMP := 0.8 # 地图边框圈额外抬升：矮石墙围界（对齐头图矮墙+h 豁口），非崖壁
 const RIM_MOUTH_W := 3.6 # 南面出怪口豁口半宽（m，spawn 列两侧高斯衰减）
+
+# 六边棱边 → 角点表（CW 环序 Ca→Cb，与 core.HEX_CORNERS 下标对应）：
+# E=C1-C2 / NE=C0-C1 / NW=C5-C0 / W=C4-C5 / SW=C3-C4 / SE=C2-C3
+const HEX_EDGE_A := [1, 0, 5, 4, 3, 2]
+const HEX_EDGE_B := [2, 1, 0, 5, 4, 3]
+const WALL_EMBED := 0.5 # 界外壁底埋深（相对蓝图高度函数）
 
 var host: Node3D
 var core: ViewCoreScript
@@ -75,6 +82,7 @@ var _normals := PackedVector3Array()
 var _colors := PackedColorArray()
 var _indices := PackedInt32Array()
 var _ground: MeshInstance3D = null
+var _hex: MeshInstance3D = null # 场内六棱板网格（顶面扇形 + 棱墙；随 _cell_top 重建）
 var _ground_mat: ShaderMaterial = null
 var _col_lo := Color()
 var _col_mid := Color()
@@ -191,21 +199,28 @@ func _build_lattice() -> void:
 	_i0 = OUT_RINGS
 	_i1 = OUT_RINGS + n_fine - 1
 	_stat_field = core.CELL_N * core.CELL_N
-	_stat_plain = (_ln - 1) * (_ln - 1) - core.CELL_N * core.CELL_N * 4
+	# 场内区面片整体跳过（六边网格接管），只留最外圈缝合环 → 渲染面片 = 全场 - 跳过
+	var skipped_side := core.CELL_N * 2 - 2
+	_stat_plain = (_ln - 1) * (_ln - 1) - skipped_side * skipped_side
 	_build_indices()
 
 
-## 全场三角索引（规则网格；顶点一律共享 → 水密无裂缝）
+## 全场三角索引（规则网格；顶点一律共享 → 水密无裂缝）；场内区面片跳过（六边网格接管）。
 func _build_indices() -> void:
 	if not _indices.is_empty():
 		return
 	var e := _ln - 1
-	_indices.resize(e * e * 6)
+	var skip_lo := _i0 + 1
+	var skip_hi := _i1 - 2
+	var skip_n := skip_hi - skip_lo + 1
+	_indices.resize((e * e - skip_n * skip_n) * 6)
 	var w := 0
 	for lj in e:
 		var row := lj * _ln
 		var row1 := row + _ln
 		for li in e:
+			if li >= skip_lo and li <= skip_hi and lj >= skip_lo and lj <= skip_hi:
+				continue
 			var a := row + li
 			var b := a + 1
 			var d := row1 + li
@@ -248,10 +263,29 @@ func _build_ground() -> void:
 		_ground.material_override = _ground_mat
 		field_root.add_child(_ground)
 	_apply_mesh()
+	_rebuild_hex()
 
 
-## 场内区顶点（高 = 邻接格顶 max，色 = 胜出格分带/岩石色）；挖填/落墙后由 _rebuild_field 复跑。
+## 场内区采样线（2026-10-17 六边化）：整区取蓝图高度函数平滑直填（内部面片已跳过，
+## 仅最外圈 1 环参与渲染缝合场外）；格顶/棱墙由 _rebuild_hex 独立成网格。
 func _fill_field_region() -> void:
+	if field_h.is_empty():
+		return
+	for lj in range(_i0, _i1 + 1):
+		var pz := _lattice[lj]
+		var row := lj * _ln
+		for li in range(_i0, _i1 + 1):
+			var px := _lattice[li]
+			var h := ground_h(px, pz)
+			_heights[row + li] = h
+			_positions[row + li] = Vector3(px, h, pz)
+			_colors[row + li] = _outside_color(px, pz, h)
+
+
+# ---- 场内六棱板网格（2026-10-17 H3）----
+
+## 每格视觉顶（蓝图高 + 模拟层 1.2m/级 + SOLID 抬升 + 边框围界）→ _cell_top。
+func _compute_cell_top() -> void:
 	if field_h.is_empty():
 		return
 	var n := core.CELL_N
@@ -265,61 +299,133 @@ func _fill_field_region() -> void:
 				if grid.at(x, y) == Grid.SOLID:
 					t += SOLID_BUMP
 					if x == 0 or y == 0 or x == n - 1 or y == n - 1:
-						t += RIM_BUMP * _rim_scale(x, y) # 边框崖壁（视觉围合；周向起伏 + 南口豁口）
+						t += RIM_BUMP * _rim_scale(x, y) # 边框围界（视觉围合；周向起伏 + 南口豁口）
 			_cell_top[y * n + x] = t
-	for lj in range(_i0, _i1 + 1):
-		var pz := _lattice[lj]
-		var row := lj * _ln
-		var fz := pz + float(n) * 0.5
-		var cy0 := int(floor(fz))
-		var z_mid := absf(fz - float(cy0)) > 1e-6 # 采样线在格中心（非整数坐标）→ 只邻接本格
-		for li in range(_i0, _i1 + 1):
-			var px := _lattice[li]
-			var fx := px + float(n) * 0.5
-			var cx0 := int(floor(fx))
-			var x_mid := absf(fx - float(cx0)) > 1e-6
-			var best := -1.0e9
-			var best_solid := false
-			var bx := 0
-			var by := 0
-			for dz in 2:
-				var cy := cy0 - dz
-				if dz == 1 and z_mid:
-					continue
-				if cy < 0 or cy >= n:
-					continue
-				for dx in 2:
-					var cx := cx0 - dx
-					if dx == 1 and x_mid:
-						continue
-					if cx < 0 or cx >= n:
-						continue
-					var t := _cell_top[cy * n + cx]
-					if t > best:
-						best = t
-						best_solid = grid != null and grid.at(cx, cy) == Grid.SOLID
-						bx = cx
-						by = cy
-			if best < -1.0e8:
-				best = ground_h(px, pz) # 理论到不了（场内必有邻格）；兜底防 NaN
+
+
+## 重建六棱板网格：逐格顶面（中心 + 6 角扇形；坡度法线/顶点色）+ 棱墙
+## （只朝低邻侧画、面朝邻居；界外棱双面 + 底埋 ground_h-0.5）。挖/填/落墙后复跑。
+func _rebuild_hex() -> void:
+	if field_h.is_empty() or _ground == null:
+		return # 蓝图尚未套用（正常流程 apply_blueprint 先于 build_terrain）
+	_compute_cell_top()
+	var n := core.CELL_N
+	var verts := PackedVector3Array()
+	var nrms := PackedVector3Array()
+	var cols := PackedColorArray()
+	var idx := PackedInt32Array()
+	for y in n:
+		for x in n:
+			var w := core.cell_to_world(x, y)
+			var t := _cell_top[y * n + x]
+			var solid := grid != null and grid.at(x, y) == Grid.SOLID
+			# 坡度法线 / 坡度值（6 邻；界外邻不计）
+			var ga := 0.0
+			var gb := 0.0
 			var slope := 0.0
-			if not best_solid:
-				var t0 := _cell_top[by * n + bx]
-				var s1 := absf(t0 - _cell_top[by * n + maxi(bx - 1, 0)])
-				var s2 := absf(t0 - _cell_top[by * n + mini(bx + 1, n - 1)])
-				var s3 := absf(t0 - _cell_top[maxi(by - 1, 0) * n + bx])
-				var s4 := absf(t0 - _cell_top[mini(by + 1, n - 1) * n + bx])
-				slope = maxf(maxf(s1, s2), maxf(s3, s4))
-			_heights[row + li] = best
-			_positions[row + li] = Vector3(px, best, pz)
-			_colors[row + li] = _field_color(best, best_solid, slope, bx, by)
+			for k in 6:
+				var x2 := Grid.nx(x, y, k)
+				var y2 := Grid.ny(x, y, k)
+				if x2 < 0 or y2 < 0 or x2 >= n or y2 >= n:
+					continue
+				var dt := _cell_top[y2 * n + x2] - t
+				slope = maxf(slope, absf(dt))
+				var w2 := core.cell_to_world(x2, y2)
+				var dx := w2.x - w.x
+				var dz := w2.z - w.z
+				var inv := 1.0 / sqrt(dx * dx + dz * dz)
+				ga += dt * dx * inv
+				gb += dt * dz * inv
+			var nrm := Vector3(-ga * 0.3, 1.0, -gb * 0.3).normalized()
+			var col := _field_color(t, solid, slope, x, y)
+			# 顶面：中心 + 6 角（CW 环序 C0..C5），扇形 6 三角
+			var base := verts.size()
+			verts.append(Vector3(w.x, t, w.z))
+			nrms.append(nrm)
+			cols.append(col)
+			for i in 6:
+				var c2: Vector2 = core.HEX_CORNERS[i]
+				verts.append(Vector3(w.x + c2.x, t, w.z + c2.y))
+				nrms.append(nrm)
+				cols.append(col)
+			for i2 in 6:
+				idx.append(base)
+				idx.append(base + 1 + i2)
+				idx.append(base + 1 + (i2 + 1) % 6)
+			# 棱墙
+			for k2 in 6:
+				var ca: Vector2 = core.HEX_CORNERS[HEX_EDGE_A[k2]]
+				var cb: Vector2 = core.HEX_CORNERS[HEX_EDGE_B[k2]]
+				var ax := w.x + ca.x
+				var az := w.z + ca.y
+				var bx := w.x + cb.x
+				var bz := w.z + cb.y
+				var nx2 := Grid.nx(x, y, k2)
+				var ny2 := Grid.ny(x, y, k2)
+				var t_lo := 0.0
+				var both := false
+				if nx2 >= 0 and ny2 >= 0 and nx2 < n and ny2 < n:
+					var t2 := _cell_top[ny2 * n + nx2]
+					if t <= t2 + 0.02:
+						continue # 同高/我低（低侧由对面格画）
+					t_lo = t2
+				else:
+					t_lo = minf(ground_h(ax, az), ground_h(bx, bz)) - WALL_EMBED # 界外：埋入场外地面
+					both = true
+				var wd := Vector3(cb.x - ca.x, 0.0, cb.y - ca.y)
+				var wn := Vector3(wd.z, 0.0, -wd.x).normalized() # 面朝邻居（外法线）
+				var wcol := Color(col.r * 0.72, col.g * 0.72, col.b * 0.74, col.a)
+				var wb := verts.size()
+				verts.append(Vector3(ax, t, az))
+				verts.append(Vector3(ax, t_lo, az))
+				verts.append(Vector3(bx, t_lo, bz))
+				verts.append(Vector3(bx, t, bz))
+				for _i3 in 4:
+					nrms.append(wn)
+					cols.append(wcol)
+				idx.append(wb)
+				idx.append(wb + 1)
+				idx.append(wb + 2)
+				idx.append(wb)
+				idx.append(wb + 2)
+				idx.append(wb + 3)
+				if both: # 界外壁双面（内视角可见）
+					var wb2 := verts.size()
+					verts.append(Vector3(bx, t, bz))
+					verts.append(Vector3(bx, t_lo, bz))
+					verts.append(Vector3(ax, t_lo, az))
+					verts.append(Vector3(ax, t, az))
+					var wn2 := -wn
+					for _i4 in 4:
+						nrms.append(wn2)
+						cols.append(wcol)
+					idx.append(wb2)
+					idx.append(wb2 + 1)
+					idx.append(wb2 + 2)
+					idx.append(wb2)
+					idx.append(wb2 + 2)
+					idx.append(wb2 + 3)
+	var mesh := ArrayMesh.new()
+	var arrays: Array = []
+	arrays.resize(Mesh.ARRAY_MAX)
+	arrays[Mesh.ARRAY_VERTEX] = verts
+	arrays[Mesh.ARRAY_NORMAL] = nrms
+	arrays[Mesh.ARRAY_COLOR] = cols
+	arrays[Mesh.ARRAY_INDEX] = idx
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+	if _hex == null:
+		_hex = MeshInstance3D.new()
+		_hex.name = "HexField"
+		_hex.material_override = _ground_mat
+		field_root.add_child(_hex)
+	_hex.mesh = mesh
 
 
 ## 边框崖壁高度系数：周向确定性起伏（去直边皱褶感）+ 南面出怪口豁口（对齐当局 spawn 列，限南沿）。
 func _rim_scale(x: int, y: int) -> float:
 	var s := 0.70 + 0.55 * Blueprint.ihash(x * 7 + 3, y * 7 - 5, 5521)
 	if y == core.CELL_N - 1 and not _gates.is_empty():
-		var wx := float(x) - core.HALF + 0.5
+		var wx := core.cell_to_world(x, y).x # 六边 odd-r：奇行 +0.5，必须走统一映射
 		var m := 0.0
 		for gx in _gates:
 			var u := (wx - gx) / RIM_MOUTH_W
@@ -369,13 +475,12 @@ func _outside_color(px: float, pz: float, h: float) -> Color:
 	return Color(clampf(_col_lo.r * k, 0.0, 1.0), clampf(_col_lo.g * k, 0.0, 1.0), clampf(_col_lo.b * k, 0.0, 1.0), mix)
 
 
-## 重建地面网格（挖/填/落墙后 height_rev 变）：只重算场内区 + 相邻法线，与静态场外区合并重建。
+## 重建地表（挖/填/落墙后 height_rev 变）：lattice 为静态平滑底（蓝图期一次建成），
+## 只重建场内六棱板网格（_cell_top 随 sim 高度层刷新）。
 func _rebuild_field() -> void:
 	if _ln == 0 or _ground == null:
 		return # 蓝图尚未套用（正常流程 apply_blueprint 先于 build_terrain）
-	_fill_field_region()
-	_recompute_normals(_i0 - 2, _i1 + 2)
-	_apply_mesh()
+	_rebuild_hex()
 
 
 ## 法线：采样线坐标差 + 高度中心差（渐进格距按实际坐标差算，水密网格共享顶点自适应）
@@ -460,9 +565,10 @@ func rebuild_heat(pworld: World) -> void:
 				var arr: Array = groups[band - 1]
 				var w := core.cell_to_world(x, y)
 				arr.append([Vector3(w.x, ground_y(x, y) + 0.05, w.z), Vector3(0.94, 0.05, 0.94)])
+	core._ensure_hex_plate()
 	for i in HEAT_N:
 		var arr2: Array = groups[i]
-		var mmi := core._make_multimesh(arr2, heat_mats[i])
+		var mmi := core._make_multimesh(arr2, heat_mats[i], core.hex_plate_mesh)
 		mmi.name = "H" + str(i + 1)
 		heat_root.add_child(mmi)
 		_stat_heat += arr2.size()

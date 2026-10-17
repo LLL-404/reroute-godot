@@ -59,7 +59,7 @@ func _initialize() -> void:
 
 	# schema 字节
 	var buf := a.canonical_bytes()
-	check(buf.data[0] == 0 and buf.data[1] == 0 and buf.data[2] == 0 and buf.data[3] == 5, "STATE_SCHEMA bytes")
+	check(buf.data[0] == 0 and buf.data[1] == 0 and buf.data[2] == 0 and buf.data[3] == 6, "STATE_SCHEMA bytes")
 
 	# 终局冻结
 	var f := World.new(sc, 1)

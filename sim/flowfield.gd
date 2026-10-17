@@ -1,16 +1,14 @@
 class_name FlowField
 extends RefCounted
 
-# 流场：多目标 Dijkstra（直 10 / 斜 14，贴角禁穿）+ 距离桶队列（Dial 变体）。
-# 照搬 warden/Warden.Core/FlowField.cs 语义，含三条确定性纪律：
-#   · 贴角禁穿：对角步要求两侧正交邻格都可通行；
+# 流场：多目标 Dijkstra（2026-10-17 六边形化：六向等权 10，无斜向贴角问题）+ 距离桶队列（Dial 变体）。
+# 拓扑 = 尖顶六边形 odd-r（见 grid.gd）；方向序（全项目唯一）：0E 1NE 2NW 3W 4SW 5SE。
+# 固定侦察纪律：
+#   · 六边网格边永远共享整条边，无需贴角禁穿判定（方形时代的 side_a/side_b 规则随拓扑废止）；
 #   · DirAt 平手取方向序号最小（严格 < 判定）；
 #   · 纯整数运算，无浮点无 libm。
-# 方向序（全项目唯一）：0E 1NE 2N 3NW 4W 5SW 6S 7SE（0 基）。
+# 距离上界（可证明）：最短路径绝不重复经过任一格（边权恒正）→ 至多 w*h−1 步 ×10。
 const STRAIGHT := 10
-const DIAGONAL := 14
-const DX := [1, 1, 0, -1, -1, -1, 0, 1]
-const DY := [0, 1, 1, 1, 0, -1, -1, -1]
 const INT64_MAX := 9223372036854775807
 
 var grid: Grid
@@ -21,9 +19,9 @@ var max_d: int
 var head: Array # 距离桶：head[d] 槽链表头，-1 = 空
 var slot_cell: Array
 var slot_next: Array
-var off: Array
-var side_a: Array
-var side_b: Array
+var off_e: Array # 偶行邻居 padded 增量（6 向，构造期算好）
+var off_o: Array # 奇行邻居 padded 增量
+var par: Array # padded 下标 → 内部行奇偶（热路径选增量表）
 var cur: int
 var max_bucket: int
 var pending: int
@@ -38,28 +36,22 @@ func _init(pgrid: Grid, pignore_h: bool = false) -> void:
 	var pad_n: int = stride * (grid.h + 2)
 	dist = []
 	settled = []
+	par = []
 	for i in pad_n:
 		dist.append(-1)
 		settled.append(0)
-	# 距离上界（可证明）：最短路径绝不重复经过任一格（边权恒正）→ 至多 w*h−1 步 ×14。
-	# 旧值 14×(w+h)+16 曾被蛇形长廊型地图突破而被 push 静默丢弃（见单测 snake-corridor）。
-	max_d = DIAGONAL * grid.w * grid.h
+		par.append((Lua64.idiv(i, stride) - 1) & 1)
+	max_d = STRAIGHT * grid.w * grid.h
 	head = []
 	for d in max_d + 1:
 		head.append(-1)
 	slot_cell = []
 	slot_next = []
-	# 邻居与对角两侧的 padded 下标增量（构造期算好，热循环纯加法）
-	off = []
-	side_a = []
-	side_b = []
-	for k in 8:
-		var dx: int = DX[k]
-		var dy: int = DY[k]
-		off.append(dy * stride + dx)
-		var diag := dx != 0 and dy != 0
-		side_a.append(dy * stride if diag else 0)
-		side_b.append(dx if diag else 0)
+	off_e = []
+	off_o = []
+	for k in 6:
+		off_e.append(Grid.DY[k] * stride + Grid.DX[0][k])
+		off_o.append(Grid.DY[k] * stride + Grid.DX[1][k])
 	cur = -1
 	max_bucket = 0
 	pending = 0
@@ -115,18 +107,17 @@ func relax(p: int, d: int) -> void:
 	var pmap := grid.pmap
 	var hp := grid.hp
 	var ignore := ignore_h
-	for k in 8:
+	var off := off_o if par[p] == 1 else off_e
+	for k in 6:
 		var nb: int = p + off[k]
 		if pmap[nb] == 1:
-			var diag := k % 2 == 1 # 0 基方向序：奇数=对角（NE/NW/SW/SE），偶数=直行
-			if not (diag and (pmap[p + side_a[k]] == 0 or pmap[p + side_b[k]] == 0)):
-				# 扩张边 = nb→p（nb 处单位跨入 p）：爬 ≤1、下崖任意（单向崖）
-				if ignore or (hp[p] - hp[nb] <= 1):
-					if settled[nb] == 0:
-						var nd := d + (DIAGONAL if diag else STRAIGHT)
-						if dist[nb] == -1 or nd < dist[nb]:
-							dist[nb] = nd
-							push(nd, nb)
+			# 扩张边 = nb→p（nb 处单位跨入 p）：爬 ≤1、下崖任意（单向崖）
+			if ignore or (hp[p] - hp[nb] <= 1):
+				if settled[nb] == 0:
+					var nd := d + STRAIGHT
+					if dist[nb] == -1 or nd < dist[nb]:
+						dist[nb] = nd
+						push(nd, nb)
 
 
 func push(d: int, cell: int) -> void:
@@ -157,7 +148,7 @@ func dist_at(x: int, y: int) -> int:
 	return dist[grid.pad_idx(x, y)]
 
 
-## 朝目标的下降方向 0..7（方向序下标）；已在目标/不可达/不可通行返回 -1。平手取方向序号最小（确定性）。
+## 朝目标的下降方向 0..5（方向序下标）；已在目标/不可达/不可通行返回 -1。平手取方向序号最小（确定性）。
 ## 实走边 = p→nb：爬 ≤1、下崖任意（单向崖）；英雄场 ignore_h 免查。
 func dir_at(x: int, y: int) -> int:
 	if not grid.passable(x, y):
@@ -171,20 +162,20 @@ func dir_at(x: int, y: int) -> int:
 	var pmap := grid.pmap
 	var hp := grid.hp
 	var ignore := ignore_h
-	for k in 8:
+	var off := off_o if (y & 1) == 1 else off_e
+	for k in 6:
 		var nb: int = p + off[k]
 		if pmap[nb] == 1:
-			var diag := k % 2 == 1 # 0 基方向序：奇数=对角
-			if not (diag and (pmap[p + side_a[k]] == 0 or pmap[p + side_b[k]] == 0)):
-				if ignore or (hp[nb] - hp[p] <= 1):
-					var nd: int = dist[nb]
-					if nd >= 0 and nd < best_d:
-						best_d = nd
-						best = k
+			if ignore or (hp[nb] - hp[p] <= 1):
+				var nd: int = dist[nb]
+				if nd >= 0 and nd < best_d:
+					best_d = nd
+					best = k
 	return best
 
 
 ## 封死回退：目标不可达时，按切比雪夫环 r=0..3 逐格螺旋找首个"可达且本单位跨得进去"的通行格；找不到返回 -1。
+## 邻域口径 = 切比雪夫窗（与六边拓扑无关的兜底收口，保旧确定性螺旋序）。
 ## 返回未加帧的格子序号（与 Grid:idx 一致，0 基）。
 func fallback_near(x: int, y: int) -> int:
 	var hp := grid.hp

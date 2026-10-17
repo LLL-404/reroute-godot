@@ -1,13 +1,56 @@
 class_name Grid
 extends RefCounted
 
-# 格子三态与通行镜像，照搬 warden/Warden.Core/Grid.cs：
+# 格子三态与通行镜像。2026-10-17 六边形化（H 相）：
+#   · 拓扑 = 尖顶（pointy-top）六边形，odd-r 偏移布局：奇数列右移半格（行 y 奇偶决定邻接）。
+#   · 仍是 64×64 阵列、(x,y)=（列,行）语义、padded (W+2)×(H+2) 镜像——方形时代的
+#     场景锚点/岩脊行/盆地矩形全部逐位保留，只有邻接关系与几何变了。
+#   · 方向序（全项目唯一）：0E 1NE 2NW 3W 4SW 5SE；六向等权（流场统一步长 10）。
+# 下标口径：内部数组 0 基，行列主序同旧版，指纹字段序不变（值当然全变，走重录）。
 # Open=0 通行 / Cover=1 覆盖层（不可通行、可挖开）/ Solid=2 实心阻挡（不可挖）。
-# 通行性加一帧 padded 镜像 ((W+2)×(H+2)，外环恒阻挡)，流场因此做纯下标邻域运算。
-# 下标口径：内部数组 0 基（Lua 版 1 基），公式同构平移 -1；迭代序不变，指纹不受影响。
 const OPEN := 0
 const COVER := 1
 const SOLID := 2
+
+# odd-r 邻接增量表：[行奇偶（0=偶行/1=奇行）][方向 k]。DY 与行奇偶无关。
+# 偶行：E(+1,0) NE(0,-1) NW(-1,-1) W(-1,0) SW(-1,+1) SE(0,+1)
+# 奇行：E(+1,0) NE(+1,-1) NW(0,-1) W(-1,0) SW(0,+1) SE(+1,+1)
+const DX := [[1, 0, -1, -1, -1, 0], [1, 1, 0, -1, 0, 1]]
+const DY := [0, -1, -1, 0, 1, 1]
+
+
+## 方向 k 在行 y 处的列增量。
+static func dir_dx(k: int, y: int) -> int:
+	return DX[y & 1][k]
+
+
+## 方向 k 的行增量（与行奇偶无关）。
+static func dir_dy(k: int) -> int:
+	return DY[k]
+
+
+## 单元 (x,y) 沿方向 k 的邻居列坐标。
+static func nx(x: int, y: int, k: int) -> int:
+	return x + DX[y & 1][k]
+
+
+## 单元 (x,y) 沿方向 k 的邻居行坐标。
+static func ny(x: int, y: int, k: int) -> int:
+	return y + DY[k]
+
+
+## odd-r 偏移坐标 → 轴向坐标（q 轴向列、r = 行）。q = x − (y − (y&1))/2。
+static func to_axial(x: int, y: int) -> Vector2i:
+	return Vector2i(x - ((y - (y & 1)) >> 1), y)
+
+
+## 六边轴向距离（= 立方坐标切比雪夫距离）。
+static func hex_dist(x1: int, y1: int, x2: int, y2: int) -> int:
+	var a := to_axial(x1, y1)
+	var b := to_axial(x2, y2)
+	var dq := a.x - b.x
+	var dr := a.y - b.y
+	return (absi(dq) + absi(dr) + absi(dq + dr)) >> 1
 
 var w: int
 var h: int

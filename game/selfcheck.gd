@@ -140,7 +140,7 @@ func run(main) -> int:
 	var view = main.view
 	var st: Dictionary = view.debug_stats()
 	_cmpi(int(st["field"]), 4096, "地面网格 field=4096")
-	_cmpi(int(st["plain"]), 39312, "场外旷野 plain=39312")
+	_cmpi(int(st["plain"]), 39820, "场外旷野 plain=39820（六边化：场内面片跳过，原 39312 已废止）")
 	_chk(st["cam"] == true, "相机就绪")
 	_cmpi(int(st["covers"]), 25, "覆盖层 covers=25")
 	var gsolid := 0

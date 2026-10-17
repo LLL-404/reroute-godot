@@ -63,4 +63,45 @@ func _initialize() -> void:
 	var gi := Grid.new(4, 3)
 	gi.init_h(1, 1, 3)
 	check(gi.get_h(1, 1) == 3 and gi.rev == 0 and gi.hp[gi.pad_idx(1, 1)] == 3, "init_h no bump")
+	# 六边拓扑（pointy-top odd-r，2026-10-17）：偶行/奇行邻接表 + 对向往返 + 轴向距离
+	check(Grid.DX.size() == 2 and Grid.DY.size() == 6, "hex tables dims")
+	# 偶行 (4,4)：E(5,4) NE(4,3) NW(3,3) W(3,4) SW(3,5) SE(4,5)
+	check(Grid.nx(4, 4, 0) == 5 and Grid.ny(4, 4, 0) == 4, "even E")
+	check(Grid.nx(4, 4, 1) == 4 and Grid.ny(4, 4, 1) == 3, "even NE")
+	check(Grid.nx(4, 4, 3) == 3 and Grid.ny(4, 4, 3) == 4, "even W")
+	check(Grid.nx(4, 4, 4) == 3 and Grid.ny(4, 4, 4) == 5, "even SW")
+	check(Grid.nx(4, 4, 5) == 4 and Grid.ny(4, 4, 5) == 5, "even SE")
+	# 奇行 (5,5)：E(6,5) NE(6,4) NW(5,4) W(4,5) SW(5,6) SE(6,6)
+	check(Grid.nx(5, 5, 1) == 6 and Grid.ny(5, 5, 1) == 4, "odd NE")
+	check(Grid.nx(5, 5, 2) == 5 and Grid.ny(5, 5, 2) == 4, "odd NW")
+	check(Grid.nx(5, 5, 4) == 5 and Grid.ny(5, 5, 4) == 6, "odd SW")
+	check(Grid.nx(5, 5, 5) == 6 and Grid.ny(5, 5, 5) == 6, "odd SE")
+	# 对向往返（k+3 mod 6 回到原点；两行奇偶都验）
+	var round_ok := true
+	for yy in [4, 5]:
+		for xx in [4, 5]:
+			for k in 6:
+				var ox := Grid.nx(xx, yy, k)
+				var oy := Grid.ny(xx, yy, k)
+				if Grid.nx(ox, oy, (k + 3) % 6) != xx or Grid.ny(ox, oy, (k + 3) % 6) != yy:
+					round_ok = false
+	check(round_ok, "dir round-trip (k+3)")
+	# 轴向与距离
+	check(Grid.to_axial(0, 0) == Vector2i(0, 0) and Grid.to_axial(1, 1) == Vector2i(1, 1), "to_axial l0")
+	check(Grid.to_axial(2, 2) == Vector2i(1, 2) and Grid.to_axial(1, 2) == Vector2i(0, 2), "to_axial l1")
+	check(Grid.hex_dist(0, 0, 1, 1) == 2, "hex_dist diag 2")
+	check(Grid.hex_dist(0, 0, 2, 2) == 3, "hex_dist diag 3")
+	check(Grid.hex_dist(0, 0, 7, 7) == 11, "hex_dist diag 11")
+	check(Grid.hex_dist(3, 1, 3, 1) == 0, "hex_dist self 0")
+	# 全开小图上 FlowField 距离 == 10 × 轴向距离
+	var fh := FlowField.new(Grid.new(5, 5))
+	fh.begin([Vector2i(0, 0)])
+	while not fh.done():
+		fh.step(1 << 30)
+	var all_ok := true
+	for yy in 5:
+		for xx in 5:
+			if fh.dist_at(xx, yy) != 10 * Grid.hex_dist(0, 0, xx, yy):
+				all_ok = false
+	check(all_ok, "flowfield == 10x hex_dist on open 5x5")
 	finish("GRID")

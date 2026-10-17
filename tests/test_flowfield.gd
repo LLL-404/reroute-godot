@@ -1,7 +1,8 @@
 extends RefCounted
 
-# flowfield 单测（移植自 reroute/tests/test_flowfield.lua）。
-# 方向序为 0 基：0E 1NE 2N 3NW 4W 5SW 6S 7SE（Lua 版 1 基同构 -1）。
+# flowfield 单测（2026-10-17 六边形重写）。
+# 方向序（全项目唯一，见 grid.gd）：0E 1NE 2NW 3W 4SW 5SE；六向等权步长 10。
+# 六边形无对角/贴角概念 —— 方形时代的 corner-cut 用例改写为「门格正邻」语义用例。
 
 
 func _run_full(f: FlowField) -> void:
@@ -21,15 +22,16 @@ func register(kit: TestKit) -> void:
 		var f := FlowField.new(g)
 		f.begin([Vector2i(0, 0)])
 		_run_full(f)
-		kit.eq(f.dist_at(1, 0), 10, "直行一格")
-		kit.eq(f.dist_at(3, 0), 30, "直行三格")
-		kit.eq(f.dist_at(1, 1), 14, "斜行一格")
-		kit.eq(f.dist_at(2, 2), 28, "斜行两格")
-		kit.eq(f.dist_at(3, 1), 34, "混合 (3,1)")
-		kit.eq(f.dist_at(7, 7), 98, "对角 (7,7)")
+		kit.eq(f.dist_at(1, 0), 10, "东行一格")
+		kit.eq(f.dist_at(3, 0), 30, "东行三格")
+		kit.eq(f.dist_at(1, 1), 20, "SE 对角（六边距 2 步）")
+		kit.eq(f.dist_at(2, 2), 30, "对角两列 (2,2)（六边距 3 步）")
+		kit.eq(f.dist_at(3, 1), 40, "混合 (3,1)（六边距 4 步）")
+		kit.eq(f.dist_at(7, 7), 110, "对角 (7,7)（六边距 11 步）")
 		kit.eq(f.dist_at(0, 0), 0, "目标格"))
 
-	kit.test("corner-cut-ban", func():
+	kit.test("gate-adjacency", func():
+		# 六边形无贴角问题：门格 (1,1) 的 SW/SE 正邻即门侧格，无方形时代的绕行惩罚。
 		var g := Grid.new(4, 3)
 		for x in 4:
 			g.set_cell(x, 1, Grid.SOLID)
@@ -38,10 +40,10 @@ func register(kit: TestKit) -> void:
 		f.begin([Vector2i(1, 0)])
 		_run_full(f)
 		kit.eq(f.dist_at(1, 2), 20, "过门直行 10+10")
-		kit.eq(f.dist_at(0, 2), 30, "(0,2) 斜穿被禁绕行")
-		kit.eq(f.dist_at(2, 2), 30, "(2,2) 斜穿被禁绕行")
-		kit.eq(f.dist_at(2, 0), 10, "北岸直行")
-		kit.eq(f.dir_at(1, 2), 6, "(1,2) 下降方向 = 6（朝门）"))
+		kit.eq(f.dist_at(0, 2), 30, "(0,2) 非门格正邻，绕行 30")
+		kit.eq(f.dist_at(2, 2), 20, "(2,2) 门格 SE 正邻一步到")
+		kit.eq(f.dist_at(2, 0), 10, "北岸东行")
+		kit.eq(f.dir_at(1, 2), 1, "(1,2) 下降方向 = 1 NE（朝门）"))
 
 	kit.test("dir-tie-lowest-index", func():
 		var g := Grid.new(5, 5)
@@ -49,10 +51,10 @@ func register(kit: TestKit) -> void:
 		var f := FlowField.new(g)
 		f.begin([Vector2i(0, 0)])
 		_run_full(f)
-		kit.eq(f.dist_at(2, 1), 30, "(2,1) 绕行距离")
-		kit.eq(f.dist_at(1, 2), 30, "(1,2) 绕行距离")
-		kit.eq(f.dist_at(2, 2), 40, "(2,2) 距离")
-		kit.eq(f.dir_at(2, 2), 4, "平手取序号最小：W(4) 先于 S(6)"))
+		kit.eq(f.dist_at(2, 1), 30, "(2,1) 绕行距离（东绕）")
+		kit.eq(f.dist_at(1, 2), 20, "(1,2) 西绕近道（(0,1) SE 直插）")
+		kit.eq(f.dist_at(2, 2), 30, "(2,2) 距离")
+		kit.eq(f.dir_at(3, 2), 2, "平手取序号最小：NW(2) 先于 W(3)"))
 
 	kit.test("dir-at-edges", func():
 		var g := Grid.new(4, 4)
@@ -64,11 +66,12 @@ func register(kit: TestKit) -> void:
 		g2.set_cell(2, 2, Grid.SOLID)
 		g2.set_cell(2, 3, Grid.SOLID)
 		g2.set_cell(3, 2, Grid.SOLID)
+		# (3,3) odd 行六邻：W(2,3)/NW(3,2) 实心；E/NE/SW/SE 全部界外（4×4 图天然封闭）。
 		var f2 := FlowField.new(g2)
 		f2.begin([Vector2i(0, 0)])
 		_run_full(f2)
 		kit.eq(f2.dir_at(2, 2), -1, "不可通行格 -1")
-		kit.eq(f2.dist_at(3, 3), -1, "围住格不可达")
+		kit.eq(f2.dist_at(3, 3), -1, "六邻全封不可达")
 		kit.eq(f2.dir_at(3, 3), -1, "不可达格 -1"))
 
 	kit.test("budget-split-invariance", func():
@@ -104,7 +107,7 @@ func register(kit: TestKit) -> void:
 		kit.eq(f.pending, 1, "重复目标去重（pending=1）")
 		_run_full(f)
 		kit.eq(f.dist_at(0, 0), 0, "目标距 0")
-		kit.eq(f.dist_at(3, 3), 42, "均匀图 (3,3) = 3×14"))
+		kit.eq(f.dist_at(3, 3), 50, "均匀图 (3,3) = 5×10（六边距）"))
 
 	kit.test("goal-on-impassable", func():
 		var g := Grid.new(4, 4)
@@ -117,16 +120,18 @@ func register(kit: TestKit) -> void:
 
 	kit.test("fallback-near", func():
 		var g := Grid.new(5, 5)
-		g.set_cell(1, 2, Grid.SOLID)
-		g.set_cell(3, 2, Grid.SOLID)
-		g.set_cell(2, 1, Grid.SOLID)
-		g.set_cell(2, 3, Grid.SOLID)
+		g.set_cell(1, 2, Grid.SOLID) # W
+		g.set_cell(3, 2, Grid.SOLID) # E
+		g.set_cell(2, 1, Grid.SOLID) # NE
+		g.set_cell(2, 3, Grid.SOLID) # SE
+		g.set_cell(1, 1, Grid.SOLID) # NW（六邻全封）
+		g.set_cell(1, 3, Grid.SOLID) # SW
 		var f := FlowField.new(g)
 		f.begin([Vector2i(0, 0)])
 		_run_full(f)
-		kit.eq(f.dist_at(2, 2), -1, "围住格不可达")
-		kit.eq(f.fallback_near(2, 2), g.idx(1, 1), "回退到环上首个可达格 (1,1)")
-		kit.eq(f.fallback_near(1, 1), g.idx(1, 1), "r=0 自身可达即返回自身"))
+		kit.eq(f.dist_at(2, 2), -1, "六邻全封不可达")
+		kit.eq(f.fallback_near(2, 2), g.idx(3, 1), "回退到环上首个可达格 (3,1)")
+		kit.eq(f.fallback_near(1, 0), g.idx(1, 0), "r=0 自身可达即返回自身"))
 
 	kit.test("fallback-near-none", func():
 		var g := Grid.new(9, 9)
@@ -183,8 +188,8 @@ func register(kit: TestKit) -> void:
 
 	kit.test("snake-corridor-beyond-old-bound", func():
 		# 蛇形单宽长廊：8×8 图中 y=0/2/4/6 整行 + 连接格 (7,1) (0,3) (7,5) 可通行，其余实心。
-		# 全程无对角捷径 → 每步直行 10；路径 35 格 → 最远格 34×10 = 340。
-		# 回归锁：旧上界 14×(8+8)+16 = 240 被突破后 push 静默丢弃 → 远端 -1（本测试必红）。
+		# 六边最短路径 32 步 = 320：西端借 (1,2)→(0,3)→(1,4) 的 S 弯，比逐行绕行少 2 步（实测核验）。
+		# 回归锁：旧方形上界 240 被突破后 push 静默丢弃 → 远端 -1；六边上界 = 10×w×h = 640 覆盖。
 		var g := Grid.new(8, 8)
 		for y in 8:
 			if y % 2 == 1:
@@ -196,6 +201,6 @@ func register(kit: TestKit) -> void:
 		var f := FlowField.new(g)
 		f.begin([Vector2i(0, 0)])
 		_run_full(f)
-		kit.eq(f.dist_at(0, 6), 340, "长廊最远端 = 34 步 ×10")
+		kit.eq(f.dist_at(0, 6), 320, "长廊最远端 = 32 步 ×10")
 		kit.eq(f.dist_at(7, 0), 70, "长廊近端 7 步")
 		kit.eq(f.dist_at(1, 1), -1, "墙格不可达"))

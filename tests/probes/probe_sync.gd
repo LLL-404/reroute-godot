@@ -25,7 +25,7 @@ func _initialize() -> void:
 
 	# 锚点：坐标映射的独立字面量检查（其余对拍以此为基）
 	cmp_v3(view.cell_to_world(0, 0), Vector3(-31.5, 0.0, -31.5), "cell_to_world(0,0)")
-	cmp_v3(view.cell_to_world(63, 63), Vector3(31.5, 0.0, 31.5), "cell_to_world(63,63)")
+	cmp_v3(view.cell_to_world(63, 63), Vector3(32.0, 0.0, 31.5), "cell_to_world(63,63)（六边 odd-r：63 为奇行 +0.5 右移；原方形口径 31.5 已废止）")
 
 	# ---- 布置：2 单位 + 墙 + 塔（远处）+ 英雄移动 ----
 	var spawn_a := _find_free(world, 24, 8, 40, 16, [])

@@ -252,12 +252,12 @@ func _initialize() -> void:
 	finish("INPUT", 21)
 
 
-## 读取特定战场格中心处的地面网格顶点高度（独立于 ground_y，防止自我对拍）。
-## 世界重做后地面是单张连续网格（格中心恰为采样线交点：场内 0.5m 细格）。
+## 读取特定战场格中心处的六棱板顶面顶点高度（独立于 ground_y，防止自我对拍）。
+## 2026-10-17 六边化：场内高度由 "HexField" 六棱板网格承担（中心为顶面扇形顶点）。
 func _terrain_top(view, cell: Vector2i) -> float:
 	var pos: Vector3 = view.cell_to_world(cell.x, cell.y)
 	for node in view.field_root.get_children():
-		if not (node is MeshInstance3D):
+		if not (node is MeshInstance3D) or node.name != "HexField":
 			continue
 		var mesh: Mesh = node.mesh
 		for s in mesh.get_surface_count():

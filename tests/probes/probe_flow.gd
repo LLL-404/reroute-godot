@@ -1,7 +1,8 @@
 extends ProbeKit
 
-# R4 验证探针：flowfield 移植（距离/贴角/平手/预算不变性/边界/回退/单向崖）。
-# 方向序为 0 基：0E 1NE 2N 3NW 4W 5SW 6S 7SE（Lua 版 1 基同构 -1）。
+# R4 验证探针：flowfield 移植（距离/邻接/平手/预算不变性/边界/回退/单向崖）。
+# 2026-10-17 六边形重写：方向序 0E 1NE 2NW 3W 4SW 5SE，六向等权步长 10。
+# 贴角用例改写为「门格正邻」语义（六边无对角概念）。
 # 判定：exit 0 + stdout 含 `[FLOW] PASS`。
 
 
@@ -18,10 +19,10 @@ func _initialize() -> void:
 	run_full(f)
 	check(f.dist_at(1, 0) == 10, "straight 1")
 	check(f.dist_at(3, 0) == 30, "straight 3")
-	check(f.dist_at(1, 1) == 14, "diag 1")
-	check(f.dist_at(2, 2) == 28, "diag 2")
-	check(f.dist_at(3, 1) == 34, "mixed (3,1)")
-	check(f.dist_at(7, 7) == 98, "corner (7,7)")
+	check(f.dist_at(1, 1) == 20, "diag (1,1) = 六边距 2 步")
+	check(f.dist_at(2, 2) == 30, "diag (2,2) = 六边距 3 步")
+	check(f.dist_at(3, 1) == 40, "mixed (3,1) = 六边距 4 步")
+	check(f.dist_at(7, 7) == 110, "corner (7,7) = 六边距 11 步")
 	check(f.dist_at(0, 0) == 0, "goal")
 
 	# 贴角禁穿
@@ -33,21 +34,22 @@ func _initialize() -> void:
 	f2.begin([Vector2i(1, 0)])
 	run_full(f2)
 	check(f2.dist_at(1, 2) == 20, "through door")
-	check(f2.dist_at(0, 2) == 30, "corner-cut banned (0,2)")
-	check(f2.dist_at(2, 2) == 30, "corner-cut banned (2,2)")
+	check(f2.dist_at(0, 2) == 30, "door west detour (0,2)")
+	check(f2.dist_at(2, 2) == 20, "door SE neighbor one step (2,2)")
 	check(f2.dist_at(2, 0) == 10, "north straight")
-	check(f2.dir_at(1, 2) == 6, "dir to door = 6 (S)")
+	check(f2.dir_at(1, 2) == 1, "dir to door = 1 (NE)")
 
-	# 平手取序号最小：挡两条对角逼出 (2,1)/(1,2) 距离平手 → W(4) 先于 S(6)
+	# 平手取序号最小：挡 (1,1) 逼出绕行；(3,2) 处 NW(2)/W(3) 双 30 平手 → NW 先。
 	var g3 := Grid.new(5, 5)
 	g3.set_cell(1, 1, Grid.SOLID)
 	var f3 := FlowField.new(g3)
 	f3.begin([Vector2i(0, 0)])
 	run_full(f3)
-	check(f3.dist_at(2, 1) == 30, "tie dist (2,1)")
-	check(f3.dist_at(1, 2) == 30, "tie dist (1,2)")
-	check(f3.dist_at(2, 2) == 40, "tie dist (2,2)")
-	check(f3.dir_at(2, 2) == 4, "tie -> lowest index (W=4)")
+	check(f3.dist_at(2, 1) == 30, "detour east (2,1)")
+	check(f3.dist_at(1, 2) == 20, "west shortcut (1,2)")
+	check(f3.dist_at(2, 2) == 30, "detour (2,2)")
+	check(f3.dist_at(3, 2) == 40, "detour (3,2)")
+	check(f3.dir_at(3, 2) == 2, "tie -> lowest index (NW=2)")
 
 	# dir_at 边界
 	check(f.dir_at(0, 0) == -1, "dir at goal")
@@ -93,7 +95,7 @@ func _initialize() -> void:
 	check(f5.pending == 1, "duplicate goals dedup (pending=1)")
 	run_full(f5)
 	check(f5.dist_at(0, 0) == 0, "goal dist 0")
-	check(f5.dist_at(3, 3) == 42, "uniform (3,3) = 3x14")
+	check(f5.dist_at(3, 3) == 50, "uniform (3,3) = 5x10 六边距")
 
 	# 目标格可不可通行（核心占地口径）
 	var g6 := Grid.new(4, 4)
@@ -104,18 +106,20 @@ func _initialize() -> void:
 	check(f6.dist_at(2, 2) == 0, "impassable goal dist 0")
 	check(f6.dist_at(2, 1) == 10, "goal neighbor expandable")
 
-	# 封死回退
+	# 封死回退（(2,2) 六邻全封：E(3,2) W(1,2) NE(2,1) NW(1,1) SW(1,3) SE(2,3)）
 	var g7 := Grid.new(5, 5)
 	g7.set_cell(1, 2, Grid.SOLID)
 	g7.set_cell(3, 2, Grid.SOLID)
 	g7.set_cell(2, 1, Grid.SOLID)
 	g7.set_cell(2, 3, Grid.SOLID)
+	g7.set_cell(1, 1, Grid.SOLID)
+	g7.set_cell(1, 3, Grid.SOLID)
 	var f7 := FlowField.new(g7)
 	f7.begin([Vector2i(0, 0)])
 	run_full(f7)
 	check(f7.dist_at(2, 2) == -1, "enclosed cell unreachable")
-	check(f7.fallback_near(2, 2) == g7.idx(1, 1), "fallback to (1,1)")
-	check(f7.fallback_near(1, 1) == g7.idx(1, 1), "r=0 self")
+	check(f7.fallback_near(2, 2) == g7.idx(3, 1), "fallback to (3,1)")
+	check(f7.fallback_near(1, 0) == g7.idx(1, 0), "r=0 self")
 	var g8 := Grid.new(9, 9)
 	for dy in range(-3, 4):
 		for dx in range(-3, 4):
