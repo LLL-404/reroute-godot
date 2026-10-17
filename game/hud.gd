@@ -190,11 +190,11 @@ func _build_top_bar() -> void:
 	hp_bar.show_percentage = false
 	hp_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	hp_bar.add_theme_stylebox_override("background", _flat(DARK["track"], DARK["gold_lo"], 2, 1))
-	hp_bar.add_theme_stylebox_override("fill", _flat(DARK["hp"], Color(0, 0, 0, 0), 2, 0))
+	hp_bar.add_theme_stylebox_override("fill", _flat(DARK["hp"], UiStyle.NO_BORDER, 2, 0))
 	# 25/50/75% 三道刻度线（纯装饰，随条缩放）
 	for frac in [0.25, 0.5, 0.75]:
 		var tick := ColorRect.new()
-		tick.color = Color8(0, 0, 0, 110)
+		tick.color = UiStyle.SHADOW_TICK
 		tick.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		tick.anchor_left = frac
 		tick.anchor_right = frac
@@ -508,7 +508,7 @@ func banner(title: String, sub: String, danger: bool = false) -> void:
 	sb.border_color = DARK["danger"] if danger else DARK["active_border"]
 	banner_root.visible = true
 	var base_y := banner_card.position.y
-	banner_card.modulate = Color(1, 1, 1, 0)
+	banner_card.modulate = UiStyle.CLEAR
 	banner_card.position.y = base_y - 14.0 * S
 	if _banner_tween != null and _banner_tween.is_valid():
 		_banner_tween.kill()

@@ -314,20 +314,10 @@ func _build_title() -> Control:
 	page.mouse_filter = Control.MOUSE_FILTER_STOP # 全屏吃指针：防穿透到战场/HUD
 
 	# 底部 55% 渐暗帷幕（战场全景可见，向下渐入帝王金黑）
-	# 注意分量口径：Color() 是 0..1 浮点，超 1 会钳成白——必须 Color8。
-	var grad := Gradient.new()
-	grad.colors = PackedColorArray([UiStyle.TITLE_VEIL_TOP, UiStyle.TITLE_VEIL_MID, UiStyle.TITLE_VEIL_BOTTOM])
-	grad.offsets = PackedFloat32Array([0.0, 0.5, 1.0])
-	var gtex := GradientTexture2D.new()
-	gtex.gradient = grad
-	# 实测采样（probe_dbg_veil，已删）：texture 行 0=矩形顶部，(0,0)→(0,1) 即顶透明→底不透明。
-	gtex.fill_from = Vector2(0, 0)
-	gtex.fill_to = Vector2(0, 1)
-	gtex.width = 64
-	gtex.height = 256
+	# 口径坑实录：Color() 浮点分量 >1 会钳成白；GradientTexture2D 行 0=矩形顶。
 	var veil := TextureRect.new()
 	veil.name = "title_veil"
-	veil.texture = gtex
+	veil.texture = UiStyle.title_veil_tex()
 	veil.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	veil.anchor_left = 0.0
 	veil.anchor_right = 1.0

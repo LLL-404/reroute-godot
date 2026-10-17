@@ -24,10 +24,12 @@ const TITLEBAR_VAR := "TitleBar"           # 卡内衬线标题条
 const SLIDER_VAR := "GoldSlider"           # HSlider 三件套（暗槽/亮金已过段）
 
 const NO_BORDER := Color(0, 0, 0, 0)
+const CLEAR := Color(1, 1, 1, 0)              # 动画起始全透白（横幅淡入初值）
 const FONT_PATH := "res://assets/fonts/NotoSansSC-Regular.otf"
 
 # —— v2.2 质感层常量（A 档参数口，集中调噪点/投影/饰线档位） ——
 const SHADOW_BTN := Color8(0, 0, 0, 110)      # A2 主钮小投影（卡片用调色板 shadow token）
+const SHADOW_TICK := Color8(0, 0, 0, 110)     # HUD 顶栏 hp 刻底的小影线（同档黑）
 const GLOW_GOLD := Color8(178, 142, 82, 140)  # A3 金字投影色
 const GRAIN_ALPHA := 0.05                     # A4 噪粒不透明度（5%，糊字可降 0.03）
 const VIGNETTE_ALPHA := 0.31                  # A5 暗角峰值（≈α80/255）
@@ -178,10 +180,27 @@ static func label(text: String, fs: float, color: Color, font: Font = null, shri
 	return l
 
 
+## 标题页渐暗帷幕（TextureRect 用；texture 行 0=顶部，(0,0)→(0,1) 顶透→底暗——实测口径）。
+static func title_veil_tex() -> GradientTexture2D:
+	if _veil == null:
+		var g := Gradient.new()
+		g.colors = PackedColorArray([TITLE_VEIL_TOP, TITLE_VEIL_MID, TITLE_VEIL_BOTTOM])
+		g.offsets = PackedFloat32Array([0.0, 0.5, 1.0])
+		var t := GradientTexture2D.new()
+		t.gradient = g
+		t.fill_from = Vector2(0, 0)
+		t.fill_to = Vector2(0, 1)
+		t.width = 64
+		t.height = 256
+		_veil = t
+	return _veil
+
+
 # —— A4/A5 覆盖层纹理（确定性：固定种子；懒生成缓存） ——
 
 static var _grain: NoiseTexture2D = null
 static var _vign: GradientTexture2D = null
+static var _veil: GradientTexture2D = null
 
 
 ## A4 噪粒纹理：无缝 256² 颗粒（FastNoiseLite 固定种子，TILE 铺法由调用方定）。

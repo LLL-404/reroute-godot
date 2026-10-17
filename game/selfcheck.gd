@@ -3,8 +3,9 @@ extends RefCounted
 # 导出包自证（C8）：`--headless --selfcheck` 触发（main.gd _ready 尾部调用）。
 # 断言链：引擎/构建模式 → 资源齐备（29 mp3 + CJK 字体打进包）→ sim 核心黄金回放
 # 12 指纹逐位一致（含不变式看门狗与终局冻结自证）→ 确定性复跑 → 主场景构建完整
-# （地形/相机/HUD/壳/世界）→ 音频接口 → tick 推进冒烟。
+# （地形/相机/HUD/壳/世界）→ 音频接口 → tick 推进冒烟 → UI 样式工厂预设一致（v2.2）。
 # 输出 `[SELFCHECK] PASS` + exit 0；任一失败 `[SELFCHECK] FAIL` + exit 1。
+const UiStyle = preload("res://game/ui_style.gd")
 const ALL_MP3 := [
 	"bgm_reroute.mp3",
 	"build_stone_place.mp3",
@@ -179,6 +180,20 @@ func run(main) -> int:
 		view.sync(main.world)
 	_cmpi(main.world.tick_count, t0 + 40, "40 tick 推进")
 	_chk(main.world.outcome == World.RUNNING, "仍在进行中")
+
+	# ---- 6. UI 样式工厂一致性（v2.2：质感预设 + 变体接线不漂移）----
+	var ui_c: Dictionary = main.hud.DARK
+	var btn_st: Dictionary = UiStyle.button_states(ui_c, true)
+	_cmpi(int(btn_st["pressed"].content_margin_top), 2, "A6 主钮按下下沉 2px")
+	_cmpi(int(btn_st["normal"].shadow_size), 6, "A2 主钮投影档位")
+	_chk(btn_st["normal"].shadow_color == UiStyle.SHADOW_BTN, "A2 主钮投影色 token")
+	var ui_theme: Theme = main.shell.host.theme
+	_chk(main.hud.theme == ui_theme, "hud/shell 同源共享主题实例")
+	var card_sb: StyleBoxFlat = ui_theme.get_stylebox("panel", UiStyle.CARD_VAR)
+	_chk(card_sb != null and card_sb.shadow_size >= 12 and card_sb.shadow_color == ui_c["shadow"], "A2 卡片投影档位")
+	_chk(ui_theme.get_stylebox("normal", UiStyle.BTN_MENU_VAR) != null, "变体 MenuButton 已装")
+	_chk(ui_theme.get_stylebox("slider", UiStyle.SLIDER_VAR) != null, "变体 GoldSlider 已装")
+	_chk(UiStyle.grain_tex() != null and UiStyle.vignette_tex() != null, "A4/A5 氛围层纹理已生成")
 
 	print("[SELFCHECK] checks=", checks, " bad=", bad)
 	for i in mini(fail_list.size(), 12):
