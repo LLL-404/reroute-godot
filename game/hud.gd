@@ -50,8 +50,8 @@ var DARK := {
 	"gold": Color8(200, 168, 108, 255),
 	"gold_hi": Color8(224, 198, 140, 255),
 	"gold_lo": Color8(96, 76, 44, 255),
-	"edge_hi": Color8(224, 198, 140, 46),
-	"shadow": Color8(0, 0, 0, 80),
+	"edge_hi": Color8(236, 208, 150, 120),
+	"shadow": Color8(0, 0, 0, 150),
 	"track": Color8(10, 8, 5, 220),
 	"warn": Color8(180, 96, 44, 255),
 	"on_gold": Color8(43, 32, 16, 255),
@@ -158,10 +158,11 @@ func _style_button(b: Button, w: float, h: float, fs: float) -> void:
 	b.add_theme_stylebox_override("pressed", st["pressed"])
 	b.add_theme_stylebox_override("disabled", st["disabled"])
 	b.set_meta("sb_normal", st["normal"])
+	UiStyle.edge_dress(b, DARK["edge_hi"], UiStyle.RULE) # A1 光边
 
 
-func _make_label(text: String, fs: float, color: Color) -> Label:
-	return UiStyle.label(text, fs, color)
+func _make_label(text: String, fs: float, color: Color, glow: bool = false) -> Label:
+	return UiStyle.label(text, fs, color, null, false, glow)
 
 
 func _build_top_bar() -> void:
@@ -218,7 +219,7 @@ func _build_top_bar() -> void:
 	wave_text = _make_label("准备中", 11.0 * S, DARK["text"])
 	top_bar.add_child(wave_text)
 
-	supply_text = _make_label("供给 %d" % Sim.START_SUPPLY, 15.0 * S, DARK["supply"])
+	supply_text = _make_label("供给 %d" % Sim.START_SUPPLY, 15.0 * S, DARK["supply"], true)
 	top_bar.add_child(supply_text)
 
 	heat_btn = Button.new()
@@ -299,7 +300,7 @@ func _build_banner() -> void:
 	margin.add_theme_constant_override("margin_bottom", int(12 * S))
 	var col := VBoxContainer.new()
 	col.add_theme_constant_override("separation", int(4 * S))
-	banner_title = _make_label("", 20.0 * S, DARK["gold_hi"])
+	banner_title = _make_label("", 20.0 * S, DARK["gold_hi"], true)
 	banner_sub = _make_label("", 11.0 * S, DARK["muted"])
 	col.add_child(banner_title)
 	col.add_child(banner_sub)
@@ -311,7 +312,7 @@ func _build_banner() -> void:
 func _build_floats() -> void:
 	floats = []
 	for _i in FLOAT_N:
-		var el := _make_label("", 13.0 * S, DARK["gold_hi"])
+		var el := _make_label("", 13.0 * S, DARK["gold_hi"], true)
 		el.visible = false
 		add_child(el)
 		floats.append({ "el": el, "active": false, "sx": 0.0, "sy": 0.0, "born": 0 })

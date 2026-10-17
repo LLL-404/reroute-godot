@@ -188,6 +188,7 @@ func _build_confirm() -> void:
 	veil.set_anchors_preset(Control.PRESET_FULL_RECT)
 	veil.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	confirm_layer.add_child(veil)
+	UiStyle.overlay_fx(confirm_layer) # A5+A4
 	var center := CenterContainer.new()
 	center.set_anchors_preset(Control.PRESET_FULL_RECT)
 	center.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -195,6 +196,7 @@ func _build_confirm() -> void:
 	var card := PanelContainer.new()
 	card.custom_minimum_size = Vector2(300.0 * S, 0)
 	card.theme_type_variation = UiStyle.CARD_VAR
+	UiStyle.corner_dress(card, C["gold_lo"]) # C 饰线
 	center.add_child(card)
 	var margin := MarginContainer.new()
 	for side in ["left", "right", "top", "bottom"]:
@@ -230,8 +232,8 @@ func _flat(bg: Color, border: Color, radius: int, border_w: int = 1) -> StyleBox
 	return UiStyle.flat(bg, border, radius, border_w) # 委托样式工厂（唯一真源 ui_style.gd）
 
 
-func _label(text: String, fs: float, color: Color, serif := false) -> Label:
-	return UiStyle.label(text, fs, color, F_SERIF if serif else null, true)
+func _label(text: String, fs: float, color: Color, serif := false, glow := false) -> Label:
+	return UiStyle.label(text, fs, color, F_SERIF if serif else null, true, glow)
 
 
 ## 衬线隔字标题：逐字 Label + 等宽间隔（子集无空格字形，用布局实现字距）。
@@ -241,7 +243,7 @@ func _serif_title(text: String, fs: float, color: Color, gap: float = 12.0) -> H
 	row.add_theme_constant_override("separation", int(gap * S))
 	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	for ch in text:
-		row.add_child(_label(ch, fs, color, true))
+		row.add_child(_label(ch, fs, color, true, true))
 	return row
 
 
@@ -277,6 +279,7 @@ func _button(text: String, primary: bool, w: float, h: float, fs: float, fn: Cal
 	b.add_theme_font_size_override("font_size", int(fs))
 	# 发射器 a：字色/四态样式盒全走主题变体（UiStyle.build_theme），不再逐钮 override
 	b.theme_type_variation = UiStyle.BTN_PRIMARY_VAR if primary else UiStyle.BTN_MENU_VAR
+	UiStyle.edge_dress(b, C["edge_hi"], UiStyle.RULE) # A1 光边
 	if pad_left >= 0.0: # 逐实例左距：复制共享样式盒成专用副本（避免污染主题）
 		for k in ["normal", "hover", "pressed"]:
 			var sb: StyleBoxFlat = UiStyle.get_theme().get_stylebox(k, b.theme_type_variation).duplicate()
@@ -295,6 +298,7 @@ func _page_base(veil: Color) -> Control:
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
 	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	page.add_child(bg)
+	UiStyle.overlay_fx(page) # A5 暗角 + A4 噪粒（在 bg 上、内容下）
 	return page
 
 
@@ -330,6 +334,7 @@ func _build_title() -> Control:
 	veil.anchor_top = 0.45
 	veil.anchor_bottom = 1.0
 	page.add_child(veil)
+	UiStyle.overlay_fx(page) # A5+A4
 
 	# 左对齐菜单列（x=18% 宽度 240，文明 6 主菜单口径）
 	var col := VBoxContainer.new()
@@ -390,6 +395,7 @@ func _build_title() -> Control:
 	tips_panel.visible = false
 	tips_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	tips_panel.theme_type_variation = UiStyle.CARD_VAR
+	UiStyle.corner_dress(tips_panel, C["gold_lo"]) # C 饰线
 	var margin := MarginContainer.new()
 	for side in ["left", "right", "top", "bottom"]:
 		margin.add_theme_constant_override("margin_" + side, int(16 * S))
@@ -437,6 +443,7 @@ func _build_pause() -> Control:
 	var pcard := PanelContainer.new()
 	pcard.custom_minimum_size = Vector2(320.0 * S, 0)
 	pcard.theme_type_variation = UiStyle.CARD_VAR
+	UiStyle.corner_dress(pcard, C["gold_lo"]) # C 饰线
 	center.add_child(pcard)
 	var margin := MarginContainer.new()
 	for side in ["left", "right", "top", "bottom"]:
@@ -481,6 +488,7 @@ func _build_gameover() -> Control:
 	var pcard := PanelContainer.new()
 	pcard.custom_minimum_size = Vector2(400.0 * S, 0)
 	pcard.theme_type_variation = UiStyle.CARD_VAR
+	UiStyle.corner_dress(pcard, C["gold_lo"]) # C 饰线
 	center.add_child(pcard)
 	var margin := MarginContainer.new()
 	for side in ["left", "right", "top", "bottom"]:
@@ -489,7 +497,7 @@ func _build_gameover() -> Control:
 	col.add_theme_constant_override("separation", int(14 * S))
 	col.alignment = BoxContainer.ALIGNMENT_CENTER
 	# 胜负标题：文本/颜色由 open_gameover 注入（探针断言 色=hp|danger）；衬线字形已进子集
-	go_title = _label("", 34.0 * S, C["danger"], true)
+	go_title = _label("", 34.0 * S, C["danger"], true, true)
 	col.add_child(go_title)
 	go_body = _label("", 13.0 * S, C["text"])
 	go_body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -519,6 +527,7 @@ func _build_slots() -> Control:
 	var pcard := PanelContainer.new()
 	pcard.custom_minimum_size = Vector2(440.0 * S, 0)
 	pcard.theme_type_variation = UiStyle.CARD_VAR
+	UiStyle.corner_dress(pcard, C["gold_lo"]) # C 饰线
 	center.add_child(pcard)
 	var margin := MarginContainer.new()
 	for side in ["left", "right", "top", "bottom"]:
@@ -565,6 +574,7 @@ func _build_settings() -> Control:
 	var pcard := PanelContainer.new()
 	pcard.custom_minimum_size = Vector2(440.0 * S, 0)
 	pcard.theme_type_variation = UiStyle.CARD_VAR
+	UiStyle.corner_dress(pcard, C["gold_lo"]) # C 饰线
 	center.add_child(pcard)
 	var margin := MarginContainer.new()
 	for side in ["left", "right", "top", "bottom"]:
