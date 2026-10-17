@@ -227,6 +227,16 @@ python tools/check_shots.py    # 截图像素校验
   probe_input §14 断言标定改机器无关口径（透视放大 1.43× 帧速漂移根因；负对照
   `pan_pixels` ×2 咬红后还原）。全闸绿（input 58/0、hud 69/0、ui_flow 39/0、touch 39/0、
   selfcheck 23/0、check_shots 25/0）；19 受击截图重出 + 目验 6 张通过。
+- UI v2.2「质感层 + 样式工厂」（2026-10-17）**已完成**：新 `game/ui_style.gd` 唯一样式口
+  （运行时 Theme + type variations 发射器 a：PrimaryButton/MenuButton/DarkCard/TitleBar/
+  GoldSlider，按 S 缓存 hud/shell 共享；探针面仍走 override+meta 发射器 b）+ 质感 A 档
+  六件（A1 光边 2px+底金 3px draw 闭包 / A2 投影 卡 12S·钮 6px / A3 金字影 α140 /
+  A4 噪粒 5% 种子 20260415 / A5 暗角 α0.31@0.78 / A6 按下 +2px）+ C 六面板角饰线；
+  **game 页禁挂氛围层**保 check_shots 契约。守规 `tools/check_ui_lint.py`（L1 裸色/
+  L2 构造口/L3 变体名）+ selfcheck **31/0**（+8 工厂一致性）。全 21 闸绿 + 19 图重出 +
+  双端包终版（exe 109,551,432 复签 Valid+pck 109,738,128+zip 183,606,300+apk 312,058,040；
+  判据 = exe+pck 同目录 selfcheck，**exe 为字节确定性模板件、同哈希≠旧包**）。
+  证据 `logs/gates-20261017-v22*`；决策记录 = 方案 §11.23 + UI-REDESIGN §7。
 - LOD：源 4 级接回 + 屏占比切级（2026-10-17）**已完成**：`umd2_to_gltf.py` 每资产导出
   lod0..lod3 四 mesh 节点（蒙皮件共享 skeleton；逐级独立顶点缓冲——Godot 内置 LOD 为索引级，
   塞不进美术 LOD）；`verify_glb` 以源 `.mdl` 实测表断言逐级 verts/idx（非递增 + 蒙皮权重）；
@@ -237,6 +247,10 @@ python tools/check_shots.py    # 截图像素校验
   `check_shots` 25/0 绿（含主树 golden——并行 sim 半成品已收敛提交）。glb 8.0→21.0MB
   （+13MB；pck 以冻结包复测为准），**双端包需再重出**。证据 `logs/gates-20261017-lod/`；
   决策记录 = 方案 §11.21。
+- TapTap 提审通道（2026-10-17）**冻结待启动**：app 958251 系制造/关卡（spark-only）型，
+  不能承接常规双端包；已定**新建常规 app「改道」**（`package_type=windows`）承接双端常规
+  发布，等地图算法更新 + 双端包终版重出后启动流水线——决策/证据/步骤见方案 §11.22。
+  并行缺口：投稿讲解视频/实机录屏未产出；开发者日志需 ≥5 篇（现 3 篇）。
 
 ---
 

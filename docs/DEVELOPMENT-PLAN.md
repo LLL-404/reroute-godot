@@ -149,6 +149,8 @@
       旧版后台 `https://www.taptap.cn/moment/854478404412507237`；
       「TapTap制造」路径 `https://www.taptap.cn/moment/854472244993197015`
       ——**本作不走制造线**（PC/安卓常规发布；Maker 项目仅作素材工厂）
+- [ ] **载体注（2026-10-17）**：958251 系制造/关卡型（spark-only），不可承接常规双端包；
+      提审改由**新建常规 app「改道」**承接——官方 `taptap-cli` 流水线，决策/步骤见 §11.22
 
 **C. 投稿材料（D4 至少占位，D7 补齐）**
 
@@ -1972,6 +1974,17 @@ model/orient 全 PASS、input **58/0**、hud 69/0、ui_flow 39/0、touch 39/0；
 （title/hud/gameover/settings/slots/game_narrow）通过；已知小瑕疵豁免：设置页滑杆
 grabber 为默认主题灰点（有意不引贴图）、gameover 卡右下 1px 描边圆角缺口。
 
+**双端包重出（2026-10-17 午后）**：Windows `export/game.exe` 109,551,432B 复签
+（SIGNED=Valid，复签后自证 23/0）+ `game.pck` 103,739,444B（较 §11.19 包 +16.8KB =
+衬线子集 + UI 代码增量）；**`reroute-windows.zip` 175,551,201B 重建**——发现上一版
+zip 混入 10-16 11:45 的史前 pck（80,571,148B，早于 world64 重包），系 10-16 晚重出
+时漏建 zip 的遗留交付缺陷，本轮修复（game.exe/game.pck/运行说明.txt/data_* 四件码）；
+Android `export/reroute-release.apk` 306,061,351B（alias `reroute`，口令台账
+`signing.env`→`GODOT_ANDROID_KEYSTORE_RELEASE_*` 拼装注入，apksigner verify =
+CN=Reroute, OU=GameJam, O=Reroute, C=CN）。四件 SHA-256（上传前终核口径）：
+APK `178edbe4…a399b4` / ZIP `1bcbac06…f9ea05` / EXE `0539d11b…585bc` /
+PCK `4bf830a9…d5b2`。README「继续对局」口径同步为「读档存档」。
+
 ### 11.21 LOD：源 4 级接回 + 按屏占比切级（2026-10-17）
 
 **背景/决策**：美术 pass 后实机观感已逼近宣传图，移动端性能成为下一瓶颈。用户三问定案：
@@ -2019,6 +2032,93 @@ PASS；**golden 主树直接 PASS**——并行会话的 sim 半成品已收敛�
 
 **体积**：glb 8.0MB → 21.0MB（+13MB；蒙皮件 ×2.0~2.6，静态件 ×3.0）；pck 预计 +13MB
 上下（上一包 103,739,444B，以冻结包复测为准）。**双端包需再重出**（§11.20 包在 LOD 之前）。
+
+### 11.22 TapTap 提审通道侦查与新建常规 app 决策（2026-10-17，冻结待启动）
+
+**通道就位**：官方 `taptap-cli`（`@taptap/cli`，Windows 二进制在 npm 全局包 `bin/`）已登录
+（开发者 434158「工具道具的工作室」，凭据 keychain，token 有效）；调用需环境变量
+`TAPTAP_CLI_BUNDLED_SKILLS_ROOT` 指向包根，scope 用 `--dev-id 434158 --app-id <id>`；
+写操作纪律 = dry-run 预览 → 用户确认 → `--yes`（不可逆节点必停）。
+
+**堵点裁定（只读体检，2026-10-17）**：现有 app「改道」**958251 系制造/关卡（spark）型**——
+`get-available-package-types` 仅 `["spark"]`、`package_slots.windows.available=false`、
+`region_flag_*` 为关卡型选项集（[1,3,4]）——**无法承接常规 APK/Windows 双端包**；方向创建时
+定死、CLI 无改向命令。与 §0.3「本作不走制造线（PC/安卓常规发布）」冲突，须换载体。
+
+**决策（用户确认）**：**新建常规 app「改道」**承接双端常规发布——`package_type=windows`
+（用户选定，PC 向）+ `category=strategy` + `developer_role=developer`，create-app dry-run
+已通过；创建后先读包体槽位/平台选项做**验证闸门**再继续；旧 958251 保持未发布不动（SCE
+协议不签、不提交）。
+
+**流水线（冻结，待地图算法更新落地 + 双端包终版重出后启动）**：创建 → 验证闸门 →
+`upload-apk` / `upload-pc-package` → `select-package`（main=APK + windows=zip，写后读回）→
+素材/字段/合规（防沉迷未接入 + TapPlay、双端平台勾选、分发状态=开放试玩）→ 自测二维码
+（用户扫码）→ `precheck-app-review` → `prepare-review-snapshot` → 用户确认 →
+`submit-app-review` → 投稿弹窗（占位文案已备）→ 活动页投稿（CLI 未覆盖则浏览器兜底）。
+
+**并行缺口提醒**：投稿材料「讲解视频 + 实机录屏」尚未产出（§0.3 C 官方必交）；开发者日志
+需 ≥5 篇（现 `docs/devlogs/01~03` 三篇）；制造积分 95,175 于 **10-21 12:00** 到期。
+
+### 11.23 UI v2.2「质感层 + 样式工厂」（2026-10-17）
+
+**动因**：v2.1 视觉完好了但「没有质感」（用户语）——正是 Gaming 反模式
+（Minimalist + Static assets）；借机把 UI 样式治理也一并落掉。分六档递进提交，
+每档独立绿后方可进下一档。
+
+**P1 样式工厂搬迁（1248cf1）**：新 `game/ui_style.gd`（RefCounted，preload 引入、
+不经 class_name 防全局类缓存坑）为全部 Control 样式唯一构造口；hud/_flat/_make_label、
+screens/_flat/_label/_button 改一行委托；screens 裸 Color8 清零（hud 的 22 处 =
+`DARK` 调色板定义区，规约白名单）。**判据坑实录：仓库里三张页面 PNG 是陈渍产物**——
+回滚对照实测 head 代码与搬迁代码渲染逐字节同（MIGSAME），提交物反而不同（HEADDIFF）；
+顺手以重渲染纠偏。四 UI 闸 69/39/39/74 绿。
+
+**P2 发射器 a：运行时 Theme + type variations（283cf22）**：`UiStyle.build_theme(C,S)`
+单源生成（default_font NotoSans + 变体 `PrimaryButton/MenuButton/DarkCard/TitleBar/
+GoldSlider`），按 S 缓存共享实例，hud 与 shell 同源；screens 六面板/滑杆/全部菜单钮
+变体一行接入；pad 逐实例钮从 `UiStyle.get_theme()` duplicate 样式盒陆 override（防共享
+实例污染）。**探针面（HUD 模式钮/热层/暂停）维持发射器 b**（override+`sb_normal`
+meta——probe_hud:238 只读该 meta 的 bg_color，读的是自家对象，与渲染通道天然解耦；
+排查截图差时证实 settings/slots/title 的 PNG 差全为战场跑格子透过 veil 的采样噪声，
+非 UI 回归）。四闸全绿。
+
+**P3 质感层 A 档全量（f640cca）**：A1 按钮顶缘 2px 亮金（DARK.edge_hi α46→120）+ 底缘
+3px 金压线（**draw 闭包零子节点，随尺寸自适应**；StyleBoxFlat 单 border_color 表达不了
+双色边，闭包是唯一干净解）；A2 卡片投影 12S/4S/DARK.shadow α80→150 + 主钮 6px/α110；
+A3 金字投影（衬线全题/banner/go_title/浮字/供给数，GLOW_GOLD α140 offset(0,1)）；
+A4 噪粒 NoiseTexture2D 5% TILE（FastNoiseLite 种子 20260415 确定性；**game 页禁挂**
+保 check_shots 契约）；A5 径向暗角 α0→80@0.78（fill_to=(0.5,0.02) 椭圆随画幅）；
+A6 按下 content_margin_top+2 伪按压；C 六面板四角 8px L 饰线（同为 draw 闭包）。
+unit+hud/ui_flow/touch/save/smoke/shots+check_shots 全绿；6 目验过。
+
+**P4 守规（7fa1571）**：新 `tools/check_ui_lint.py`——L1 裸 Color 构造仅限 DARK 定义区
+（区间自动探测）+ token 透明度重组豁免（`Color(DARK[…].r…)` 类算术）+ 注释剥离；
+L2 StyleBox/Theme/Gradient 类构造口唯一化（工厂外全红）；L3 `theme_type_variation`
+禁字面量（必须引 UiStyle.* 常量）。selfcheck +8 工厂预设一致性断言（按下位移/投影档/
+共享主题同实例/变体四件/氛围纹理）= **31/0**。顺手把 title 帷幕纹理、banner 淡入初值、
+hp 刻影线共 5 处收进工厂（lint 践行时清出的最后一批散件）。
+
+**P5 终验（1b35d1c）**：全 21 闸复跑全绿（headless 9 + 窗口 12）+ check_shots 25/0 +
+ui-lint PASS；19 张受击截图终版重出。
+
+**P6 双端包终版（SAC 自证口径 = exe+pck 同目录 `--selfcheck`）**：
+- game.exe 109,551,432B 复签 **Valid**（CN=Reroute）+ 同目录 selfcheck **31/0**
+- game.pck 109,738,128B（较 §11.20 包 +5,998,684B；v2.2 工厂 + 他会话 glb 刷新）
+- reroute-windows.zip 183,606,300B（192 条目，testzip 完整性 None-bad）
+- reroute-release.apk 312,058,040B（apksigner = CN=Reroute, OU=GameJam, O=Reroute, C=CN）
+- SHA-256 终版：exe `0539d11b…585bc` / pck `2470b934…ddbb` /
+  apk `4f57cb95…a5f0a9`（全值）`4f57cb950194081fbf25a71a2342a1865b0cce51768f26ce95cd4718a15500a9` /
+  zip `94bbaa80…b57a1`（全值）`94bbaa80a7b4af8b87ed9e0404d12a6ba0de57ea8652dfb5e2963cc66a5b57a1`
+
+**打包方法论补记（修正 §11.20 口径）**：game.exe 是**内容无关模板件**（mono 模板 +
+`project.bin` 内嵌 + Authenticode 签名块 +1,352B；模板/证书/图标不变 ⇒ **字节确定性**，
+任意版本导出同哈希）。版本判据**永远**是 exe+同目录 pck 的 selfcheck 断言链
+（当前 31 = v2.2），exe 单独的同哈希≠旧包。两 AI 会话并行同跑导出时 pck/exe mtime 会
+被对方刷新，**以哈希 + selfcheck 双证收官**，别追 mtime。
+
+**治理面**：维护入口唯一化 = 只改 `ui_style.gd` 参数表（VEIL 档位/投影档/噪粒度/
+暗角深/TICK 臂长/GLOW 色）；双发射器并存期，判据 = selfcheck 工厂一致性 8 条 + lint 3 条；
+赛后收敛方向（theme 化已全量落地，遗留 = 探针面 10 钮 override→variation 翻转 + .tscn
+场景化）。
 
 ---
 

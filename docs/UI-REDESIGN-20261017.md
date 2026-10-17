@@ -132,3 +132,36 @@
 
 - `docs/mockups/title_v21.png` / `game_v21.png` / `gameover_v21.png` / `settings_v21.png`
 - v2 旧图 `*_v2.png` 保留作对照
+
+## 7. v2.2 质感层 + 样式工厂（2026-10-17 实装）
+
+**判据起点**：skill 数据（Skeuomorphism 阴影差 30–50%、渐变 8–12 档；Gaming 反模式 =
+Minimalist + Static assets）⇒ A 档六件套 + C 饰线全量，B 档（颜色过渡/点击音/glow）
+割爱守探针契约。参数全部集中在 `game/ui_style.gd`（唯一真源）：
+
+| 项 | 落点 | 参数 |
+|---|---|---|
+| A1 光边 | `edge_dress()` draw 闭包（顶层 2px + 底缘 3px 金） | tip 色 = DARK.edge_hi（α120）；底 = RULE |
+| A2 投影 | 主钮 6px/4px/α110；卡片 int(12S)/int(4S)/DARK.shadow(α150) | SHADOW_BTN 常量 |
+| A3 金字影 | `label(glow:=true)`：GLOW_GOLD α140@(0,1) | 衬线全题/banner/go_title/浮字/供给数 |
+| A4 噪粒 | `grain_tex()` 256² 无缝 + modulate α0.05 TILE | 种子 20260415（确定性） |
+| A5 暗角 | `vignette_tex()` 径向 0→0@0.78→α0.31 | 有意写在 (0.5,0.02) 半径 |
+| A6 按压 | pressed content_margin_top+2 | selfcheck 断言锁 |
+| C 饰线 | `corner_dress()` 8px L 金 | 六面板（确认/说明/暂停/结算/存档/设置） |
+
+**氛围层挂点**：五覆盖页 + 确认弹窗（`_page_base`/title/confirm）；**game 页禁挂**
+（check_shots 像素契约不受任何影响）。
+
+**架构（双发射器）**：
+- 发射器 a：`UiStyle.build_theme(C,S)` → 运行时 Theme + type variations
+  （PrimaryButton/MenuButton/DarkCard/TitleBar/GoldSlider），按 S 缓存、hud/shell 共享
+  同一实例；控件接入 = `theme_type_variation` 一行。
+- 发射器 b：按钮 override + `sb_normal` meta（HUD 探针面 10 钮专用——probe 只读 meta
+  对象 bg_color，与渲染通道解耦；两路由同参数派生永一致）。
+- 赛后遗留：探针面翻转 variation + .tscn 场景化（§11.23 治理面）。
+
+**维护三规约（lint 强制）**：L1 裸 Color 只在 DARK 定义区；L2 样式/纹理构造只走工厂；
+L3 变体名只用常量。`python tools/check_ui_lint.py` + selfcheck 31/0（含 8 条工厂一致性）。
+
+**调参速查**：噪粒度 GRAIN_ALPHA（糊字降 0.03）·暗角 VIGNETTE_ALPHA ·饰线臂 TICK_ARM ·
+金字 GLOW_GOLD ·投影 SHADOW_BTN/Build 卡片 shadow（build_theme 内）·veil 三档常量。
