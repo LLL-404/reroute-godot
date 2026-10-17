@@ -1972,6 +1972,54 @@ model/orient 全 PASS、input **58/0**、hud 69/0、ui_flow 39/0、touch 39/0；
 （title/hud/gameover/settings/slots/game_narrow）通过；已知小瑕疵豁免：设置页滑杆
 grabber 为默认主题灰点（有意不引贴图）、gameover 卡右下 1px 描边圆角缺口。
 
+### 11.21 LOD：源 4 级接回 + 按屏占比切级（2026-10-17）
+
+**背景/决策**：美术 pass 后实机观感已逼近宣传图，移动端性能成为下一瓶颈。用户三问定案：
+① **路线 B = 直接上源 4 级 LOD**（不把引擎自动网格抽取当主力）；② 激进度**冲性能**
+（切级系数 1.3 偏早切）；③ 验证口径**完全不新增探针**（`verify_glb` 管线自检锁定数据 +
+临时目视件三机位 + `check_shots` 复跑兜底）。
+
+**方案硬约束**：Godot 内置 mesh LOD 是**索引级**（各级共享同一顶点缓冲，meshoptimizer
+simplify 产出），塞不进美术 LOD（各级独立顶点缓冲）；MSFT_lod 未实装；
+visibility_range 不具可测性且无迟滞、不便调试。故采用「转换器导出四个并列
+MeshInstance3D（`lod0..lod3`，蒙皮件共享同一 skeleton）+ 运行时按屏占比切 `.visible`」。
+
+**转换器（`tools/umd2_to_gltf.py`）**：`parse_mdl` 全 4 级解析——每级独立顶点缓冲 +
+索引块，**索引块 k ↔ LOD k** 映射经「num_ib==num_lods」与三角比 100/85/65/45 双重确证；
+每级独立 mesh（POSITION/NORMAL/TEXCOORD_0/TANGENT，蒙皮级另加 JOINTS/WEIGHTS）；
+AABB 统一取 **LOD0**（宁大勿小）；蒙皮件四个 lod 节点共享同一 skin；节点名
+`lod0..lod3`（Godot 导入后居于 Skeleton3D 之下，绑定器递归查找）。
+**14/14 资产**（含建筑三件/金矿）源文件均含 4 级。
+
+**verify_glb 断言升级**（本任务自动化验证面）：四节点/四 mesh 存在 + 逐级顶点/索引
+非递增 + 蒙皮件各级挂 skin + 逐级权重和抽查；并以 **EXPECTED 表**（源 .mdl 逐级实测
+verts/idx，14×4）锁定数量。14/14 PASS。
+
+**运行时切级（`game/models.gd` + `game/view_entities.gd`）**：度量 `h = 世界半径 /
+(相机距离 × tan(fov/2))`（fov 恒 45°）；阈值出自源管线 `.lodgroup` 的 screenSize
+**0.20/0.08/0.03**（对象屏高占比），再乘 `LOD_AGGRESSIVENESS=1.3`；迟滞 10%（回升需
+超阈值 ×1.1）防边界抖动。单位逐帧切；静态件（覆盖层/建筑）仅在**相机变换或新注册**
+（`_lod_dirty`）时刷。**总回退开关：`LOD_AGGRESSIVENESS=0` → 恒 LOD0 = 原状**。
+引擎 auto-LOD 保留（各级网格之下再抽，无害兜底）。
+
+**口径保护（关键）**：`mesh_aabb` 经 `_lod_decoy` 跳过 lod1..3 → 校准口径 = LOD0，
+与 glb 化前逐值一致（probe_asset 缩放断言零改而绿）；probe_asset 网格断言为 `>=1`，
+天然兼容；`probe_model` 裸实例化补一行 `bind_lod(inst, 0.0)`（只显 LOD0，防四级同渲染
+叠模）；selfcheck 只查 AnimationPlayer、probe_orient 走 spawn_unit，均零改。
+`spawn_gold` 为死代码（无调用点），保持原样仅挂 meta 不刷新。
+
+**目视+数字存证**（临时件用后删）：远/中/近三机位 = 默认全图 L3 / 20m L1–L2 / 3m L0；
+覆盖层四档分布 25→[0,0,4,21]；切级梯 0.30→0/0.25→1/0.10→2/0.05→2/0.02→3，
+迟滞 0.27→1/0.29→0 全对；近/中/远截图目验无叠模无破面。
+
+**闸**：单测 104/0 + 全 21 闸绿（headless golden/scene/blueprint/sim/grid/flow/scenario/
+world + 窗口 sync/input/hud/ui_flow/smoke/shots/audio/asset/model/orient/save/touch 全
+PASS；**golden 主树直接 PASS**——并行会话的 sim 半成品已收敛提交，无需 worktree 复核）+
+`check_shots` 25/0。证据 `logs/gates-20261017-lod/`。
+
+**体积**：glb 8.0MB → 21.0MB（+13MB；蒙皮件 ×2.0~2.6，静态件 ×3.0）；pck 预计 +13MB
+上下（上一包 103,739,444B，以冻结包复测为准）。**双端包需再重出**（§11.20 包在 LOD 之前）。
+
 ---
 
 ## 12. AI 任务卡模板（派活时照抄）

@@ -167,8 +167,7 @@ def absorb_bind_basis(bones) -> None:
 
 class Model:
     def __init__(self):
-        self.vertices = []   # list of dict(pos, normal, uv, tangent, weights, joints)
-        self.indices = []    # list[int] (LOD0)
+        self.lods = []       # list[(verts, indices)]：verts = list[dict]，LOD0 在前
         self.bones = []      # list[Bone]
         self.bbox = None     # (min, max) 原始坐标
         self.num_lods = 0
@@ -246,39 +245,41 @@ def parse_mdl(path: str) -> Model:
             m.bones = bones
             absorb_bind_basis(m.bones)
 
-    # LOD0 顶点 + 索引
-    nv, descs, vsize, voff = lods[0]
-    verts = []
-    for i in range(nv):
-        off = voff + i * vsize
-        v = {}
-        p = off
-        for d in descs:
-            t = d & 0xFF
-            sem = (d >> 8) & 0xFF
-            if sem == SEM_POSITION:
-                vv = struct.unpack_from('<3f', b, p)
-                v['pos'] = z3(vv)
-            elif sem == SEM_NORMAL:
-                vv = struct.unpack_from('<3f', b, p)
-                v['normal'] = z3(vv)
-            elif sem == SEM_TEXCOORD:
-                v['uv'] = struct.unpack_from('<2f', b, p)
-            elif sem == SEM_TANGENT:
-                vv = struct.unpack_from('<4f', b, p)
-                v['tangent'] = (vv[0], vv[1], -vv[2], -vv[3])
-            elif sem == SEM_BLENDWEIGHTS:
-                v['weights'] = struct.unpack_from('<4f', b, p)
-            elif sem == SEM_BLENDINDICES:
-                v['joints'] = struct.unpack_from('<4B', b, p)
-            # COLOR / LIGHTMAPUV / 其他：跳过
-            p += TYPE_SIZES[t]
-        verts.append(v)
-    m.vertices = verts
-
-    ni, isz, ioff = index_blocks[0]
-    fmt = '<%dH' % ni if isz == 2 else '<%dI' % ni
-    m.indices = list(struct.unpack_from(fmt, b, ioff))
+    # 全部 LOD 级：顶点（每级 descs 独立）+ 索引块
+    # 实测 num_ib == num_lods（4 块递减），索引块 k 即 LOD k（与 .lodgroup 的
+    # percentTriangles 100/85/65/45 三角数逐级吻合佐证）。
+    assert len(index_blocks) == len(lods), (
+        '索引块数 %d != LOD 数 %d（%s）：无法一一映射' % (len(index_blocks), len(lods), path))
+    for k, (nv, descs, vsize, voff) in enumerate(lods):
+        verts = []
+        for i in range(nv):
+            off = voff + i * vsize
+            v = {}
+            p = off
+            for d in descs:
+                t = d & 0xFF
+                sem = (d >> 8) & 0xFF
+                if sem == SEM_POSITION:
+                    vv = struct.unpack_from('<3f', b, p)
+                    v['pos'] = z3(vv)
+                elif sem == SEM_NORMAL:
+                    vv = struct.unpack_from('<3f', b, p)
+                    v['normal'] = z3(vv)
+                elif sem == SEM_TEXCOORD:
+                    v['uv'] = struct.unpack_from('<2f', b, p)
+                elif sem == SEM_TANGENT:
+                    vv = struct.unpack_from('<4f', b, p)
+                    v['tangent'] = (vv[0], vv[1], -vv[2], -vv[3])
+                elif sem == SEM_BLENDWEIGHTS:
+                    v['weights'] = struct.unpack_from('<4f', b, p)
+                elif sem == SEM_BLENDINDICES:
+                    v['joints'] = struct.unpack_from('<4B', b, p)
+                # COLOR / LIGHTMAPUV / 其他：跳过
+                p += TYPE_SIZES[t]
+            verts.append(v)
+        ni, isz, ioff = index_blocks[k]
+        fmt = '<%dH' % ni if isz == 2 else '<%dI' % ni
+        m.lods.append((verts, list(struct.unpack_from(fmt, b, ioff))))
     return m
 
 
@@ -376,52 +377,72 @@ def build_glb(model: Model, anims, out_path: str,
               base_color=(1, 1, 1, 1), metallic=0.0, roughness=0.75,
               alpha_cutoff=None, name='asset') -> None:
     g = Glb()
-    verts = model.vertices
-    n = len(verts)
-    has_skin = len(model.bones) > 0 and any('joints' in v for v in verts)
-
-    # 顶点属性
-    pos_data = bytearray()
-    nor_data = bytearray()
-    uv_data = bytearray()
-    tan_data = bytearray()
-    jnt_data = bytearray()
-    wgt_data = bytearray()
-    for v in verts:
-        pos_data += struct.pack('<3f', *v.get('pos', (0, 0, 0)))
-        nor_data += struct.pack('<3f', *v.get('normal', (0, 1, 0)))
-        uv_data += struct.pack('<2f', *v.get('uv', (0, 0)))
-        tan_data += struct.pack('<4f', *v.get('tangent', (1, 0, 0, 1)))
-        jnt_data += bytes(v.get('joints', (0, 0, 0, 0)))
-        wgt_data += struct.pack('<4f', *v.get('weights', (0, 0, 0, 0)))
-
-    mn = [min(v['pos'][i] for v in verts) for i in range(3)]
-    mx = [max(v['pos'][i] for v in verts) for i in range(3)]
-
-    bv = g.view(bytes(pos_data), AR_POS)
-    acc_pos = g.accessor(bv, CT_F32, n, 'VEC3', mn, mx)
-    bv = g.view(bytes(nor_data), AR_POS)
-    acc_nor = g.accessor(bv, CT_F32, n, 'VEC3')
-    bv = g.view(bytes(uv_data), AR_POS)
-    acc_uv = g.accessor(bv, CT_F32, n, 'VEC2')
-    bv = g.view(bytes(tan_data), AR_POS)
-    acc_tan = g.accessor(bv, CT_F32, n, 'VEC4')
-    acc_jnt = acc_wgt = None
+    lods = model.lods
+    n_lod = len(lods)
+    v0 = lods[0][0]
+    has_skin = len(model.bones) > 0 and any('joints' in v for v in v0)
     if has_skin:
-        bv = g.view(bytes(jnt_data), AR_POS)
-        acc_jnt = g.accessor(bv, CT_U8, n, 'VEC4')
-        bv = g.view(bytes(wgt_data), AR_POS)
-        acc_wgt = g.accessor(bv, CT_F32, n, 'VEC4')
+        for k in range(n_lod):
+            assert any('joints' in v for v in lods[k][0]), \
+                'LOD%d 缺蒙皮属性（蒙皮模型各级必须一致）: %s' % (k, name)
 
-    idx16 = max(model.indices) < 65536 if model.indices else True
-    if idx16:
-        idx_bytes = struct.pack('<%dH' % len(model.indices), *model.indices)
-        ct = CT_U16
-    else:
-        idx_bytes = struct.pack('<%dI' % len(model.indices), *model.indices)
-        ct = CT_U32
-    bv = g.view(idx_bytes, AR_IDX)
-    acc_idx = g.accessor(bv, ct, len(model.indices), 'SCALAR')
+    # 各级顶点属性 + 索引 → 每级一个 mesh（AABB 统一取 LOD0，供 culling，宁大勿小）
+    mn = [min(v['pos'][i] for v in v0) for i in range(3)]
+    mx = [max(v['pos'][i] for v in v0) for i in range(3)]
+    meshes = []
+    for k, (verts, indices) in enumerate(lods):
+        n = len(verts)
+        pos_data = bytearray()
+        nor_data = bytearray()
+        uv_data = bytearray()
+        tan_data = bytearray()
+        jnt_data = bytearray()
+        wgt_data = bytearray()
+        for v in verts:
+            pos_data += struct.pack('<3f', *v.get('pos', (0, 0, 0)))
+            nor_data += struct.pack('<3f', *v.get('normal', (0, 1, 0)))
+            uv_data += struct.pack('<2f', *v.get('uv', (0, 0)))
+            tan_data += struct.pack('<4f', *v.get('tangent', (1, 0, 0, 1)))
+            jnt_data += bytes(v.get('joints', (0, 0, 0, 0)))
+            wgt_data += struct.pack('<4f', *v.get('weights', (0, 0, 0, 0)))
+
+        bv = g.view(bytes(pos_data), AR_POS)
+        acc_pos = g.accessor(bv, CT_F32, n, 'VEC3', mn, mx)
+        bv = g.view(bytes(nor_data), AR_POS)
+        acc_nor = g.accessor(bv, CT_F32, n, 'VEC3')
+        bv = g.view(bytes(uv_data), AR_POS)
+        acc_uv = g.accessor(bv, CT_F32, n, 'VEC2')
+        bv = g.view(bytes(tan_data), AR_POS)
+        acc_tan = g.accessor(bv, CT_F32, n, 'VEC4')
+        attrs = {
+            'POSITION': acc_pos, 'NORMAL': acc_nor,
+            'TEXCOORD_0': acc_uv, 'TANGENT': acc_tan,
+        }
+        if has_skin:
+            bv = g.view(bytes(jnt_data), AR_POS)
+            attrs['JOINTS_0'] = g.accessor(bv, CT_U8, n, 'VEC4')
+            bv = g.view(bytes(wgt_data), AR_POS)
+            attrs['WEIGHTS_0'] = g.accessor(bv, CT_F32, n, 'VEC4')
+
+        idx16 = max(indices) < 65536 if indices else True
+        if idx16:
+            idx_bytes = struct.pack('<%dH' % len(indices), *indices)
+            ct = CT_U16
+        else:
+            idx_bytes = struct.pack('<%dI' % len(indices), *indices)
+            ct = CT_U32
+        bv = g.view(idx_bytes, AR_IDX)
+        acc_idx = g.accessor(bv, ct, len(indices), 'SCALAR')
+
+        meshes.append({
+            'name': '%s_lod%d' % (name, k),
+            'primitives': [{
+                'attributes': attrs,
+                'indices': acc_idx,
+                'material': 0,
+                'mode': 4,
+            }],
+        })
 
     # 材质
     mat = {
@@ -438,11 +459,11 @@ def build_glb(model: Model, anims, out_path: str,
     if tex_n:
         mat['normalTexture'] = {'index': 1}
 
-    # 节点 / 骨架
+    # 节点 / 骨架：LOD 各级一个节点（lod0..lod3）；skinned 时共享同一 skin
     nodes = []
     skin_idx = None
     if has_skin:
-        # 骨骼节点（0..B-1），再一个 mesh 节点（B）
+        # 骨骼节点（0..B-1），然后 lod0..lod3（B..B+3）
         for i, bone in enumerate(model.bones):
             node = {
                 'name': bone.name,
@@ -472,19 +493,23 @@ def build_glb(model: Model, anims, out_path: str,
             ibm_data += struct.pack('<16f', *m4)
         bv = g.view(bytes(ibm_data))
         acc_ibm = g.accessor(bv, CT_F32, len(model.bones), 'MAT4')
-        mesh_node = len(nodes)
-        nodes.append({'name': name, 'mesh': 0, 'skin': 0})
-        nodes[0]['children'] = nodes[0].get('children', [])  # root bone 挂场景根
+        lod_node_ids = []
+        for k in range(n_lod):
+            lod_node_ids.append(len(nodes))
+            nodes.append({'name': 'lod%d' % k, 'mesh': k, 'skin': 0})
         skin_idx = 0
-        scene_nodes = [0, mesh_node]
+        scene_nodes = [0] + lod_node_ids
         skins = [{
             'name': name + '_skin',
             'joints': list(range(len(model.bones))),
             'inverseBindMatrices': acc_ibm,
         }]
     else:
-        nodes.append({'name': name, 'mesh': 0})
-        scene_nodes = [0]
+        lod_node_ids = []
+        for k in range(n_lod):
+            lod_node_ids.append(len(nodes))
+            nodes.append({'name': 'lod%d' % k, 'mesh': k})
+        scene_nodes = lod_node_ids
         skins = None
 
     # 动画
@@ -544,21 +569,7 @@ def build_glb(model: Model, anims, out_path: str,
         'scene': 0,
         'scenes': [{'nodes': scene_nodes}],
         'nodes': nodes,
-        'meshes': [{
-            'name': name,
-            'primitives': [{
-                'attributes': {
-                    'POSITION': acc_pos,
-                    'NORMAL': acc_nor,
-                    'TEXCOORD_0': acc_uv,
-                    'TANGENT': acc_tan,
-                    **({'JOINTS_0': acc_jnt, 'WEIGHTS_0': acc_wgt} if has_skin else {}),
-                },
-                'indices': acc_idx,
-                'material': 0,
-                'mode': 4,
-            }],
-        }],
+        'meshes': meshes,
         'materials': [mat],
         'accessors': g.accessors,
         'bufferViews': g.buffer_views,
@@ -618,9 +629,11 @@ def main() -> int:
               tex_d=args.tex_d, tex_n=args.tex_n,
               base_color=bc, metallic=args.metallic, roughness=args.roughness,
               name=name)
-    print('[OK] %s: %d verts, %d idx, %d bones, %d anims -> %s (%.1f KB)' % (
-        name, len(model.vertices), len(model.indices), len(model.bones),
-        len(anims), args.out, os.path.getsize(args.out) / 1024))
+    print('[OK] %s: lods=%d verts=%s idx=%s bones=%d anims=%d -> %s (%.1f KB)' % (
+        name, len(model.lods),
+        '/'.join(str(len(l[0])) for l in model.lods),
+        '/'.join(str(len(l[1])) for l in model.lods),
+        len(model.bones), len(anims), args.out, os.path.getsize(args.out) / 1024))
     return 0
 
 

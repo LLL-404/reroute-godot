@@ -46,6 +46,8 @@ var models = null # 真实资产模型管理器（ModelsScript 实例；_ready �
 var on_float: Callable
 
 var _height_rev := -1
+var _lod_cam := Transform3D() # 静态件 LOD 的相机变换缓存（变换未变即不刷）
+var _lod_dirty := true # 新注册静态件（覆盖层/建筑）或重铺场地时置脏
 var _hero_cd := 0
 var _units_n := 0
 var _horn_tick := -999
@@ -97,6 +99,7 @@ func build_terrain(pgrid: Grid) -> void:
 	_horn_tick = -999
 	_core_hp = -1
 	_core_hit_tick = -999
+	_lod_dirty = true
 
 	var n_solid := 0
 	for y in pgrid.h:
@@ -120,7 +123,9 @@ func _make_cover(x: int, y: int) -> void:
 	else:
 		var variant: int = (x * 7 + y * 13) % 3
 		node = models.spawn_rubble(tiles, variant, Vector3(w.x, gy, w.z), 0.94)
-	cover_nodes[x * 1000 + y] = { "node": node, "x": x, "y": y }
+	cover_nodes[x * 1000 + y] = { "node": node, "x": x, "y": y,
+			"lod": node.get_meta("lod", {}) }
+	_lod_dirty = true
 
 
 # ---- 幽灵预览 ----
@@ -173,6 +178,13 @@ func sync(world: World) -> void:
 	if terrain.heat_on and world.grid.rev != terrain.heat_rev:
 		terrain.rebuild_heat(world)
 
+	# 相机位置预取：单位逐帧切级；静态件在相机变换时统一刷。
+	var cam: Camera3D = core.camera
+	var cam_ok := cam != null
+	var cam_pos := Vector3.ZERO
+	if cam_ok:
+		cam_pos = cam.global_position
+
 	# 挖开的覆盖层消失
 	for k in cover_nodes.keys():
 		var cv: Dictionary = cover_nodes[k]
@@ -208,9 +220,12 @@ func sync(world: World) -> void:
 				building_root.add_child(node)
 				var kind: int = b["kind"]
 				# 建筑 = 真实资产 3 件（2026-10-17：盒体拼接退役，spec §12 fallback 不再需要）
-				node.add_child(models.spawn_building(
-					"tower" if kind == Sim.B_TOWER else ("core" if kind == Sim.B_CORE else "wall")))
-				entry = { "node": node, "kind": kind, "cd": int(b["cooldown"]) }
+				var binst: Node3D = models.spawn_building(
+					"tower" if kind == Sim.B_TOWER else ("core" if kind == Sim.B_CORE else "wall"))
+				node.add_child(binst)
+				entry = { "node": node, "kind": kind, "cd": int(b["cooldown"]),
+						"lod": binst.get_meta("lod", {}) }
+				_lod_dirty = true
 				building_nodes[bid] = entry
 				if kind == Sim.B_TOWER:
 					placed_tower = true
@@ -298,6 +313,7 @@ func sync(world: World) -> void:
 				e = {
 					"node": unode,
 					"player": spawn["player"],
+					"lod": spawn["lod"],
 					"px": int(u["x"]),
 					"py": int(u["y"]),
 					"kind": int(u["kind"]),
@@ -345,6 +361,8 @@ func sync(world: World) -> void:
 			e["py"] = int(u["y"])
 			e["hp"] = int(u["hp"])
 			e["traveled"] = int(u["traveled"])
+			if cam_ok:
+				models.update_lod(e["lod"], cam_pos, Vector3(ix2, iy2, iz2))
 	for uid2 in unit_nodes.keys():
 		if not useen.has(uid2):
 			var e3: Dictionary = unit_nodes[uid2]
@@ -361,6 +379,19 @@ func sync(world: World) -> void:
 			unit_nodes.erase(uid2)
 	update_death_fx(world.tick_count)
 	update_shock_ring(world)
+
+	# 静态件（覆盖层/建筑）LOD：相机变换或新注册（脏标）时统一刷。
+	if cam_ok:
+		var lod_xf := cam.global_transform
+		if _lod_dirty or lod_xf != _lod_cam:
+			_lod_cam = lod_xf
+			_lod_dirty = false
+			for ck in cover_nodes.keys():
+				var cv3: Dictionary = cover_nodes[ck]
+				models.update_lod(cv3["lod"], cam_pos, (cv3["node"] as Node3D).global_position)
+			for bk in building_nodes.keys():
+				var be3: Dictionary = building_nodes[bk]
+				models.update_lod(be3["lod"], cam_pos, (be3["node"] as Node3D).global_position)
 
 	var vp := host.get_viewport().get_visible_rect().size
 	if vp.x > 0.0 and vp.y > 0.0 and (vp.x != core._fit_w or vp.y != core._fit_h):

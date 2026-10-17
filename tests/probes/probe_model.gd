@@ -3,7 +3,10 @@ extends ProbeKit
 # 模型渲染探针 v2：三个单位形态 + 金堆，含动画帧（Crawl）截图验证。
 # 判定：exit 0 + stdout 含 [MODEL] PASS。
 
+const ModelsScript = preload("res://game/models.gd")
+
 func _initialize() -> void:
+	var models = ModelsScript.new()
 	var root := get_root()
 	var world := Node3D.new()
 	world.name = "World"
@@ -51,6 +54,7 @@ func _initialize() -> void:
 		if packed == null:
 			continue
 		var inst: Node3D = packed.instantiate()
+		models.bind_lod(inst, 0.0) # 4 级 LOD 资产：裸实例化只显 LOD0（游戏内走 spawn_* 自动切级）
 		inst.position = item[2]
 		world.add_child(inst)
 		var anim_name: String = item[3]

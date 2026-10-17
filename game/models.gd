@@ -58,6 +58,81 @@ const BUILDING_SIZE := {
 var _cache: Dictionary = {}
 
 
+# ---- LOD（2026-10-17，源 4 级）----
+# 转换器（tools/umd2_to_gltf.py）把源 .mdl 的 4 级 LOD 导出为 lod0..lod3 四个并列
+# MeshInstance3D 子节点（蒙皮件共享同一 skeleton/skin）。运行时按「对象屏高占比」切级：
+# 阈值出自源管线 .lodgroup（screenSize 0.20/0.08/0.03，跌到该占比即切下一级）；
+# LOD_AGGRESSIVENESS 乘在阈值上（>1 更早切低模，冲性能）。置 0 = 恒 LOD0（总回退开关）。
+const LOD_LEVELS := 4
+const LOD_SCREEN_FRACTIONS := [0.20, 0.08, 0.03]
+const LOD_AGGRESSIVENESS := 1.3
+const LOD_HYSTERESIS := 0.10 # 回升档需超过阈值 1.10 倍，防边界抖动
+const LOD_TAN_HALF_FOV := 0.41421356 # tan(45°/2)：相机 fov 恒 45（view_core）
+
+
+## LOD 旁支判定：lod1..lod3（校准口径只认 lod0——与 glb 化前逐像素一致）。
+func _lod_decoy(n: Node) -> bool:
+	var nm := String(n.name).to_lower()
+	if not nm.begins_with("lod"):
+		return false
+	var rest := nm.substr(3)
+	return rest.is_valid_int() and int(rest) > 0
+
+
+## 纯函数：h = 对象屏高占比（包围球直径 / 视口高）→ 目标级别。带迟滞；aggr ≤ 0 → 恒 0。
+func lod_index(h: float, current: int) -> int:
+	var k: int = current
+	if k < 0:
+		k = 0
+	while k < LOD_LEVELS - 1 and h < float(LOD_SCREEN_FRACTIONS[k]) * LOD_AGGRESSIVENESS:
+		k += 1
+	while k > 0 and h > float(LOD_SCREEN_FRACTIONS[k - 1]) * LOD_AGGRESSIVENESS * (1.0 + LOD_HYSTERESIS):
+		k -= 1
+	return k
+
+
+## 绑定 glb 实例的 lod0..lod3（转换器约定命名），初态只显 LOD0。
+## radius = 世界半径（包围球）。返回 { nodes:[MeshInstance3D×4], radius, idx }；
+## 非 LOD 资产（旧单网格 glb）返回 {}。
+func bind_lod(inst: Node, radius: float) -> Dictionary:
+	var found: Dictionary = {}
+	var stack: Array = [inst]
+	while not stack.is_empty():
+		var n: Node = stack.pop_back()
+		if n is MeshInstance3D:
+			var nm := String(n.name).to_lower()
+			if nm.begins_with("lod"):
+				var rest := nm.substr(3)
+				if rest.is_valid_int():
+					found[int(rest)] = n
+		for c in n.get_children():
+			stack.append(c)
+	if found.size() != LOD_LEVELS:
+		return {}
+	var nodes: Array = []
+	for k in range(LOD_LEVELS):
+		nodes.append(found[k])
+	for k in range(LOD_LEVELS):
+		(nodes[k] as MeshInstance3D).visible = (k == 0)
+	return { "nodes": nodes, "radius": radius, "idx": 0 }
+
+
+## 按屏幕占比切级；只在级跳变时写 visible。world_pos = 实例世界位置。
+func update_lod(st: Dictionary, cam_pos: Vector3, world_pos: Vector3) -> void:
+	if st.is_empty() or LOD_AGGRESSIVENESS <= 0.0:
+		return
+	var d: float = cam_pos.distance_to(world_pos)
+	if d < 0.001:
+		d = 0.001
+	var h: float = float(st["radius"]) / (d * LOD_TAN_HALF_FOV)
+	var k := lod_index(h, int(st["idx"]))
+	if k != int(st["idx"]):
+		var nodes: Array = st["nodes"]
+		(nodes[int(st["idx"])] as MeshInstance3D).visible = false
+		(nodes[k] as MeshInstance3D).visible = true
+		st["idx"] = k
+
+
 ## 惰性加载 PackedScene（每次 load 有引擎缓存，这里再加一层字典省查找）。
 func scene(path: String) -> PackedScene:
 	if _cache.has(path):
@@ -83,7 +158,7 @@ func mesh_aabb(inst: Node) -> AABB:
 		var item: Array = stack.pop_back()
 		var node: Node3D = item[0]
 		var xf: Transform3D = item[1]
-		if node is MeshInstance3D and node.mesh != null:
+		if node is MeshInstance3D and node.mesh != null and not _lod_decoy(node):
 			var ta: AABB = xf * node.mesh.get_aabb()
 			if has:
 				acc = acc.merge(ta)
@@ -135,7 +210,8 @@ func spawn_unit(parent: Node, kind: int) -> Dictionary:
 	inst.scale = Vector3(s, s, s)
 	var c := box.get_center()
 	inst.position = Vector3(-c.x * s, -box.position.y * s, -c.z * s)
-	return { "node": root, "player": find_player(inst) }
+	return { "node": root, "player": find_player(inst),
+			"lod": bind_lod(inst, float(UNIT_LENGTH[kind]) * 0.5) }
 
 
 ## 金堆满档：root（世界位置 + 0.78 缩放）+ 内部各轴缩到 1.2×0.4×1.2、底部中心对齐。
@@ -156,6 +232,8 @@ func spawn_gold(parent: Node, pos: Vector3) -> Node3D:
 	inst.scale = Vector3(sx, sy, sz)
 	var c := box.get_center()
 	inst.position = Vector3(-c.x * sx, -box.position.y * sy, -c.z * sz)
+	root.set_meta("lod", bind_lod(inst,
+			0.5 * maxf(target.x, maxf(target.y, target.z)) * GOLD_ROOT_SCALE))
 	return root
 
 
@@ -173,6 +251,8 @@ func spawn_rubble(parent: Node, variant: int, pos: Vector3, footprint: float) ->
 	var c := box.get_center()
 	inst.position = Vector3(-c.x * s, -box.position.y * s, -c.z * s)
 	root.position = pos
+	root.set_meta("lod", bind_lod(inst,
+			0.5 * s * maxf(box.size.x, maxf(box.size.y, box.size.z))))
 	return root
 
 
@@ -190,6 +270,8 @@ func spawn_ore(parent: Node, pos: Vector3, footprint: float) -> Node3D:
 	var c := box.get_center()
 	inst.position = Vector3(-c.x * s, -box.position.y * s, -c.z * s)
 	root.position = pos
+	root.set_meta("lod", bind_lod(inst,
+			0.5 * s * maxf(box.size.x, maxf(box.size.y, box.size.z))))
 	return root
 
 
@@ -210,4 +292,5 @@ func spawn_building(kind_name: String) -> Node3D:
 	inst.scale = s
 	var c := box.get_center()
 	inst.position = Vector3(-c.x * s.x, -box.position.y * s.y, -c.z * s.z)
+	inst.set_meta("lod", bind_lod(inst, 0.5 * maxf(target.x, maxf(target.y, target.z))))
 	return inst

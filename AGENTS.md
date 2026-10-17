@@ -227,6 +227,16 @@ python tools/check_shots.py    # 截图像素校验
   probe_input §14 断言标定改机器无关口径（透视放大 1.43× 帧速漂移根因；负对照
   `pan_pixels` ×2 咬红后还原）。全闸绿（input 58/0、hud 69/0、ui_flow 39/0、touch 39/0、
   selfcheck 23/0、check_shots 25/0）；19 受击截图重出 + 目验 6 张通过。
+- LOD：源 4 级接回 + 屏占比切级（2026-10-17）**已完成**：`umd2_to_gltf.py` 每资产导出
+  lod0..lod3 四 mesh 节点（蒙皮件共享 skeleton；逐级独立顶点缓冲——Godot 内置 LOD 为索引级，
+  塞不进美术 LOD）；`verify_glb` 以源 `.mdl` 实测表断言逐级 verts/idx（非递增 + 蒙皮权重）；
+  `models.gd` 按 `h=半径/(d·tan(fov/2))` 切级，阈值 = 源 `.lodgroup` screenSize
+  0.20/0.08/0.03 × `LOD_AGGRESSIVENESS` 1.3 + 10% 迟滞防抖；静态件（覆盖/建筑）相机变换时刷；
+  **回退开关：`LOD_AGGRESSIVENESS=0` → 恒 LOD0**；`mesh_aabb` 跳过 lod1..3 保校准口径
+  （probe_asset 零改）；`probe_model` 裸实例化补 `bind_lod`（防四级叠模）。全 21 闸 +
+  `check_shots` 25/0 绿（含主树 golden——并行 sim 半成品已收敛提交）。glb 8.0→21.0MB
+  （+13MB；pck 以冻结包复测为准），**双端包需再重出**。证据 `logs/gates-20261017-lod/`；
+  决策记录 = 方案 §11.21。
 
 ---
 
