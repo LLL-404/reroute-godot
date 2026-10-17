@@ -185,7 +185,7 @@ python tools/check_shots.py    # 截图像素校验
   `ridge_y` / `basin_rect` 中心 / `core`）、`view_terrain` 坡度岩化 + 崖壁围合（RIM_BUMP 4.2）、
   灯光/调色提亮；单测 100→104；全 19 闸 + check_shots 绿（证据 `logs/gates-20261016-mapgen-post/`
   + `logs/gates-20261016-visual/`）；决策记录 = 方案 §11.14/§11.15。
-  **Android/Windows 现包不含本次变更，D4 提交前必须重出。**
+  **包重出跟进：10-17 UI v2.1 后已双端重出（zip 顺带修复 10-16 混入史前 pck 的交付缺陷），见方案 §11.20。**
 - 峡谷化第二/三步（2026-10-16 晚–10-17 晨）**已完成**：A=场内地面失踪根因修复
   （`_build_indices` 三角绕序倒置，world64 起即存在，雾色假地面——索引绕序对调）；B=第二步
   （干冲沟/脊状崖顶/4.5m 层理/豁口锚定 + fit 俯角 44°）；C=第三步改**开阔荒漠口径**（矮墙
@@ -215,7 +215,8 @@ python tools/check_shots.py    # 截图像素校验
   9~12 上限未扩满）；**第四次基线重录**（16 指纹全换、WON@6400 余 808/击杀 236/供给 621）。
   新探针 `probe_blueprint`(11)；全 21 闸 + `check_shots` 25/0 + 导出件 `--selfcheck` 22/0 绿。
   **双端包已重出**：Windows 已复签 + Android 305.9MB（CN=Reroute）。
-  决策记录 = 方案 §11.19；开发者日志③草案 = `docs/devlogs/03-*.md`（待发布）。
+  决策记录 = 方案 §11.19；开发者日志③**已发布**（2026-10-17，moment `860546275211218896`；
+  正文留档 `docs/devlogs/03-*.md`）。
   **注**：Windows 自证以 `export/game.exe --selfcheck` 直跑为准（`--main-pack` 在 4.7.2
   模板不支持 path overrides，10-16 记录口径更正）。
 - UI v2.1「帝王金黑」实装（2026-10-17）**已完成**：`hud.gd`/`screens.gd` 换肤（色板 token
