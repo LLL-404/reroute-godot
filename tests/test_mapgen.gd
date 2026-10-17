@@ -1,7 +1,7 @@
 extends RefCounted
 
-# mapgen 单测（2026-10-16 世界生成）：参数域契约、64 种子全扫、确定性（缓存路径同值）、
-# check_grid / check_plug_open 负对照（结构校验必须真拒坏图）。
+# mapgen 单测（2026-10-16 世界生成 / 2026-10-17 G2 模板池）：参数域契约、64 种子全扫、
+# 模板覆盖、确定性（缓存路径同值）、check_grid / check_plug_open 负对照（结构校验必须真拒坏图）。
 
 
 func register(kit: TestKit) -> void:
@@ -9,31 +9,35 @@ func register(kit: TestKit) -> void:
 
 	kit.test("64-seed-sweep", func():
 		var sigs := {}
+		var tpl_seen := {}
 		for i in 64:
-			var s := 20261003 + i
+			var s := 20261004 + i # 默认种子走冻结窄域（锚点由 probe_scenario 钉死），此处扫变幅域
 			var sc := Scenario.new(s)
-			kit.ok(sc.resample_salt <= 8, "种子 %d 重采样 %d 次（参数窗收窄？）" % [s, sc.resample_salt])
-			kit.ok(sc.core.x >= 30 and sc.core.x <= 34, "core_x 越域 s=%d" % s)
-			kit.ok(sc.ridge_y >= 40 and sc.ridge_y <= 42, "ridge_y 越域 s=%d" % s)
+			tpl_seen[sc.template_id] = true
+			kit.ok(sc.resample_salt <= 8, "种子 %d 重采样 %d 次（参数窗收窄？tpl=%d）" % [s, sc.resample_salt, sc.template_id])
+			kit.ok(sc.core.x >= 28 and sc.core.x <= 38, "core_x 越域 s=%d" % s)
+			kit.ok(sc.ridge_y >= 39 and sc.ridge_y <= 43, "ridge_y 越域 s=%d" % s)
 			var cw: Vector2i = sc.chokes[0]
 			var ce: Vector2i = sc.chokes[1]
-			kit.ok(cw.x >= 16 and cw.x <= 22 and ce.x >= 41 and ce.x <= 47, "咽喉位越域 s=%d" % s)
+			kit.ok(cw.x >= 15 and cw.x <= 26 and ce.x >= 38 and ce.x <= 51, "咽喉位越域 s=%d" % s)
 			kit.ok(ce.x - cw.x >= 15, "咽喉间距越域 s=%d" % s)
-			kit.ok(cw.y == sc.ridge_y and ce.y == sc.ridge_y, "咽喉行越域 s=%d" % s)
+			kit.ok(cw.y >= sc.ridge_y - 5 and cw.y <= sc.ridge_y + 5, "西咽喉行越域 s=%d" % s)
+			kit.ok(ce.y >= sc.ridge_y - 5 and ce.y <= sc.ridge_y + 5, "东咽喉行越域 s=%d" % s)
 			var b: Rect2i = sc.basin_rect
-			kit.ok(b.position.x >= 2 and b.position.x <= 4 and b.position.y >= 52 and b.position.y <= 54, "盆地角越域 s=%d" % s)
-			kit.ok(b.size.x >= 7 and b.size.x <= 8 and b.size.y >= 8 and b.size.y <= 9, "盆地尺寸越域 s=%d" % s)
+			kit.ok(b.position.x >= 1 and b.position.x <= 5 and b.position.y >= 50 and b.position.y <= 52, "盆地角越域 s=%d" % s)
+			kit.ok(b.size.x >= 6 and b.size.x <= 9 and b.size.y >= 7 and b.size.y <= 9, "盆地尺寸越域 s=%d" % s)
 			var plug_dx: int = sc.basin_plug.x - b.position.x
 			kit.ok(plug_dx >= 2 and plug_dx <= b.size.x - 2, "插口列越域 s=%d" % s)
 			kit.eq(sc.basin_plug.y, b.position.y, "插口在上缘")
 			kit.eq(sc.mid_ore.size(), 5, "中场矿数")
 			kit.eq(sc.basin_ore.size(), 12, "盆地矿数")
-			kit.ok(sc.sparse_phase >= 2 and sc.sparse_phase <= 6, "表土相位越域 s=%d" % s)
+			kit.ok(sc.sparse_phase >= 2 and sc.sparse_phase <= 7, "表土相位越域 s=%d" % s)
 			for my in range(sc.mesa.position.y, sc.mesa.position.y + 2):
 				for mx in range(sc.mesa.position.x, sc.mesa.position.x + 2):
-					kit.ok(my >= sc.ridge_y + 5 and my <= 49, "微丘行越域 s=%d" % s)
+					kit.ok(mx >= 7 and mx <= 56 and my >= sc.ridge_y + 5 and my <= 49, "微丘域越域 s=%d" % s)
 					kit.ok(absi(mx - cw.x) > 1 and absi(mx - ce.x) > 1, "微丘压咽喉走廊 s=%d" % s)
-			sigs["%s|%d|%s|%s|%s|%d" % [str(sc.core), sc.ridge_y, str(cw), str(ce), str(sc.mesa), sc.sparse_phase]] = true
+			sigs["T%d|%s|%d|%s|%s|%s|%d" % [sc.template_id, str(sc.core), sc.ridge_y, str(cw), str(ce), str(sc.mesa), sc.sparse_phase]] = true
+		kit.ok(tpl_seen.size() >= 5, "模板覆盖不足：仅 %d/5 种 / 64 种子" % tpl_seen.size())
 		kit.ok(sigs.size() >= 40, "布局多样性不足：仅 %d 种签名 / 64 种子" % sigs.size()))
 
 	kit.test("determinism-fresh-vs-cache", func():

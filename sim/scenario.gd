@@ -1,9 +1,10 @@
 class_name Scenario
 extends RefCounted
 
-# 数值表 + 64² 程序化布局（2026-10-16 世界生成：手搓夹具 → MapGen 变奏级生成）。
-# 结构模板：核心在北岸中上；岩脊横贯（双咽喉口）；南岸双出怪口；
-# 西南盆地密闭岩环（插口是唯一覆盖格，内部藏矿）= 开门陷阱；中场安全矿；南场 2×2 微丘。
+# 数值表 + 64² 程序化布局（2026-10-16 世界生成：手搓夹具 → MapGen 变奏级生成；
+# 2026-10-17 G2：MapGen 升级五模板池，本文件负责按参数建图/校验，结构面见 mapgen.gd）。
+# 固定结构元素：核心在北岸中上；屏障带横贯（双咽喉口 ±1 宽 3，形状随模板 T0..T4）；
+# 南岸双出怪口；西南盆地密闭岩环（插口是唯一覆盖格，内部藏矿）= 开门陷阱；中场安全矿；南场 2×2 微丘。
 # 生成纪律：布局纯整数（sim Rng 采样，见 mapgen.gd）；本文件负责「采样 → 结构不变量校验 →
 # 失败换盐重采样 ≤64 次」。校验口径（check_grid / check_plug_open）同时是测试的读取面。
 # 波次表与固定节奏（end_tick/trickle 等）不参与变奏。
@@ -35,11 +36,14 @@ var end_tick: int
 var hard_cap_tick: int
 var trickle_every: int
 var wave_scale_pct: int
-var ridge_y: int # 岩脊三行（ridge_y..ridge_y+2）首行
-var chokes: Array # [Vector2i(谷口中心x, ridge_y) × 2]（西、东）
+var template_id: int # 布局模板（0 横脊 / 1 错行双脊 / 2 弧脊 / 3 斜壁 / 4 獠牙翼；不进指纹，形状已由高度/咽喉入口径覆盖）
+var ridge_y: int # 屏障基准行：T0/T4 = 屏障首行；T1 = 西带首行；T2/T3 = 列行公式基点（中列附近）
+var chokes: Array # [Vector2i(口心 x, 口行 y) × 2]（西、东；口行 = 该列屏障顶行）
 var sparse_phase: int # 表土纹理相位（y=17 行，x % 9 == phase 为覆盖格）
 var mesa: Rect2i # 南场微丘（2×2，h1）
 var resample_salt: int # 实际采用的盐（诊断用；不进指纹：布局由参数完全决定）
+var _p: Dictionary # 本局布局参数（MapGen 产物；模板几何静态面的查询源）
+var _barrier: Dictionary # 屏障 SOLID 集合（已扣咽喉缺口；"x,y" 键）
 
 
 func _init(p_seed: int = DEFAULT_SEED) -> void:
@@ -84,7 +88,7 @@ func _init(p_seed: int = DEFAULT_SEED) -> void:
 		resample_salt = cached[1]
 		return
 	for attempt in RESAMPLE_MAX:
-		var params := MapGen.generate(p_seed, attempt)
+		var params := MapGen.generate(p_seed, attempt, p_seed == DEFAULT_SEED)
 		_apply_layout(params)
 		if _validate_layout():
 			resample_salt = attempt
@@ -93,11 +97,14 @@ func _init(p_seed: int = DEFAULT_SEED) -> void:
 	assert(false, "[scenario] 布局 %d 次重采样仍不合法 seed=%d（生成器/不变量坏了）" % [RESAMPLE_MAX, p_seed])
 
 
-## 布局参数 → 实例字段（纯赋值，不校验）。
+## 布局参数 → 实例字段（纯赋值，不校验）。屏障蒙版 = 模板带 − 咽喉缺口 + 附壁。
 func _apply_layout(p: Dictionary) -> void:
 	var cx: int = p["core_x"]
+	_p = p
+	template_id = int(p.get("template", 0))
 	ridge_y = p["ridge_y"]
-	chokes = [Vector2i(p["choke_west"], ridge_y), Vector2i(p["choke_east"], ridge_y)]
+	var gr: Array = MapGen.gate_rows(p)
+	chokes = [Vector2i(p["choke_west"], int(gr[0])), Vector2i(p["choke_east"], int(gr[1]))]
 	core = Vector2i(cx, 6)
 	hero_spawn = Vector2i(cx, 8) # 核心门前两格（build_grid 强制 OPEN）
 	spawns = [
@@ -119,30 +126,51 @@ func _apply_layout(p: Dictionary) -> void:
 	ore_cells.append_array(mid_ore)
 	sparse_phase = p["sparse_phase"]
 	mesa = Rect2i(p["mesa_x"], p["mesa_y"], 2, 2)
+	_barrier = {}
+	for x in range(1, w - 1):
+		var rows: Array = MapGen.band_rows(p, x)
+		if rows.size() != 2:
+			continue
+		for y in range(int(rows[0]), int(rows[1]) + 1):
+			if MapGen.carved(p, x, y):
+				continue
+			if x == basin_plug.x and y == basin_plug.y:
+				continue # 插口是覆盖门：屏障让位（罕见贴环情形）
+			_barrier[str(x) + "," + str(y)] = true
+	for c in MapGen.extra_walls(p):
+		_barrier[str(c.x) + "," + str(c.y)] = true
 
 
-func _is_choke(x: int) -> bool:
-	return absi(x - chokes[0].x) <= 1 or absi(x - chokes[1].x) <= 1
+## 该列的咽喉口行（口心 ±1 列内，取其咽喉 c.y；否则 -1）。
+func _gate_row_at(x: int) -> int:
+	for c in chokes:
+		if absi(x - c.x) <= 1:
+			return c.y
+	return -1
 
 
-## 高度模板：北岸台地 h1；核心山头 h3 + 南向两级台阶（h2）；双咽喉谷口 ridge_y 行爬出 h1；
-## 南岸低地/咽喉谷道/盆地坑 h0；南场微丘（2×2）h1。与岩脊 SOLID 叠加成"峡谷+高原"。
+## 该列屏障顶行（无屏障列回退 ridge_y，保 x=0/63 边缘口径与 T0 逐位一致）。
+func _barrier_top(x: int) -> int:
+	var rows: Array = MapGen.band_rows(_p, x)
+	if rows.size() == 2:
+		return int(rows[0])
+	return ridge_y
+
+
+## 高度模板：北岸台地 h1；核心山头 h3 + 南向两级台阶（h2）；咽喉口行爬出 h1（随列屏障顶行，
+## 北岸台地边界随之弯曲/升降）；南岸低地/咽喉谷道/盆地坑 h0；南场微丘（2×2）h1。
 func height_at(x: int, y: int) -> int:
 	if y <= 9 and x >= core.x - 3 and x <= core.x + 3:
 		return 3
 	if y <= 12 and x >= core.x - 2 and x <= core.x + 2:
 		return 2
-	if y <= ridge_y - 1:
-		return 1
-	if y == ridge_y and _is_choke(x):
+	if y == _gate_row_at(x):
+		return 1 # 咽喉口
+	if y <= _barrier_top(x) - 1:
 		return 1
 	if mesa.has_point(Vector2i(x, y)):
 		return 1
 	return 0
-
-
-func _is_ridge(x: int, y: int) -> bool:
-	return y >= ridge_y and y <= ridge_y + 2 and x >= 1 and x <= 62
 
 
 ## 初始地形：三态一次性写入（命令层之后才登场）。
@@ -156,8 +184,8 @@ func build_grid() -> Grid:
 			if x == 0 or y == 0 or x == w - 1 or y == h - 1:
 				g.set_cell(x, y, Grid.SOLID)
 			elif ore.has(str(x) + "," + str(y)):
-				g.set_cell(x, y, Grid.COVER) # 矿格先于岩脊判定，否则会被写成不可挖的实心
-			elif _is_ridge(x, y) and not _is_choke(x):
+				g.set_cell(x, y, Grid.COVER) # 矿格先于屏障判定，否则会被写成不可挖的实心
+			elif _barrier.has(str(x) + "," + str(y)):
 				g.set_cell(x, y, Grid.SOLID)
 			elif basin_rect.has_point(Vector2i(x, y)):
 				# 盆地：密闭岩环（只有插口是覆盖层），内部空腔藏矿与第三出怪口
@@ -190,14 +218,22 @@ func is_ore(x: int, y: int) -> bool:
 ## 结构 + 连通性校验（生成重采样与测试共用；返回 "" = 合法）。
 ## 口径：边框实心属 build_grid 常量；凡「布局可观测」的玩意都在这里管。
 func check_grid(g: Grid) -> String:
-	# 1) 咽喉形态：脊带三行，除两个宽 3 缺口（谷口中心 ±1）外全实心
-	for y in range(ridge_y, ridge_y + 3):
-		for x in range(1, w - 1):
-			if (g.at(x, y) == Grid.SOLID) == _is_choke(x):
-				return "脊带形态破例 (%d,%d)" % [x, y]
-	# 2) 咽喉口高度 = h1（从南岸 h0 一步爬入）
+	# 1) 屏障形态：蒙版全实心；咽喉缺口（口心 ±1 × 该列屏障行）全通行、口心 h1
+	for key in _barrier:
+		var parts: PackedStringArray = String(key).split(",")
+		if g.at(int(parts[0]), int(parts[1])) != Grid.SOLID:
+			return "屏障格非实心 " + key
 	for c in chokes:
-		if g.get_h(c.x, ridge_y) != 1:
+		for dx in range(-1, 2):
+			var rows: Array = MapGen.band_rows(_p, c.x + dx)
+			if rows.size() != 2:
+				continue
+			for y in range(int(rows[0]), int(rows[1]) + 1):
+				if not MapGen.carved(_p, c.x + dx, y):
+					continue
+				if g.at(c.x + dx, y) != Grid.OPEN:
+					return "咽喉缺口未开 (%d,%d)" % [c.x + dx, y]
+		if g.get_h(c.x, c.y) != 1:
 			return "咽喉口高度破例 x=%d" % c.x
 	# 3) 主出怪口 3×3 净空、英雄位通行、核心占位与山头
 	for i in range(0, 2):
@@ -220,7 +256,7 @@ func check_grid(g: Grid) -> String:
 	for o in ore_cells:
 		if g.at(o.x, o.y) != Grid.COVER:
 			return "矿格非覆盖 (%d,%d)" % [o.x, o.y]
-		if o.y >= ridge_y and o.y <= ridge_y + 2:
+		if _barrier.has(str(o.x) + "," + str(o.y)):
 			return "矿格压脊 (%d,%d)" % [o.x, o.y]
 	# 5) 盆地环：周围一圈全实心、插口唯一覆盖格
 	var b := basin_rect

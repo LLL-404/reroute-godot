@@ -9,12 +9,17 @@ extends RefCounted
 ## 条目数与 tick 序列、同 tick 组内相对序与手搓夹具版一一对应：
 ##   放墙漏斗收窄双咽喉、塔火链、挖矿经济（中场全挖 + 盆地 9/12，末角矿留作非法命令）、
 ##   开门陷阱（1000t 挖插口 → 第三出怪口渗漏）、拆除、英雄点地/震荡波，以及非法命令（零副作用进指纹口径）。
-## 咽喉几何约定：谷口宽 3（中心 ±1），漏斗墙行 = ridge_y+3（脊带下行之南），走廊卡口行 = ridge_y+1。
+## 咽喉几何约定：谷口宽 3（中心 ±1），咽喉相关行相对各口行 c.y（T0 恒 == ridge_y）——
+## 漏斗墙行 = c.y+3（屏障带下行之南），走廊卡口行 = c.y+1，北侧塔行 c.y-1/c.y-2/c.y-3。
 static func script_for(sc: Scenario) -> Array:
 	var cx := sc.core.x
 	var ry := sc.ridge_y
-	var wx: int = sc.chokes[0].x
-	var ex: int = sc.chokes[1].x
+	var cw: Vector2i = sc.chokes[0]
+	var ce: Vector2i = sc.chokes[1]
+	var wx: int = cw.x
+	var wy: int = cw.y # 西咽喉口行
+	var ex: int = ce.x
+	var ey: int = ce.y # 东咽喉口行
 	var my: int = sc.mid_ore[0].y # 中场矿带行
 	var ore := sc.mid_ore # x 主序：cx-2..cx+2
 	var bo := sc.basin_ore # x 主序：3 列 × 4 行 = 12 格；末行（idx 3/7/11）留作非法命令
@@ -22,25 +27,25 @@ static func script_for(sc: Scenario) -> Array:
 	return [
 		[20, "dig", ore[0].x, ore[0].y], [20, "dig", ore[1].x, ore[1].y], [20, "dig", bo[2].x, bo[2].y], [20, "dig", bo[6].x, bo[6].y],
 		[30, "dig", ore[2].x, ore[2].y], [30, "dig", ore[3].x, ore[3].y], [30, "dig", ore[4].x, ore[4].y], [30, "wall", cx, sc.core.y],
-		[31, "hero", cx, sc.core.y], [32, "hero", plug.x, plug.y], [33, "shock", 0, 0], [34, "fill", wx - 2, ry],
+		[31, "hero", cx, sc.core.y], [32, "hero", plug.x, plug.y], [33, "shock", 0, 0], [34, "fill", wx - 2, wy],
 		[35, "lower", cx, sc.core.y], [40, "dig", bo[10].x, bo[10].y], [40, "dig", bo[1].x, bo[1].y], [40, "dig", bo[5].x, bo[5].y],
 		[40, "dig", bo[9].x, bo[9].y], [50, "dig", bo[0].x, bo[0].y], [50, "dig", bo[4].x, bo[4].y], [50, "dig", bo[8].x, bo[8].y],
-		[50, "dig", cx, sc.core.y], [60, "wall", wx - 2, ry + 3], [60, "wall", wx - 1, ry + 3], [60, "wall", wx + 1, ry + 3],
-		[60, "wall", wx + 2, ry + 3], [70, "wall", ex - 2, ry + 3], [70, "wall", ex - 1, ry + 3], [70, "wall", ex + 1, ry + 3],
-		[70, "wall", ex + 2, ry + 3], [70, "wall", -5, 12], [80, "tower", wx - 1, ry - 2], [90, "tower", wx + 1, ry - 2],
-		[90, "dig", 99, 99], [100, "tower", wx - 2, ry - 1], [110, "tower", ex - 1, ry - 2], [120, "tower", ex + 1, ry - 2],
-		[130, "tower", ex - 2, ry - 1], [140, "wall", wx - 1, ry + 1], [140, "wall", wx + 1, ry + 1], [140, "wall", ex - 1, ry + 1],
-		[140, "wall", ex + 1, ry + 1], [160, "hero", cx, 14], [220, "hero", cx - 4, my], [300, "tower", cx - 4, 12],
+		[50, "dig", cx, sc.core.y], [60, "wall", wx - 2, wy + 3], [60, "wall", wx - 1, wy + 3], [60, "wall", wx + 1, wy + 3],
+		[60, "wall", wx + 2, wy + 3], [70, "wall", ex - 2, ey + 3], [70, "wall", ex - 1, ey + 3], [70, "wall", ex + 1, ey + 3],
+		[70, "wall", ex + 2, ey + 3], [70, "wall", -5, 12], [80, "tower", wx - 1, wy - 2], [90, "tower", wx + 1, wy - 2],
+		[90, "dig", 99, 99], [100, "tower", wx - 2, wy - 1], [110, "tower", ex - 1, ey - 2], [120, "tower", ex + 1, ey - 2],
+		[130, "tower", ex - 2, ey - 1], [140, "wall", wx - 1, wy + 1], [140, "wall", wx + 1, wy + 1], [140, "wall", ex - 1, ey + 1],
+		[140, "wall", ex + 1, ey + 1], [160, "hero", cx, 14], [220, "hero", cx - 4, my], [300, "tower", cx - 4, 12],
 		[460, "dig", ore[0].x, ore[0].y], [461, "wall", bo[11].x, bo[11].y], [462, "fill", bo[11].x, bo[11].y], [500, "tower", cx + 3, 12],
-		[1000, "tower", wx - 1, ry - 3], [1000, "dig", plug.x, plug.y], [1050, "tower", wx + 1, ry - 3], [1100, "tower", ex - 1, ry - 3],
+		[1000, "tower", wx - 1, wy - 3], [1000, "dig", plug.x, plug.y], [1050, "tower", wx + 1, wy - 3], [1100, "tower", ex - 1, ey - 3],
 		[1150, "fill", cx - 4, ry - 1], [1160, "fill", cx - 4, ry - 1], [1170, "fill", cx - 4, ry - 1], [1180, "fill", cx - 4, ry - 1],
-		[1190, "lower", cx - 4, ry - 1], [1195, "fill", cx - 4, ry - 1], [2000, "hero", wx, ry - 3], [2600, "tower", cx - 3, 9],
+		[1190, "lower", cx - 4, ry - 1], [1195, "fill", cx - 4, ry - 1], [2000, "hero", wx, wy - 3], [2600, "tower", cx - 3, 9],
 		[2700, "tower", cx + 3, 9], [2900, "shock", 0, 0], [3400, "tower", cx - 1, 10], [3600, "tower", cx, 9],
-		[4000, "wall", cx - 3, ry - 1], [4020, "wall", cx - 2, ry - 1], [4100, "tower", wx - 2, ry - 2], [4300, "tower", ex + 2, ry - 2],
+		[4000, "wall", cx - 3, ry - 1], [4020, "wall", cx - 2, ry - 1], [4100, "tower", wx - 2, wy - 2], [4300, "tower", ex + 2, ey - 2],
 		[4400, "tower", cx - 6, 14], [4500, "tower", cx + 6, 14], [4520, "shock", 0, 0], [4600, "tower", cx + 2, 8],
 		[4620, "hero", cx, 12], [4700, "tower", cx - 2, 8], [4720, "wall", cx - 3, 11], [4740, "wall", cx + 3, 11],
-		[4800, "shock", 0, 0], [5000, "remove", wx + 2, ry + 3], [5200, "tower", cx - 4, 10], [5400, "shock", 0, 0],
-		[5600, "remove", ex - 1, ry + 1],
+		[4800, "shock", 0, 0], [5000, "remove", wx + 2, wy + 3], [5200, "tower", cx - 4, 10], [5400, "shock", 0, 0],
+		[5600, "remove", ex - 1, ey + 1],
 	]
 
 

@@ -1,7 +1,7 @@
 extends ProbeKit
 
 # R5 验证探针：scenario 程序化布局（默认种子锚点 / 高度模板 / 建图结构 / 生成校验读取面 /
-# 裸图流场路径合同 / 指纹守门 / 波次表）。
+# 裸图流场路径合同 / 指纹守门 / 波次表 / 模板池全扫）。
 # 判定：exit 0 + stdout 含 `[SCENARIO] PASS`。
 
 
@@ -10,6 +10,7 @@ func _initialize() -> void:
 
 	# --- 锚点（默认种子 20261003 全量钉死）---
 	check(Scenario.DEFAULT_SEED == 20261003 and sc.seed == Scenario.DEFAULT_SEED, "default seed")
+	check(sc.template_id == 0, "default template 0 (frozen ridge)")
 	check(sc.w == 64 and sc.h == 64, "dims 64x64")
 	check(sc.core == Vector2i(33, 6), "core")
 	check(sc.hero_spawn == Vector2i(33, 8), "hero_spawn")
@@ -168,4 +169,24 @@ func _initialize() -> void:
 	check(sc.is_ore(33, 21) and sc.is_ore(5, 56) and sc.is_ore(7, 59), "is_ore true")
 	check(not sc.is_ore(sc.basin_plug.x, sc.basin_plug.y) and not sc.is_ore(4, 54) and not sc.is_ore(0, 0), "is_ore false plug/interior/border")
 
-	finish("SCENARIO", 66, "d0=%d d1=%d d2=%d fp=0x%x" % [d0, d1, d2, fp])
+	# --- 模板池全扫（G2 完整变幅证据：五模板覆盖 + 各局校验合法 + 布局指纹互异）---
+	var tpl_seen := {}
+	var fps := {}
+	var sweep_ok := true
+	var salt_max := 0
+	for i in 48:
+		var s := 20261004 + i
+		var sx := Scenario.new(s)
+		tpl_seen[sx.template_id] = true
+		if sx.resample_salt > salt_max:
+			salt_max = sx.resample_salt
+		if sx.check_grid(sx.build_grid()) != "":
+			sweep_ok = false
+		if sx.check_plug_open(sx.build_grid()) != "":
+			sweep_ok = false
+		fps[sx.fingerprint(canon)] = true
+	check(sweep_ok, "模板池全扫合法（盐峰 %d）" % salt_max)
+	check(tpl_seen.size() >= 5, "模板覆盖 %d/5 种" % tpl_seen.size())
+	check(fps.size() >= 44, "布局指纹互异 %d/48 局" % fps.size())
+
+	finish("SCENARIO", 70, "d0=%d d1=%d d2=%d fp=0x%x tpls=%d" % [d0, d1, d2, fp, tpl_seen.size()])
