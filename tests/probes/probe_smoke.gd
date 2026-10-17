@@ -84,6 +84,7 @@ func _initialize() -> void:
 	cmp_int(w.tick_count, 0, "tick 从 0 起")
 	check(w.outcome == World.RUNNING, "开局 RUNNING")
 	check(main.paused == true, "标题态暂停")
+	cmp_int(Engine.max_fps, 60, "标题态限 60fps（菜单限帧）")
 	check(main.hud.top_bar.visible == false, "标题时 HUD 隐藏")
 	cmp_int(int(w.core["hp"]), 1200, "核心满血 1200")
 
@@ -93,6 +94,8 @@ func _initialize() -> void:
 	check(main.paused == false, "对局启动")
 	check(main.hud.top_bar.visible == true, "HUD 显示")
 	check(view.bgm_on == true, "BGM 开")
+	main._process(0.02)
+	cmp_int(Engine.max_fps, 0, "对局态不限帧（vsync 全速）")
 
 	# ---- 3. 真实主循环推进至收口 ----
 	var frames := 0
@@ -155,6 +158,8 @@ func _initialize() -> void:
 	var want_title: String = "防线守住了！" if won else "防线失守"
 	check(main.shell.go_title.text == want_title, "结算标题（得 %s）" % main.shell.go_title.text)
 	check(main.shell.go_body.text.length() > 0, "结算统计非空")
+	main._process(0.02)
+	cmp_int(Engine.max_fps, 60, "结算态限 60fps（菜单限帧）")
 
 	# ---- 6. 终局冻结：世界零副作用 ----
 	for _i in 30:

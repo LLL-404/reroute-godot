@@ -14,6 +14,7 @@ const BASE_SEED := 20261003
 const CAM_PAN_SPEED := 24.0 # WASD 平移速度（世界单位/秒）
 const CAM_ROT_SPEED := 1.5 # Q/E 旋转速度（rad/s）
 const CAM_KEYS := [KEY_W, KEY_A, KEY_S, KEY_D, KEY_Q, KEY_E] # 相机键（不参与对局操作）
+const MENU_FPS := 60 # 菜单/标题/结算限帧（压风扇/GPU；对局态不限，vsync 全速——用户口径 2026-10-17）
 
 var view = null # View（preload 脚本实例）；动态引用
 var world: World = null
@@ -306,8 +307,17 @@ func new_game() -> void:
 	print("[Game] 新对局 run=", run_index, " seed=", BASE_SEED + run_index, " sc_seed=", sc.seed)
 
 
+## 菜单限帧：非对局态（标题/暂停/结算，判据同 _camera_free）限 60fps 压风扇/GPU；
+## 对局态 max_fps=0（vsync 锁显示器刷新率全速）。每帧幂等同步，无状态簿记。
+func _sync_fps_cap() -> void:
+	var want := 0 if _camera_free() else MENU_FPS
+	if Engine.max_fps != want:
+		Engine.max_fps = want
+
+
 ## 主循环：推进模拟 tick、终局检测、视图同步、HUD 更新
 func _process(dt: float) -> void:
+	_sync_fps_cap()
 	if world == null:
 		return
 	if world.outcome == World.RUNNING and not paused:

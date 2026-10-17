@@ -263,7 +263,10 @@ python tools/check_shots.py    # 截图像素校验
   第 2 拍隐藏→T_P3 恢复，退出安全网）+ 子视口 0.7× 拉伸 + 首拍预热帧（编译藏进黑幕）
   + dt 钳 0.1——开屏 p99 8.5→5.2ms、P0.5 绘制 52→30、vmem 247→227MB；probe_intro
   26→36（探针咬出「恢复后重复命中隐藏分支」真 bug 已修）；全 22 闸复验绿，证据
-  `logs/gates-20261017-intro-perf/`。残留：标题 idle 240fps 满速（全局限帧另行拍板）。
+  `logs/gates-20261017-intro-perf/`。**菜单限帧（用户拍板：只限菜单/标题）**：
+  `main._sync_fps_cap()` 每帧按 `_camera_free()` 判据同步 Engine.max_fps——标题/暂停/结算
+  60fps、对局不限；idle/开屏 240fps→60fps 稳定钉死（开屏 max 17.2ms，编译尖峰被帧预算
+  吸收）；probe_smoke 31→34；全闸复验绿。
 
 ---
 

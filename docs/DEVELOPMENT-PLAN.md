@@ -2163,8 +2163,13 @@ P4 揭示已是熟帧），`_exit_tree` 安全网兜底任意路径退出；② 
 停滞跳拍。实测（编辑器 debug 同机同场景 before/after）：开屏 p99 8.48→5.17ms、P0.5 绘制
 调用 52→30、vmem 247→227MB、idle 不变（未动标题基线）。`probe_intro` 26→36 checks
 （+预热/停画/恢复/安全网断言；**探针咬出「恢复后 `_ticks>=2` 重复命中隐藏分支」真 bug**）。
-**残留决策**：标题 idle 仍 240fps 满速（全局限帧属产品口径，另行拍板）。证据
-`logs/gates-20261017-intro-perf/`（before/after 帧时 + e2e 四帧 + 全闸 outs）。
+**菜单限帧（用户拍板 2026-10-17 晚：只限菜单/标题，对局全速）**：`main._sync_fps_cap()`
+在 `_process` 顶部幂等同步 `Engine.max_fps`，判据复用 `_camera_free()`（标题/暂停/结算 =
+60fps，对局 = 0 不限 vsync 全速），无状态簿记、每帧自愈。实测（同机）：标题 idle 与开屏
+从 240fps 满速（4.16ms）→ **16.67ms/60fps 稳定钉死**；开屏 avg 16.58 / p99 17.14 /
+max 17.20ms——**连 P1 编译尖峰都被 60fps 的 4× 帧预算吸收**。`probe_smoke` 31→34
+（标题 60 / 对局 0 / 结算 60 三态断言）；全 22 闸 + check_shots + lint 复验绿。证据同目录
+`after_cap_editor.out`。
 
 **坑档（复用价值）**：① Sprite3D 径向渐变纹理 alpha 不按预期衰减（渐变机渲染口径），
 运行时烘焙 Image 径向 α² 是稳解；② `Image.create` 4 参宽高 mipmap 格式，勿带第 5 参；
