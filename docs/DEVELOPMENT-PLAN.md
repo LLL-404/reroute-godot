@@ -296,8 +296,9 @@
 - 字体：`assets/fonts/NotoSansSC-Regular.otf` + `OFL.txt`（**SIL OFL 1.1，已合规**。
   2026-10-14 替换掉原 `simhei.ttf`——中易黑体是商业字体，授权不含随包再分发。
   台账见 `CREDITS.md`，对外声明见 `THIRD-PARTY-NOTICES.txt`）
-- 截图：`shots/` **19 张**（`game/heat/ghost/title/gameover/hud/asset_*/model_*/
-  orient_cross/smoke_*` 等）；详情页五图 + 实机副本另置 `shots/store/`（D2-5）→ **五图素材可直接从这批里选**
+- 截图：`shots/` **17 张**（`game/heat/ghost/title/gameover/hud/asset_*/model_*/
+  orient_cross/smoke_*` 等；2026-10-17 清旧 -2 = UMD2 期 `model_render(_top)` 移除）；
+  详情页五图 + 实机副本另置 `shots/store/`（D2-5）→ **五图素材可直接从这批里选**
 
 ---
 

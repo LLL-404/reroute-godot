@@ -117,10 +117,10 @@ OFL 的「保留字体名称（Reserved Font Name）」条款。
 > 前身：`simhei.ttf`（中易黑体 SimHei，微软 Windows 系统字体）——**商业字体，授权面向系统内
 > 使用，不含随软件嵌入/再分发**。已于 2026-10-14 替换为 Noto Sans SC。详见 §四 R-1。
 
-### 3.4 截图 `shots/` —— 19 张
+### 3.4 截图 `shots/` —— 17 张
 
 自产运行截图（`game` / `heat` / `ghost` / `title` / `gameover` / `hud` / `asset_close` /
-`asset_game` / `model_blade_close` / `model_render` / `model_render_top` / `models_all` /
+`asset_game` / `model_blade_close` / `models_all` /
 `orient_cross` / `smoke_end` / `smoke_mid` / `slots` / `settings` / `game_20x9` /
 `game_narrow`）。来源：本机实跑。许可：项目自有。署名义务：无。
 
@@ -128,6 +128,8 @@ OFL 的「保留字体名称（Reserved Font Name）」条款。
 > `ls shots/*.png | wc -l` = **15**。已同步修正开发方案。教训即本文 §一 的口径——
 > 数量类陈述一律以实测为准。10-16 更新：UI 补全轮 +2（`slots`/`settings`）、
 > D1 轮 +2（`game_20x9`/`game_narrow`）→ 现 **19**。
+> 10-17 清旧 -2（`model_render`/`model_render_top` 为 UMD2 转换期渲染，展示职责由
+> `models_all` 承担）→ 现 **17**（`ls shots/*.png | wc -l` 实测）。
 
 ### 3.5 图标 `assets/icon/` —— 5 个文件
 
