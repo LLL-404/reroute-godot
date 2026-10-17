@@ -38,6 +38,7 @@ var rmb_last := Vector2.ZERO # 右键拖拽上一帧位置（用位置差算位�
 ## HUD 命中区提供者（R5 注入；未注入 = 无 HUD 区域）
 var hud_regions_provider: Callable
 var _last_back_ms := 0 # Android 返回键双入口（通知 / ui_cancel 动作）去抖时间戳
+var _intro = null # 开屏动画层（game/intro.gd；仅冷启动非探针路径创建，播完自毁）
 
 
 ## 初始化：建 HUD/壳、开新局、显示标题屏；自检模式触发 export 验收
@@ -51,6 +52,30 @@ func _ready() -> void:
 	shell.open_title() # 启动即标题：标题屏压着静态战场（母版口径，paused 初值 true）
 	if _is_selfcheck():
 		_run_selfcheck()
+	elif _intro_enabled():
+		_play_intro()
+
+
+## 开屏动画装载（探针零影响口径）：selfcheck / headless / 探针脚本主循环（-s res://tests/）
+## 三类自动跳过——生产冷启动才播。判断探针 = 主循环脚本非空且路径在 res://tests/ 下
+## （20 探针都以 `-s res://tests/probes/*.gd` 运行，主循环脚本非空可精确识别）。
+func _intro_enabled() -> bool:
+	if _is_selfcheck() or DisplayServer.get_name() == "headless":
+		return false
+	var ml = Engine.get_main_loop()
+	if ml == null or ml.get_script() == null:
+		return true
+	return not String(ml.get_script().resource_path).begins_with("res://tests/")
+
+
+## 播放开屏动画（一次性；层级在壳之上，播完自毁清引用）。
+func _play_intro() -> void:
+	var Intro = load("res://game/intro.gd")
+	_intro = Intro.new()
+	add_child(_intro)
+	_intro.begin(Callable(view, "play_sound"), hud.DARK)
+	_intro.on_done = func() -> void:
+		_intro = null
 
 
 ## 导出包自证触发检测（C8）：`--headless --selfcheck`（引擎参数后或 ++ 后均可）。
@@ -203,6 +228,9 @@ func _android_back_handle() -> void:
 	if now - _last_back_ms < 80:
 		return
 	_last_back_ms = now
+	if _intro != null: # 开屏动画中：Android 返回 = 跳过 intro（不弹退出确认）
+		_intro.skipping = true
+		return
 	if shell == null:
 		return
 	if shell.confirm_open():

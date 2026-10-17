@@ -2120,6 +2120,43 @@ ui-lint PASS；19 张受击截图终版重出。
 赛后收敛方向（theme 化已全量落地，遗留 = 探针面 10 钮 override→variation 翻转 + .tscn
 场景化）。
 
+### 11.24 开屏动画「晶体特写」（2026-10-17，可交付前最后一夜）
+
+**动因**：冷启动直落标题屏缺仪式感；用户拍板 B 方案 = 3D 核心晶体特写 + 「改道」金字 +
+暗黑宇感手风琴节奏（≤4s 硬钳，终值 3.4s）+ 专用 stinger。作为品牌拍点与完整性闭环收口。
+
+**实现**（`game/intro.gd`，CanvasLayer 30）：
+- **确定性状态机**：不用 Tween——`_process(dt)` 累加 t 解析求值一切 alpha/位置/转速/光强；
+  skip 只改推进速率（t×25 快收）。`t = minf(t, DUR_MAX=4.0)` 硬钳用户口径；
+  probe 可 `set_process(false)` 手动喂 dt 精确断言相位（D5-2 探针纪律延续）。
+- **3D 特写**：SubViewport `own_world_3d` + core_jade 裸实例等比 scale 至 CRYSTAL_H=1.8
+  + `bind_lod` 只显 LOD0（口径同 spawn_building）；三灯 = key 暖金 0.8k / 晶内玉光 2.6k /
+  背金 0.95k（energy 按 t 浮现进度 k 解析）；玉色光团 = **运行时烘焙径向 Image**
+  （128² 逐像素 α²衰减 + 加法混合——GradientTexture2D 径向 alpha 在 Sprite3D 上实测
+  不衰减成硬边矩形，弃用留档）；CPUParticles3D 金尘上扬（GL 兼容口径）。
+- **2D 叠字**：「改道」金衬线逐字 76px 绝对定位（容器会顶掉 y 动画）+ 阶梯渐入（0.12s 错拍）
+  + 升 8px；金线 `UiStyle.RULE` 自中心展开 ±130·S；副标语 P3 段渐入；
+  P4 整层 0.6s 淡出**透出底下的标题屏**（open_title 先行，天然交叉溶解交接）。
+- **音频**：`intro_stinger.mp3`（2.58s，Maker 生成；进场即放——音内 ~1.9s 水晶击点
+  对齐画面 P2 金字段）；selfcheck mp3 断言 29→30。
+- **门控（探针零影响）**：`main._intro_enabled()` = selfcheck / headless / 主循环脚本路径
+  `res://tests/` 前缀（探针 `-s` 全命中）三类自动跳过；冷启动仅播一次；
+  探针模式 main 无 intro 实例（probe_intro 断言 + 21 旧探针零改全过为证）。
+- **跳过**：任意键 / 鼠标点击 / 屏幕触摸 → `_input` 吞事件（`set_input_as_handled` +
+  `_root.mouse_filter=STOP` 防标题钮盲点）→ 25× 快收；Android 返回键顶部路由为跳过
+  （双入口先于去抖++;不弹退出确认）。
+- **启动屏**：`project.godot` + `boot_splash/bg_color` 深黑 + `show_image=false`
+  （灭 Godot 默认 Logo，冷启动全程无外牌）。
+
+**闸**：新 `probe_intro`(26 checks) → **全 22 闸**（单测 104/0 + headless 8 + 窗口 13 +
+check_shots 25/0）+ check_ui_lint 3/0 全绿；负对照 = 关输入吞实跑 bad=3 FAIL 复原（证据
+`logs/gates-20261017-intro/`），闸清单 AGENTS 同步 20→21 探针 / 12→13 窗口。
+**目视**：probe P2/P3 + 真实播放三帧（0.9 黑暗浮现 / 2.0 亮起金字渐入 / 3.1 淡出透出标题）复核过。
+
+**坑档（复用价值）**：① Sprite3D 径向渐变纹理 alpha 不按预期衰减（渐变机渲染口径），
+运行时烘焙 Image 径向 α² 是稳解；② `Image.create` 4 参宽高 mipmap 格式，勿带第 5 参；
+③ SubViewport 置 `UPDATE_DISABLED` 至 P1 省一次全屏渲染（P1 起 `UPDATE_ALWAYS`）。
+
 ---
 
 ## 12. AI 任务卡模板（派活时照抄）

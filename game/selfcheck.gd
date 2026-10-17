@@ -1,7 +1,7 @@
 extends RefCounted
 
 # 导出包自证（C8）：`--headless --selfcheck` 触发（main.gd _ready 尾部调用）。
-# 断言链：引擎/构建模式 → 资源齐备（29 mp3 + CJK 字体打进包）→ sim 核心黄金回放
+# 断言链：引擎/构建模式 → 资源齐备（30 mp3 + CJK 字体打进包）→ sim 核心黄金回放
 # 12 指纹逐位一致（含不变式看门狗与终局冻结自证）→ 确定性复跑 → 主场景构建完整
 # （地形/相机/HUD/壳/世界）→ 音频接口 → tick 推进冒烟 → UI 样式工厂预设一致（v2.2）。
 # 输出 `[SELFCHECK] PASS` + exit 0；任一失败 `[SELFCHECK] FAIL` + exit 1。
@@ -36,6 +36,7 @@ const ALL_MP3 := [
 	"tower_shot.mp3",
 	"wall_place.mp3",
 	"wave_horn.mp3",
+	"intro_stinger.mp3",
 ]
 
 var checks := 0
@@ -55,7 +56,7 @@ func run(main) -> int:
 			loaded += 1
 		else:
 			_fail("音频缺失/不可解码：" + name)
-	_cmpi(loaded, ALL_MP3.size(), "29 个 mp3 打进包且可解码")
+	_cmpi(loaded, ALL_MP3.size(), "30 个 mp3 打进包且可解码")
 	# 原断言只查「能加载」——加载成功但字体缺 CJK 字形时会渲染成豆腐块，照样报绿。
 	# 改为实测关键字形存在性：Noto Sans SC（SIL OFL 1.1）覆盖常用汉字与标点。
 	var font: FontFile = load("res://assets/fonts/NotoSansSC-Regular.otf") as FontFile

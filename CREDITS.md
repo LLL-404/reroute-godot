@@ -9,7 +9,7 @@
 > 口径：数量类陈述一律以 `assets/` 实测为准，不凭记忆。
 
 > 新鲜度：self :: 许可不明一律不准进包
-> 新鲜度：code reroute-godot/game/hud.gd :: res://assets/fonts/NotoSansSC-Regular.otf
+> 新鲜度：code reroute-godot/game/ui_style.gd :: res://assets/fonts/NotoSansSC-Regular.otf
 > 新鲜度：code reroute-godot/game/selfcheck.gd :: 中文字体打进包且关键字形存在
 
 ---
@@ -89,8 +89,9 @@
 | `gold_collect` / `mining_gold_hit` / `build_stone_place` / `room_door_open` / `room_fire_loop` / `dungeon_ambience` | 场景与环境 6 条 | 同上 | 项目自有 | 无 |
 | `wall_place` / `building_remove` / `terrain_fill` / `terrain_lower` / `wave_horn` / `core_hit` / `tower_shot` / `match_win` / `match_lose` | D1-7 补齐 9 条（放墙 / 拆除 / 填高 / 挖低 / 波次号角 / 核心受击 / 塔开火 / 胜负） | 自有 AI 云端音效生成（TapTap Maker 制造积分） | 项目自有 | 无 |
 | `bgm_settlement.mp3` | 结算 BGM（循环；D2-6 提前完成） | 自有 AI 云端音乐生成（TapTap Maker 制造积分） | 项目自有 | 无 |
+| `intro_stinger.mp3` | 开屏动画音效（水晶击点 stinger，2026-10-17 §11.24） | 自有 AI 云端音效生成（TapTap Maker 制造积分） | 项目自有 | 无 |
 
-合计 29 条（2 BGM + 27 音效）。
+合计 30 条（2 BGM + 28 音效）。
 
 ### 3.3 字体 `assets/fonts/` —— 4 个文件
 

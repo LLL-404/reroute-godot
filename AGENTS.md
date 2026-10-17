@@ -14,9 +14,9 @@ Engineering 保真度极高：模拟核心是**确定性**的，有 16 指纹黄
 |---|---|
 | `sim/` | 模拟核心十二模块，纯逻辑、**无浮点、无渲染**：`lua64`(语义 shim) / `canon` / `rng` / `grid` / `flowfield` / `mapgen`(布局生成) / `scenario`(布局构造+校验) / `sim`(数值表) / `world` / `verify` / `golden_baseline` / `save`(存档编解码) |
 | `game/` | 表现层，只读模拟：`main`(主循环/输入) / `view`(3D 门面) + 组件 `view_core`/`view_terrain`/`view_entities`/`view_audio`（D5-1 拆分 2026-10-15） / `models` / `blueprint` / `hud` / `screens`(五屏+确认弹窗) / `save_io`(槽位 I/O) / `user_settings`(音量/全屏) / `selfcheck` |
-| `tests/` | 单测 104 例 + **20 个验收探针**（`tests/probes/`，公共夹具 `probe_kit.gd`，D5-2 2026-10-15） |
+| `tests/` | 单测 104 例 + **21 个验收探针**（`tests/probes/`，公共夹具 `probe_kit.gd`，D5-2 2026-10-15；`probe_intro` 2026-10-17） |
 | `tools/` | Python 工具：`check_shots.py` / `convert_all.py` / `umd2_to_gltf.py` / `verify_glb.py` |
-| `assets/` | `audio/sfx`(29 mp3) / `fonts`(Noto Sans SC) / `models`(glb) / `icon`(图标五件套) |
+| `assets/` | `audio/sfx`(30 mp3) / `fonts`(Noto Sans SC) / `models`(glb) / `icon`(图标五件套) |
 | `docs/` | 开发方案（权威）、审计报告、`devlogs/` |
 | `shots/` | 验收截图产物 + `store/` 详情页提审素材（AI 五图 + 实机图副本；已 `exclude_filter` 排除出包） |
 | `logs/` | 闸的 stdout/exit 证据 |
@@ -47,7 +47,7 @@ for p in golden scene blueprint sim grid flow scenario world; do
 done
 
 # 必须窗口模式（涉及屏幕坐标/渲染纹理，headless 下必然失败或空转不退出）
-for p in sync input hud ui_flow smoke shots audio asset model orient save touch; do
+for p in sync input hud ui_flow smoke shots audio asset model orient save touch intro; do
   "$GODOT" --path "$P" -s res://tests/probes/probe_$p.gd
 done
 
@@ -251,6 +251,14 @@ python tools/check_shots.py    # 截图像素校验
   不能承接常规双端包；已定**新建常规 app「改道」**（`package_type=windows`）承接双端常规
   发布，等地图算法更新 + 双端包终版重出后启动流水线——决策/证据/步骤见方案 §11.22。
   并行缺口：投稿讲解视频/实机录屏未产出；开发者日志需 ≥5 篇（现 3 篇）。
+- 开屏动画（2026-10-17）**已完成**：`game/intro.gd`（CanvasLayer 30，确定性状态机
+  `_process(dt)` 解析求值、无 Tween、t 硬钳 4.0s、终值 3.4s）；3D = SubViewport 晶体特写
+  （core_jade LOD0 + 三灯 + 烘焙径向 Image 光团 + CPU 金尘）；2D = 金衬线「改道」逐字 +
+  金线 + 副标语；P4 淡出透出标题屏（open_title 先行交叉溶解）；任意键/点击/触摸跳过
+  （输入吞 + 25× 快收，Android 返回键顶部路由）；门控 = selfcheck/headless/`res://tests/`
+  主循环三类自动跳过（探针零影响）；stinger mp3 29→30 mp3；boot_splash 灭默认 Logo。
+  新 `probe_intro`(26) + 负对照（关输入吞 bad=3 FAIL）→ **全 22 闸** + check_shots 25/0 +
+  lint 全绿。证据 `logs/gates-20261017-intro/`；决策记录 = 方案 §11.24。
 
 ---
 
