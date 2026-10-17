@@ -24,6 +24,28 @@
   未触发 OFL 的「保留字体名称（Reserved Font Name）」条款，因未对字体作任何修改。
 
 
+2. 地表纹理 / Terrain textures
+------------------------------
+
+  名称   Ground093C（沙地）、Rock061（岩石）各 2 张：
+         assets/textures/terrain/ground093c_col.jpg
+         assets/textures/terrain/ground093c_nrm.jpg
+         assets/textures/terrain/rock061_col.jpg
+         assets/textures/terrain/rock061_nrm.jpg
+  版权   ambientCG 社区贡献者，以 CC0 公共领域贡献声明发布（详见各资产页署名栏）
+  许可   CC0 1.0 Universal（公共领域贡献，无署名义务）
+  许可地址   https://ambientcg.com/view?id=Ground093C
+             https://ambientcg.com/view?id=Rock061
+  是否修改   是（裁剪与重新封装）：
+         ① 分辨率重采样为 1024×1024（瓦码 1K-JPG 源）；
+         ② 法线改用 NormalGL（OpenGL 约定）变体；
+         ③ 两组精灵的 Roughness（粗糙度）贴图**未启用、未随包**
+            （引擎端以常量粗糙度替代，属材质参数而非素材本体缺失）。
+  说明：CC0 在可能的法律范围内放弃著作权与邻接权相关全部权利，允许商用、
+  修改、再分发且无需署名。本栏仅为运营透明度考虑而保留陈明。
+  完整台账见 CREDITS.md §3.7。
+
+
 未使用的许可（存档备查，勿删）
 ------------------------------
 

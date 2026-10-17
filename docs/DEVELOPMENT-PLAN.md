@@ -1815,8 +1815,12 @@ Android `reroute-release.apk` 仍为 D2-1 版、不含本次变更——**D4 提
 `probe_save` 曾误用 headless 运行挂起报错——save/orient 等窗口探针必须窗口模式（§2.1）。
 剧本指纹 0x7dea2b02 不变（纯视觉改动）。
 
-**峡谷化推翻（用户裁定「四周不应该是墙」，拍板按头图改）**：本节前段「环崖 + 台地
-层理 + 北屏风」整格局废弃——正确形态 = **开阔荒漠**：场界改成头图式矮石墙
+---
+
+### 11.17 峡谷化第三步：开阔荒漠口径 + 双端包重出（2026-10-17 晨）
+
+（用户裁定「四周不应该是墙」，拍板按头图改）§11.16 前段「环崖 + 台地层理 + 北屏风」
+整格局废弃——正确形态 = **开阔荒漠**：场界改成头图式矮石墙
 （`RIM_BUMP` 5.0→0.8，总高 ≈2.2m，保留周向起伏与南豁口 `_rim_scale`/`_gates`）；
 蓝图场外重写：环崖 rim_h 18m 级→1.1~1.7m 低沿埂（去台阶量化/去crest直墙/去北屏风
 rim_north），干冲沟 2.2→1.0m 浅干河，台地原（fbm 阈值）→**8 座离散孤岩长丘**
@@ -1828,6 +1832,39 @@ h/0.42) 斜率限幅→任一采样行相邻高差 ≤~1.5m，`probe_scene` 连�
 selfcheck 复绿；**双端包重出**：`game.exe` 109,550,080B + `game.pck` 80,587,824B
 （复签 Valid + pck 自证 22/0）+ `reroute-release.apk` 282,902,492B（apksigner
 CN=Reroute SHA-256 06fb8144… 一致）。`shots/store/` 实机五图已换新景并逐一目视。
+
+---
+
+### 11.18 美术 pass：CC0 地表纹理 + 地面三平面完整版 shader + 金矿岩块（2026-10-17 晨）
+
+**外部素材引入（第一次非字体第三方实体）**：ambientCG 全站 CC0（列入 CREDITS §二裁决表
++ 新 §3.7）。2 组 4 张 1024²：Ground093C（沙，Color/NormalGL）/ Rock061（岩，Color/NormalGL），
+VRAM 压缩 + mipmap；两组 Roughness 弃用（shader 端常量分辨率权衡）；法线取 NormalGL。
+`THIRD-PARTY-NOTICES.txt` 新增「2. 地表纹理」节（URL 实测可达，修改说明含裁剪明细）。
+
+**地面完整版 shader**（新 `game/terrain_ground.gdshader`，替代原 StandardMaterial3D 三带色）：
+世界空间三平面（blend=sharp）双材质混合——沙 × Ground093C、岩 × Rock061；混合权值来自
+**顶点色 a 位**（CPU 侧程序化编码，`_field_color` alpha=rock_mix(0..0.72)、SOLID 恒 1，
+`_outside_color` 同口径），rgb 维持程序化三带色（check_shots 校准面不依赖新纹理）。
+纹理增益归一（sand_gain 1.26/1.39/1.74；rock_gain 3.60/3.90/4.20，三轮标定）、
+tex_m 3.4/3.6、rough 0.62/0.66、占位法线 0.75/0.95。`view_terrain` 接线：预载 + `_ground_mat`
+改 ShaderMaterial + 四纹理参数；太阳 yaw 38°→10°（南崖面 NdotL 0.42→0.53）、canyon 雾提亮
+[0.650,0.525,0.405]。`check_shots` ghost 阈值 0.0003→0.0001（纹理后 AA 边缘差实测 0.00030，
+原阈值零余量；真回归=game/ghost 全同 d2≈0 语义不变）。
+
+**金矿岩块（矿格观感换新）**：核查发现 10-04 gold_ore 概念件只完成了四视图（art-review/），
+成品模型从未落地（.maker 记录仅 1 条空 prompt）；27 个母版 UUID 全面排查（3 zip 全量枚举
++ all_D 联络表目视）确认无现役对应物。用四视图 multiview 直出重建
+（`1b4aea1f…`，7816 verts / 398.7KB，metallic 0.15 / rough 0.75），`tools/convert_all.py`
+SRC 修正 `reroute-maker/assets`（原 reroute/ 已不存在；全量重转 11/11 自证）+ gold_ore
+static 任务；`models.gd` 新增 `ORE_SCENE`/`spawn_ore`（footprint 0.94 归一）、
+`view_entities` 矿格 spawn_gold→spawn_ore、`selfcheck` glb 5→6、`probe_asset`
+矿格断言更新（root 1.0 / inst ≈0.94）。特写目视与概念图一致（棕岩簇 + 金脉贯穿）。
+
+**闸与证据**：全 21 闸绿（单测 104/0；probe_item 全 PASS 含 asset 59/0；
+check_shots 25/0——game warm≈803851 段、game_20x9 warm=1010153、ghost diff=0.00031）。
+证据 `logs/gates-20261017-artfinal/`（文本摘要 + 全 stdout）。指纹无变更。
+CREDITS §3.1 11 glb 口径、§五、R-3 同步；AI-ASSETS.md 同批补行。
 
 ---
 

@@ -109,14 +109,14 @@ func build_terrain(pgrid: Grid) -> void:
 	_stat_solids = n_solid
 
 
-## 覆盖层（真实资产）：矿格 = 砂金堆满档（挖开即随覆盖层移除）；
+## 覆盖层（真实资产）：矿格 = 砂金矿石巨砾（挖开即随覆盖层移除）；
 ## 表土/插口 = 瓦砾堆 3 变体（(x*7 + y*13) % 3 确定性取模，同母版口径）。
 func _make_cover(x: int, y: int) -> void:
 	var w := core.cell_to_world(x, y)
 	var gy := terrain.ground_y(x, y)
 	var node: Node3D
 	if is_ore.call(x, y):
-		node = models.spawn_gold(tiles, Vector3(w.x, gy, w.z))
+		node = models.spawn_ore(tiles, Vector3(w.x, gy, w.z), 0.94)
 	else:
 		var variant: int = (x * 7 + y * 13) % 3
 		node = models.spawn_rubble(tiles, variant, Vector3(w.x, gy, w.z), 0.94)

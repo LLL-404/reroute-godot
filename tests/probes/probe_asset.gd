@@ -147,9 +147,16 @@ func _initialize() -> void:
 	check(n_ore >= 4 and n_rubble >= 4, "矿 %d / 瓦砾 %d 双类共存" % [n_ore, n_rubble])
 	if ore_nodes.size() > 0:
 		var gn: Node3D = ore_nodes[0]
-		check(absf(gn.scale.x - 0.78) < 1e-6, "金堆 root 缩放 0.78")
+		# 2026-10-17 矿格换砂金矿块（spawn_ore）：root 无缩放，内部实例按 footprint 0.94 归一
+		check(absf(gn.scale.x - 1.0) < 1e-6, "矿块 root 无缩放")
+		check(gn.name == "ore", "矿格节点名为 ore")
+		var oscale := 0.0
+		var oinst: Node = gn.get_child(0) if gn.get_child_count() > 0 else null
+		if oinst is Node3D:
+			oscale = (oinst as Node3D).scale.x
+		check(absf(oscale - 0.94) < 5e-3, "矿块内部缩放 ≈0.94（footprint 归一，得 %.3f）" % oscale)
 		var gsub := _count_meshes(gn)
-		check(gsub >= 1, "金堆含真实网格")
+		check(gsub >= 1, "矿块含真实网格")
 	if rub_nodes.size() > 0:
 		var rn: Node3D = rub_nodes[0]
 		var rsub := _count_meshes(rn)

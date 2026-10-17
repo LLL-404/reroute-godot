@@ -2,10 +2,11 @@
 # -*- coding: utf-8 -*-
 """批量转换《改道》全部游戏资产：UMD2/UANI → glb
 
-清单来源（reroute 母版脚本）：
-- 单位：ZergAssets.lua definitions（3 形态 × 5 动画）
-- 金堆：GoldPile.lua stages（4 档，metallic 0.65 / roughness 0.8）
-- 瓦砾：view3d.lua RUBBLE_UUIDS（3 变体，metallic 0.1 / roughness 0.9）
+SRC 母版（2026-10-17 修正）：reroute-maker/assets（旧 reroute 目录已不存在）。
+- 单位：zerg 三形态 × 5 动画
+- 金堆：4 档（metallic 0.65 / roughness 0.8）
+- 瓦砾：3 变体（metallic 0.1 / roughness 0.9）
+- 矿块：gold_ore（2026-10-17 新建 1b4aea1f，multiview 四视图直出）
 """
 import os
 import shutil
@@ -13,7 +14,7 @@ import subprocess
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # reroute-godot
-SRC = 'D:/G/game/games/reroute/assets'
+SRC = 'D:/G/game/games/reroute-maker/assets'
 CONV = os.path.join(ROOT, 'tools', 'umd2_to_gltf.py')
 OUT = os.path.join(ROOT, 'assets', 'models')
 
@@ -45,6 +46,7 @@ JOBS = [
     static('rubble_sand', '90f2333080c1453582eab7c61ab14e04', 0.1, 0.9),
     static('rubble_brown', 'df4e5ca1f3ac48ddaa05b8b81207cc61', 0.1, 0.9),
     static('rubble_gray', '65e0be7f31a1404ab374761970eea32e', 0.1, 0.9),
+    static('gold_ore', '1b4aea1f55fa4fc6b01da6cc34aaada4', 0.15, 0.75),
 ]
 
 

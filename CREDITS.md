@@ -45,6 +45,7 @@
 |---|---|---|---|
 | **kenney.nl** | 全站 **CC0-1.0** | ✅ 可商用、免署名、可修改 | 许可无任何负担，**风格是唯一门槛**。风格中性项（UI 图标、粒子/贴图、音效）直接可用；3D 模型需与 §一 规则 3 的既有美术基准对齐后才准进 |
 | **polyhaven.com** | 全站 **CC0-1.0** | ✅ 可商用、免署名、可修改 | 许可无任何负担。**HDRI 环境贴图风格中性、收益最直接**（PBR 流程直接接）；模型可用但需过风格关 |
+| **ambientcg.com** | 全站 **CC0-1.0** | ✅ 可商用、免署名、可修改 | 许可无任何负担。**PBR 表面贴图（土壤/岩石/砖石）风格中性、收益最直接**——不参与造型，只参与材质。10-17 已引入 2 组（见 §3.7）；直链 `https://ambientcg.com/get?file=<ID>` 无需账号 |
 | **sketchfab.com** | **逐模型不同**：CC0 / CC-BY / CC-BY-SA / Store 自定义 | ⚠️ 有条件 | 仅 `CC0` 免义务；`CC-BY` 必须署名；**`CC-BY-SA` 本项目禁用**（传染性：衍生作品须同许可）；Store 模型按各自 EULA，**不逐个读完条款不准进**。风格覆盖面极广，低模/卡通/体素包都有 |
 | **fab.com**（Epic） | **逐商品不同**；标准许可**不限引擎**，Godot 可用 | ⚠️ 有条件 | ① 每个商品页必须看 License 标签，**不看不用**；② **免费 Quixel Megascans 属 Epic Content License，限制 Unreal Engine 专用 → Godot 版禁用**；③ 部分商品须经 Epic 启动器领取，且 Quixel 免费额度已大幅缩水（1.8 万 → 约 1500）。风格覆盖极广，**不只有写实**：低模 / 风格化 / 卡通 / 体素包均有大量供应 |
 | 自建 AI 管线 | AI 多视图生成（Tripo 系）+ 程序烘焙 | ✅ 无外部义务 | 本作美术**主力**，见 `cashline/docs/AI-ASSETS.md` |
@@ -67,14 +68,15 @@
 
 ## 三、现有素材台账（`assets/` 实测）
 
-### 3.1 模型 `assets/models/` —— 10 个 glb + 配套贴图
+### 3.1 模型 `assets/models/` —— 11 个 glb + 配套贴图
 
 | 文件 | 内容 | 来源 | 许可 | 署名义务 |
 |---|---|---|---|---|
 | `zerg_worker.glb` / `zerg_blade.glb` / `zerg_king.glb` | 虫族三形态（幼生工虫 / 镰爪战虫 / 重甲虫王） | 自有 AI 多视图生成管线 | 项目自有 | 无 |
 | `gold_pile_full.glb` / `gold_pile_partial.glb` / `gold_pile_small.glb` / `gold_pile_low.glb` | 砂金堆四档耗损 | 同上 | 项目自有 | 无 |
 | `rubble_brown.glb` / `rubble_gray.glb` / `rubble_sand.glb` | 瓦砾堆三变体 | 同上 | 项目自有 | 无 |
-| `*_00_D.jpg` / `*_00_N.png`（8 组） | PBR 漫反射 / 法线贴图 | 同上 | 项目自有 | 无 |
+| `gold_ore.glb` | 矿格砂金矿块（10-17 新建，multiview 直出） | 同上 | 项目自有 | 无 |
+| `*_00_D.jpg` / `*_00_N.png`（9 组） | PBR 漫反射 / 法线贴图 | 同上 | 项目自有 | 无 |
 
 ### 3.2 音频 `assets/audio/sfx/` —— 29 个 mp3
 
@@ -145,6 +147,24 @@ Android `launcher_icons` 主图 + 自适应前后景）。D1-7 产。
 `game.png` / `heat.png` / `ghost.png` / `smoke_mid.png` / `game_20x9.png`——纯对局画面，
 对齐 §0.3 E「不用过场/读条/菜单截图」。
 
+### 3.7 地表纹理 `assets/textures/terrain/` —— 4 张（2026-10-17 新增）
+
+唯一外部实体素材（第 2 项自来水之外）。均为 ambientCG **CC0-1.0**，1024×1024，JPG/PNG：
+
+| 文件 | 内容 | 原资产（ambientCG） |
+|---|---|---|
+| `ground093c_col.jpg` / `ground093c_nrm.jpg` | 沙地：漫反射 + 法线（NormalGL） | Ground093C |
+| `rock061_col.jpg` / `rock061_nrm.jpg` | 岩石：漫反射 + 法线（NormalGL） | Rock061 |
+
+- **接入方式**：`game/terrain_ground.gdshader` 三平面双材质（沙 × Ground093C、岩 × Rock061），
+  按顶点色 a 权值（`view_terrain._field_color` 程序化编码）在全球空间混合。纹理**不参与造型**，
+  只参与材质——§二「风格中性项」结论的实践案例。
+- **裁剪决策**：两组的 Roughness 贴图**未启用、未随包**（shader 端用常量 roughness，
+  省移动端每次 6 次采样）。法线取 **NormalGL** 变体（Godot 4 要求 OpenGL 法线约定）。
+- **打包**：VRAM 压缩（etc2/astc）+ mipmap，pck 增量实测轻微。
+- **义务**：CC0 无署名要求；`THIRD-PARTY-NOTICES.txt` 已随包声明（含「已裁剪」说明）。
+- **验证**：`logs/gates-20261017-artfinal/` 全 21 闸绿。
+
 ---
 
 ## 四、风险台账
@@ -180,10 +200,11 @@ Android `launcher_icons` 主图 + 自适应前后景）。D1-7 产。
 补一张 Poly Haven CC0 HDRI 做环境光，免署名、零法律成本、PBR 流程直接接。
 非必须，时间不够就砍。
 
-### R-3 🟢 低 · 第三方素材面已收敛为「仅字体」
+### R-3 🟢 低 · 第三方素材面已收敛为「字体 + 4 张 CC0 纹理」
 
-替换后包内第三方素材只剩 **1 项字体（OFL，义务已履行）**。保持这个状态。
-倒排只剩 4 天（10-18 提交），引入任何需要读 EULA、需要署名落点、需要风格适配的
+替换后包内第三方素材只剩 **2 项**：字体（OFL，义务已履行）+ 地表纹理 4 张
+（CC0，零义务，10-17 引入，不参与造型）。保持这个状态。
+倒排只剩 1 天（10-18 提交），引入任何需要读 EULA、需要署名落点、需要风格适配的
 外部素材，都是负收益。
 
 ### R-4 ✅ 已解决 · `export_filter` 过宽
@@ -201,7 +222,8 @@ Android `launcher_icons` 主图 + 自适应前后景）。D1-7 产。
   纯人工 / 引擎与第三方），那份是**对外交付件**。
 - 两处**必须口径一致**，以 `assets/` 实测数字为准（本文件 §三 即实测值）：
   - 音频 **29 条**（10-16 D1-7 后；AI-ASSETS.md 对外件已**同批**补登记：+10 音频 + 图标套件 + 详情页五图，2026-10-16 收盘）
-  - 模型 **10 个 glb**
+  - 模型 **11 个 glb**（10-17 +`gold_ore.glb`）
+  - 地表纹理 **4 张 CC0**（10-17 外部引入，见 §3.7；AI-ASSETS.md §五 引擎与第三方段**同批**补行）
   - 详情页素材 **5 张 AI 图 + 5 张实机图**（10-16 D2-5；副本 `shots/store/`，见 §3.6）
   - AI-ASSETS.md §五 已改「引擎：Godot 4.7.2 stable (mono)」（2026-10-16 核实）
 - 本文件新增任何外部素材后，AI-ASSETS.md §五 要**同批**补一行。
@@ -230,3 +252,4 @@ OFL 的再分发义务就没履行（本文 §一 规则 2「登记 ≠ 履行�
 | 2026-10-16 | D1-7 制造积分素材入库：+10 mp3（9 音效 + 结算 BGM，台账 19→29）+ 图标套件 `assets/icon/`（icon2_core 定稿，主图/192/自适应前后景/ico）。新增 §3.5；§3.2/§3.4 计数与 §五 口径同步；对外件 `cashline/docs/AI-ASSETS.md` 待同批补行 |
 | 2026-10-16 | D2-5 详情页素材归置：`shots/store/` 新增 AI 五图（头图 `store_header` + 宣传 `promo_redirect`/`promo_economy`/`promo_ambush`/`promo_barrage`）+ 实机图 5 张副本；新增 §3.6；§五 口径同步 |
 | 2026-10-16 | 对外件收盘：`cashline/docs/AI-ASSETS.md` 按 Godot 交付物全文重写（29 音频 / 10 glb / 图标五件套 / 详情页五图；§五 引擎改 Godot 4.7.2 mono），§五 两条待办勾销 |
+| 2026-10-17 | 美术 pass 外部引入收口：ambientCG 列入 §二裁决表（全站 CC0）；新增 §3.7 地表纹理 4 张（Ground093C/Rock061，Color+NormalGL，Roughness 裁剪不随包）；`THIRD-PARTY-NOTICES.txt` 同步补 CC0 节；模型台账 10→11 glb（`gold_ore.glb` 自有 AI 生成，矿格观感替换）；§五 / R-3 口径同步；全 21 闸绿（`logs/gates-20261017-artfinal/`）；AI-ASSETS.md §五 同批补行 |

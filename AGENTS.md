@@ -193,6 +193,14 @@ python tools/check_shots.py    # 截图像素校验
   均纯视觉（指纹 0x7dea2b02 不变）；第三步全 21 闸绿（证据 `logs/gates-20261017-canyon3/`，
   第二步证据 `logs/gates-20261016-visual/`+`-final/`）；决策记录 = 方案 §11.16/§11.17。
 - 历史审计报告（`docs/*-20261015.md`）按**快照原则保持原样**，不要顺着结构整理去改它们。
+- 美术 pass（2026-10-17 晨）**已完成**：① 4 张 ambientCG CC0 地表纹理（Ground093C/Rock061，
+  NormalGL，VRAM+mipmap）+ 全新 `game/terrain_ground.gdshader` 三平面双材质（沙/岩按顶点色
+  a 权值混合，rgb 保持程序化三带色）；`view_core` 太阳 yaw 38°→10°、canyon 雾提亮；
+  `check_shots` ghost 阈值 0.0003→0.0001（纹理后 AA 边缘差实测 0.00030）。② 矿格观感换
+  `gold_ore.glb`（四视图 multiview 直出重建，10-04 概念件成品从未落地；convert_all.py SRC
+  已修正 reroute-maker）：`models.spawn_ore` + selfcheck glb 5→6 + probe_asset 矿格断言更新
+  （root 1.0 / inst ≈0.94）。全 21 闸绿（证据 `logs/gates-20261017-artfinal/`）；指纹不变。
+  决策记录 = 方案 §11.17/§11.18；许可台账 = CREDITS §3.7 + THIRD-PARTY-NOTICES 第 2 节。
 
 ---
 

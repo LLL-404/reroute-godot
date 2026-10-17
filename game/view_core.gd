@@ -84,7 +84,7 @@ func setup() -> void:
 	sun.light_energy = 1.55
 	sun.light_color = Color(1.0, 0.84, 0.62) # 金色时刻暖阳（对齐宣传图）
 	sun.shadow_enabled = true
-	sun.rotation_degrees = Vector3(-58.0, 38.0, 0.0)
+	sun.rotation_degrees = Vector3(-58.0, 10.0, 0.0) # 2026-10-17 yaw 38→10：南向陡崖面照度 +26%（NdotL 0.42→0.53），贴图文理更吃光
 	host.add_child(sun)
 
 	for k in MAT:

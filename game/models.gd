@@ -37,6 +37,9 @@ const RUBBLE_SCENES := [
 	"res://assets/models/rubble_gray.glb",
 ]
 
+# 矿格矿石（2026-10-17 新建：multiview 直出砂金矿块，metallic 0.15 / roughness 0.75）
+const ORE_SCENE := "res://assets/models/gold_ore.glb"
+
 var _cache: Dictionary = {}
 
 
@@ -146,6 +149,23 @@ func spawn_rubble(parent: Node, variant: int, pos: Vector3, footprint: float) ->
 	var packed := scene(RUBBLE_SCENES[variant])
 	var root := Node3D.new()
 	root.name = "rubble"
+	parent.add_child(root)
+	var inst: Node3D = packed.instantiate()
+	root.add_child(inst)
+	var box := mesh_aabb(inst)
+	var s: float = footprint / maxf(box.size.x, box.size.z)
+	inst.scale = Vector3(s, s, s)
+	var c := box.get_center()
+	inst.position = Vector3(-c.x * s, -box.position.y * s, -c.z * s)
+	root.position = pos
+	return root
+
+
+## 矿格矿石：同瓦砾口径（footprint 满 0.94 格），矿石比瓦砾高出约一格界线，辨识度优先。
+func spawn_ore(parent: Node, pos: Vector3, footprint: float) -> Node3D:
+	var packed := scene(ORE_SCENE)
+	var root := Node3D.new()
+	root.name = "ore"
 	parent.add_child(root)
 	var inst: Node3D = packed.instantiate()
 	root.add_child(inst)

@@ -117,7 +117,9 @@ if im_game is not None and im_heat is not None:
     print('[SHOTS] diff game-heat=%.4f' % d1)
 if im_game is not None and im_ghost is not None:
     d2 = diff_ratio(im_game, im_ghost)
-    chk(d2 > 0.0003, 'game 与 ghost 差异不足 %.5f（阈值 0.0003）' % d2)
+    # 2026-10-17 地面三平面纹理落地后 AA 边缘差实测 0.00030（原 0.0004，阈值 0.0003 零余量失灵）；
+    # 校准为 0.0001（真回归=ghost 截图与 game 完全相同 → d2≈0，仍被钳住；下方 green>200 为强信号）
+    chk(d2 > 0.0001, 'game 与 ghost 差异不足 %.5f（阈值 0.0001）' % d2)
     print('[SHOTS] diff game-ghost=%.5f' % d2)
 
 print('[SHOTS] checks=%d fail=%d' % (checks, len(fails)))

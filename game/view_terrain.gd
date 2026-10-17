@@ -8,12 +8,22 @@ extends RefCounted
 # _collect_ring）已删除；SOLID 抬升融入同一网格（岩石色 + 1.6m）。
 # 2026-10-16 世界重做②（方案 §11.16）：边框崖壁加「周向起伏 + 南面出怪口豁口」
 # （_rim_scale，对齐当局 spawn 列），场外配色按高度岩化。
+# 2026-10-17 三平面贴图：_ground_mat → ShaderMaterial（ground093c/rock061 CC0），
+# 顶点色 a 位 = 岩石权值（沙/岩纹理按权混法线+色），rgb 维持既有分带/层理/抖动。
 # 顶点高规则：场内采样点 = 邻接格顶高的 max（格顶 = 蓝图高 + 模拟层 1.2m/级 + SOLID 抬升），
 # 场外采样点 = 蓝图高度函数直取；网格一次建成（场外数据蓝图期内静态），
 # 高度变化（挖/填/落墙）只重算场内区并与静态区合并重建 surface。
 
 const ViewCoreScript = preload("res://game/view_core.gd")
 const Blueprint = preload("res://game/blueprint.gd")
+
+# 地面贴图管线（2026-10-17，CC0·ambientCG）：双材质三平面 shader；顶点色 a 位 = 岩石权值
+# （shader 按 a 混沙/岩纹理；rgb 维持补过 check_shots 校准的程序化分带色——见 terrain_ground.gdshader 头注）
+const GROUND_SHADER = preload("res://game/terrain_ground.gdshader")
+const TEX_SAND_COL = preload("res://assets/textures/terrain/ground093c_col.jpg")
+const TEX_SAND_NRM = preload("res://assets/textures/terrain/ground093c_nrm.jpg")
+const TEX_ROCK_COL = preload("res://assets/textures/terrain/rock061_col.jpg")
+const TEX_ROCK_NRM = preload("res://assets/textures/terrain/rock061_nrm.jpg")
 
 # 威胁热层：敌人流场"距核心步数"分带染色（d 小=近核心=红，d 大=绕得远=蓝）
 const HEAT_N := 6
@@ -65,7 +75,7 @@ var _normals := PackedVector3Array()
 var _colors := PackedColorArray()
 var _indices := PackedInt32Array()
 var _ground: MeshInstance3D = null
-var _ground_mat: StandardMaterial3D = null
+var _ground_mat: ShaderMaterial = null
 var _col_lo := Color()
 var _col_mid := Color()
 var _col_hi := Color()
@@ -140,10 +150,12 @@ func apply_blueprint(bp: Dictionary, seed: int, anchor: Dictionary = {}) -> void
 	_band_lo = float(cur_palette["band_lo_at"])
 	_band_hi = float(cur_palette["band_hi_at"])
 	if _ground_mat == null:
-		_ground_mat = StandardMaterial3D.new()
-		_ground_mat.roughness = 0.65
-		_ground_mat.metallic = 0.0
-		_ground_mat.vertex_color_use_as_albedo = true
+		_ground_mat = ShaderMaterial.new()
+		_ground_mat.shader = GROUND_SHADER
+		_ground_mat.set_shader_parameter("sand_col", TEX_SAND_COL)
+		_ground_mat.set_shader_parameter("sand_nrm", TEX_SAND_NRM)
+		_ground_mat.set_shader_parameter("rock_col", TEX_ROCK_COL)
+		_ground_mat.set_shader_parameter("rock_nrm", TEX_ROCK_NRM)
 
 	if core.env != null:
 		var fog: Array = cur_palette["fog"]
@@ -331,15 +343,16 @@ func _field_color(h: float, solid: bool, slope: float, cx: int, cy: int) -> Colo
 	else:
 		base = _col_mid.lerp(_col_hi, Blueprint.smooth01((t - 0.5) * 2.0))
 	var rock_mix := clampf((slope - 0.45) / 1.2, 0.0, 0.72)
-	base = base.lerp(_col_rock, rock_mix)
 	var patch := Blueprint.ihash(cx / 4, cy / 4, 4441) # 4 格块状干燥色斑（破单色台面）
 	base = base.lerp(_col_lo, 0.13 * clampf((patch - 0.55) * 2.5, 0.0, 1.0))
 	var strata := 0.5 + 0.5 * sin(h * 5.3 + float(cx) * 0.7 + float(cy) * 0.4)
 	var k := (0.91 + 0.18 * Blueprint.ihash(cx * 3 + 11, cy * 3 - 7, 917)) * (0.94 + 0.07 * strata)
-	return Color(base.r * k, base.g * k, base.b * k)
+	# 贴图管线（2026-10-17）：a 位 = 坡度岩石化权值（shader 按权混岩纹理；SOLID 分支恒 a=1）
+	return Color(base.r * k, base.g * k, base.b * k, rock_mix)
 
 
-## 场外顶点色：低地暖沙 → 高处/陡坡岩化（环山体/台地顶），岩壁叠层理微带 + 确定性明度抖动。
+## 场外顶点色：rgb = 沙基调（层理微带 + 确定性明度抖动），岩石比例（a 位）随高度/坡度过渡；
+## shader 端 a 混岩纹理（ground093c → rock061），层理带照乘。
 func _outside_color(px: float, pz: float, h: float) -> Color:
 	var d := maxf(absf(px), absf(pz)) - core.HALF
 	var t := clampf((h - 0.6) / 7.5, 0.0, 1.0) # 低地=沙，高地=岩
@@ -349,12 +362,11 @@ func _outside_color(px: float, pz: float, h: float) -> Color:
 		var s2 := absf(height_fn.call(px, pz + 2.0) - h)
 		slope = maxf(s1, s2) * 0.5 # 陡坡面岩化（台地崖壁/环山体内坡）
 	var mix := clampf(0.16 + 0.30 * Blueprint.smooth01(d / 60.0) + 0.62 * t + 1.1 * clampf(slope / 3.0, 0.0, 0.75), 0.0, 1.0)
-	var c := _col_lo.lerp(_col_rock, mix)
 	var e := 1.0
 	if h > 3.0:
 		e = 0.86 + 0.14 * sin(h / 4.5 * 6.2831853 + px * 0.13) # 岩壁层理带（对齐 4.5m 台阶）
 	var k := (0.90 + 0.18 * Blueprint.ihash(int(floor(px * 0.5)), int(floor(pz * 0.5)), 7331)) * e
-	return Color(clampf(c.r * k, 0.0, 1.0), clampf(c.g * k, 0.0, 1.0), clampf(c.b * k, 0.0, 1.0))
+	return Color(clampf(_col_lo.r * k, 0.0, 1.0), clampf(_col_lo.g * k, 0.0, 1.0), clampf(_col_lo.b * k, 0.0, 1.0), mix)
 
 
 ## 重建地面网格（挖/填/落墙后 height_rev 变）：只重算场内区 + 相邻法线，与静态场外区合并重建。

@@ -72,6 +72,7 @@ func run(main) -> int:
 		"res://assets/models/zerg_king.glb",
 		"res://assets/models/gold_pile_full.glb",
 		"res://assets/models/rubble_sand.glb",
+		"res://assets/models/gold_ore.glb",
 	]
 	var mloaded := 0
 	for mp in model_paths:
@@ -80,7 +81,7 @@ func run(main) -> int:
 			mloaded += 1
 		else:
 			_fail("模型缺失：" + mp)
-	_cmpi(mloaded, model_paths.size(), "5 个模型 glb 打进包")
+	_cmpi(mloaded, model_paths.size(), "6 个模型 glb 打进包")
 	var blade_packed: PackedScene = load("res://assets/models/zerg_blade.glb") as PackedScene
 	if blade_packed != null:
 		var inst0: Node3D = blade_packed.instantiate()
