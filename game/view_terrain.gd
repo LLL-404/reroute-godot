@@ -30,7 +30,7 @@ const HEAT_COLORS := [
 const FINE_STEP := 0.5
 const OUT_RINGS := 54 # i=1..54 → 最远 ±260.96
 const SOLID_BUMP := 1.6 # SOLID 格在网格内的抬升（原柱体口径：顶 = ground_y + 1.6）
-const RIM_BUMP := 5.0 # 地图边框圈（峡谷崖壁）额外抬升：纯视觉围合，对齐宣传图峡谷口
+const RIM_BUMP := 0.8 # 地图边框圈额外抬升：矮石墙围界（对齐头图矮墙+h 豁口），非崖壁
 const RIM_MOUTH_W := 3.6 # 南面出怪口豁口半宽（m，spawn 列两侧高斯衰减）
 
 var host: Node3D

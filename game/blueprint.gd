@@ -147,10 +147,8 @@ static func compose(bp: Dictionary, seed: int, anchor: Dictionary = {}) -> Array
 	var und_oct := int(world["und_oct"])
 	var rim_h := float(world["rim_h"]) # 环山体高度（紧贴场沿隆起）
 	var rim_w := float(world["rim_w"]) # 环山体外坡宽
-	var rim_north := float(world.get("rim_north", 1.0)) # 北面背景山加高倍率（峡谷屏风）
 	var mouth_s := float(world.get("mouth_s", 0.0)) # 南面出怪口豁口强度（0=整圈闭合）
-	var mesa_h := float(world["mesa_h"]) # 中距台地原高度
-	var mesa_freq := float(world["mesa_freq"])
+	var mesa_h := float(world["mesa_h"]) # 孤岩长丘高度
 	var mesa_start := float(world["mesa_start"])
 	var mesa_w := float(world["mesa_w"])
 	var sky_h := float(world["sky_h"]) # 远山剪影高度
@@ -158,6 +156,15 @@ static func compose(bp: Dictionary, seed: int, anchor: Dictionary = {}) -> Array
 	var sky_w := float(world["sky_w"])
 	var gates: Array = anchor.get("gate_x", world.get("gate_x", []))
 	var erode_iter := int(world.get("erode_iter", 0))
+	# 孤岩长丘（开阔荒漠口径，按头图写实）：8 座离散离散缓丘，绕场散布。
+	# 斜率限幅：skirt ≥ h/0.42 → 任何采样行相邻高差 ≤ ~1.5（连续性闸内）。
+	var buttes: Array = []
+	for bi in 8:
+		var b_ang := 6.2831853 * ihash(seed + bi * 29 + 5, 7, 60013)
+		var b_rad := 16.0 + 26.0 * ihash(seed + bi * 7 + 1, 21, 60013)
+		var b_r := 9.0 + 10.0 * ihash(seed + bi * 11 - 2, 31, 60013)
+		var b_h := mesa_h * (0.55 + 0.60 * ihash(seed + bi * 13 + 3, 41, 60013))
+		buttes.append([cos(b_ang) * b_rad, sin(b_ang) * b_rad, b_r, maxf(b_r * 0.8, b_h / 0.42), b_h])
 	var freq := float(micro["freq"])
 	var off0 := float(micro["offset"][0])
 	var off1 := float(micro["offset"][1])
@@ -191,10 +198,10 @@ static func compose(bp: Dictionary, seed: int, anchor: Dictionary = {}) -> Array
 			var hv: float = q + t_step * smooth01(fr)
 			h = h + (hv - h) * (1.0 - g * 0.7)
 		if g > 0.0:
-			# 场外四层（全部由 g 渐入）：中频起伏 / 环山体 / 台地原 / 远山剪影
+			# 场外（开阔荒漠，无环崖）：缓沙丘 / 浅干河 / 低沿埂 / 孤岩长丘 / 远方低剪影
 			h += (fbm(wx * und_freq, wz * und_freq, und_oct, seed + 31) - 0.5) * und_amp * g
 			var gv := fbm(wx * 0.021, wz * 0.021, 2, seed + 671)
-			h -= 2.2 * smooth01(0.14 - absf(gv - 0.5)) * smooth01((d - 2.0) / 4.0)
+			h -= 1.0 * smooth01(0.16 - absf(gv - 0.5)) * smooth01((d - 2.0) / 4.0)
 			var g_rim := smooth01((d - 0.4) / rim_w)
 			if g_rim > 0.0:
 				var ra := fbm(wx * 0.017, wz * 0.017, 2, seed + 57)
@@ -207,16 +214,16 @@ static func compose(bp: Dictionary, seed: int, anchor: Dictionary = {}) -> Array
 						var u := (wx - float(gx)) / 5.0
 						m = maxf(m, exp(-u * u))
 					rscale = 1.0 - mouth_s * m * smooth01((wz - 2.0) / 7.0) # 南面出怪口豁口
-				var nb := 1.0 + (rim_north - 1.0) * smooth01((-wz - 4.0) / 14.0) # 北面加高（峡谷背景屏风）
-				var rise := rim_h * g_rim * crest * rscale * nb
-				var tq: float = floor(rise / 4.5) * 4.5
-				var tf: float = (rise - tq) / 4.5
-				h += tq + 4.5 * smooth01(tf * 1.6 - 0.3)
-			var g_mesa := smooth01((d - mesa_start) / mesa_w)
-			if g_mesa > 0.0:
-				var mv := fbm(wx * mesa_freq, wz * mesa_freq, 3, seed + 811)
-				var qv := smooth01((floor(mv * 5.0) * 0.2 - 0.28) / 0.30) # 平顶分层台地
-				h += mesa_h * g_mesa * qv * (0.70 + 0.60 * fbm(wx * 0.031, wz * 0.031, 2, seed + 812))
+				h += rim_h * g_rim * crest * rscale # 低沿埂（非崖壁；rim_h 1.1..1.7）
+			var g_butte := smooth01((d - mesa_start) / mesa_w)
+			if g_butte > 0.0:
+				for bt in buttes:
+					var bx2 := wx - float(bt[0])
+					var bz2 := wz - float(bt[1])
+					var brr := sqrt(bx2 * bx2 + bz2 * bz2)
+					if brr < float(bt[2]) + float(bt[3]): # 快筛（出包络即略过）
+						var tbt := smooth01((float(bt[2]) - brr) / float(bt[3]))
+						h += float(bt[4]) * g_butte * tbt
 			var g_sky := smooth01((d - sky_start) / sky_w)
 			if g_sky > 0.0:
 				h += sky_h * g_sky * (0.45 + 0.55 * fbm(wx * 0.011, wz * 0.011, 3, seed + 913))
@@ -259,20 +266,18 @@ const PRESETS := {
 		],
 		"world": {
 			"slope_w": 16.0,
-			"rim_h": 18.0,
+			"rim_h": 1.4,
 			"rim_w": 3.0,
-			"rim_north": 1.7,
 			"mouth_s": 0.85,
 			"gate_x": [-10.5, 13.5, -25.5],
-			"mesa_h": 16.0,
-			"mesa_freq": 0.042,
-			"mesa_start": 16.0,
-			"mesa_w": 22.0,
-			"sky_h": 52.0,
-			"sky_start": 56.0,
+			"mesa_h": 9.0,
+			"mesa_start": 12.0,
+			"mesa_w": 14.0,
+			"sky_h": 7.0,
+			"sky_start": 64.0,
 			"sky_w": 90.0,
-			"und_amp": 2.2,
-			"und_freq": 0.050,
+			"und_amp": 2.6,
+			"und_freq": 0.036,
 			"und_oct": 3,
 			"erode_iter": 6,
 		},
@@ -299,20 +304,18 @@ const PRESETS := {
 		],
 		"world": {
 			"slope_w": 20.0,
-			"rim_h": 12.5,
-			"rim_w": 4.5,
-			"rim_north": 1.5,
+			"rim_h": 1.1,
+			"rim_w": 4.0,
 			"mouth_s": 0.80,
 			"gate_x": [-10.5, 13.5, -25.5],
-			"mesa_h": 12.0,
-			"mesa_freq": 0.048,
-			"mesa_start": 20.0,
-			"mesa_w": 26.0,
-			"sky_h": 36.0,
+			"mesa_h": 6.5,
+			"mesa_start": 14.0,
+			"mesa_w": 16.0,
+			"sky_h": 5.0,
 			"sky_start": 70.0,
 			"sky_w": 100.0,
-			"und_amp": 2.4,
-			"und_freq": 0.042,
+			"und_amp": 2.8,
+			"und_freq": 0.030,
 			"und_oct": 3,
 			"erode_iter": 5,
 		},
@@ -339,20 +342,18 @@ const PRESETS := {
 		],
 		"world": {
 			"slope_w": 13.0,
-			"rim_h": 21.0,
+			"rim_h": 1.7,
 			"rim_w": 2.5,
-			"rim_north": 1.8,
 			"mouth_s": 0.85,
 			"gate_x": [-10.5, 13.5, -25.5],
-			"mesa_h": 18.0,
-			"mesa_freq": 0.038,
-			"mesa_start": 14.0,
-			"mesa_w": 18.0,
-			"sky_h": 58.0,
-			"sky_start": 48.0,
+			"mesa_h": 10.5,
+			"mesa_start": 11.0,
+			"mesa_w": 13.0,
+			"sky_h": 8.0,
+			"sky_start": 58.0,
 			"sky_w": 84.0,
-			"und_amp": 1.6,
-			"und_freq": 0.060,
+			"und_amp": 2.2,
+			"und_freq": 0.044,
 			"und_oct": 4,
 			"erode_iter": 8,
 		},

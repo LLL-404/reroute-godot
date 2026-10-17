@@ -1815,6 +1815,20 @@ Android `reroute-release.apk` 仍为 D2-1 版、不含本次变更——**D4 提
 `probe_save` 曾误用 headless 运行挂起报错——save/orient 等窗口探针必须窗口模式（§2.1）。
 剧本指纹 0x7dea2b02 不变（纯视觉改动）。
 
+**峡谷化推翻（用户裁定「四周不应该是墙」，拍板按头图改）**：本节前段「环崖 + 台地
+层理 + 北屏风」整格局废弃——正确形态 = **开阔荒漠**：场界改成头图式矮石墙
+（`RIM_BUMP` 5.0→0.8，总高 ≈2.2m，保留周向起伏与南豁口 `_rim_scale`/`_gates`）；
+蓝图场外重写：环崖 rim_h 18m 级→1.1~1.7m 低沿埂（去台阶量化/去crest直墙/去北屏风
+rim_north），干冲沟 2.2→1.0m 浅干河，台地原（fbm 阈值）→**8 座离散孤岩长丘**
+（种子定圆环散布 r16~42m/半径 9~19m/高 0.55~1.15×mesa 6.5~10.5m；skirt=max(0.8r,
+h/0.42) 斜率限幅→任一采样行相邻高差 ≤~1.5m，`probe_scene` 连续性不破），远山剪影
+52m 级→7~8m 低剪影（fog_start 58+，只做朦胧地平线）。沙丘/色板/雾/暖阳全保留。
+三预设 canyon/shale/ember 同步（canyon: rim 1.4/mesa 9·12·14/sky 7·64/und 2.6·0.036）。
+`probe_scene` PASS、check_shots 25/0 复绿（warm=1016312）、全 19 闸 + 104 单测 +
+selfcheck 复绿；**双端包重出**：`game.exe` 109,550,080B + `game.pck` 80,587,824B
+（复签 Valid + pck 自证 22/0）+ `reroute-release.apk` 282,902,492B（apksigner
+CN=Reroute SHA-256 06fb8144… 一致）。`shots/store/` 实机五图已换新景并逐一目视。
+
 ---
 
 ## 12. AI 任务卡模板（派活时照抄）
