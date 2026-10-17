@@ -35,7 +35,8 @@ func _initialize() -> void:
 		check(box.size.x > 0.01 and box.size.y > 0.01 and box.size.z > 0.01, str(k) + " 网格包围盒有效")
 		inst.free()
 	for p in ["gold_pile_full", "gold_pile_partial", "gold_pile_small", "gold_pile_low",
-			"rubble_sand", "rubble_brown", "rubble_gray"]:
+			"rubble_sand", "rubble_brown", "rubble_gray", "gold_ore",
+			"wall_barrier", "tower_ballista", "core_jade"]:
 		var packed2: PackedScene = load("res://assets/models/" + p + ".glb")
 		check(packed2 != null, "加载 " + p)
 		if packed2 != null:

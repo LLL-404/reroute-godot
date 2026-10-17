@@ -126,7 +126,8 @@ func _make_cover(x: int, y: int) -> void:
 # ---- 幽灵预览 ----
 
 ## cells = Array[Vector2i] 或空（藏起）；bad = 有效性染色。
-## 逐格一个方块（斜线不覆盖线外格，各自贴合所在柱顶）；ghost_mi 指向首格网格。
+## 逐格一块六边板（斜线不覆盖线外格，各自贴合所在格顶；odd-r 奇行半格错位由 cell_to_world 统一）；
+## ghost_mi 指向首格网格。
 func show_ghost(cells: Array, bad: bool = false) -> void:
 	if cells.is_empty():
 		if ghost_alive and ghost != null:
@@ -141,13 +142,14 @@ func show_ghost(cells: Array, bad: bool = false) -> void:
 		ghost_mi = null
 		dyn.add_child(ghost)
 		ghost_alive = true
+	core._ensure_hex_plate()
 	while ghost.get_child_count() > cells.size():
 		var extra: Node = ghost.get_child(ghost.get_child_count() - 1)
 		ghost.remove_child(extra)
 		extra.queue_free()
 	while ghost.get_child_count() < cells.size():
 		var fresh := MeshInstance3D.new()
-		fresh.mesh = core.box_mesh
+		fresh.mesh = core.hex_plate_mesh
 		ghost.add_child(fresh)
 	var mat: Material = core.mats["ghost_bad"] if bad else core.mats["ghost_ok"]
 	for i in cells.size():
@@ -205,18 +207,9 @@ func sync(world: World) -> void:
 				node.name = "b" + str(bid)
 				building_root.add_child(node)
 				var kind: int = b["kind"]
-				if kind == Sim.B_TOWER:
-					core._part(node, 0.0, 0.225, 0.0, 1.00, 0.45, 1.00, "tower_cap")
-					core._part(node, 0.0, 1.300, 0.0, 0.70, 1.70, 0.70, "tower")
-					core._part(node, 0.0, 2.375, 0.0, 0.94, 0.45, 0.94, "tower_cap")
-					core._part(node, 0.0, 2.850, 0.0, 0.26, 0.50, 0.26, "hero")
-				elif kind == Sim.B_CORE:
-					core._part(node, 0.0, 0.200, 0.0, 1.15, 0.40, 1.15, "solid")
-					core._part(node, 0.0, 1.150, 0.0, 0.85, 1.50, 0.85, "core")
-					core._part(node, 0.0, 2.250, 0.0, 0.45, 0.45, 0.45, "core")
-				else:
-					core._part(node, 0.0, 0.525, 0.0, 0.94, 1.05, 0.94, "wall")
-					core._part(node, 0.0, 1.190, 0.0, 1.00, 0.28, 1.00, "wall_cap")
+				# 建筑 = 真实资产 3 件（2026-10-17：盒体拼接退役，spec §12 fallback 不再需要）
+				node.add_child(models.spawn_building(
+					"tower" if kind == Sim.B_TOWER else ("core" if kind == Sim.B_CORE else "wall")))
 				entry = { "node": node, "kind": kind, "cd": int(b["cooldown"]) }
 				building_nodes[bid] = entry
 				if kind == Sim.B_TOWER:

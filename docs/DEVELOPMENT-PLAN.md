@@ -1861,10 +1861,27 @@ static 任务；`models.gd` 新增 `ORE_SCENE`/`spawn_ore`（footprint 0.94 归�
 `view_entities` 矿格 spawn_gold→spawn_ore、`selfcheck` glb 5→6、`probe_asset`
 矿格断言更新（root 1.0 / inst ≈0.94）。特写目视与概念图一致（棕岩簇 + 金脉贯穿）。
 
-**闸与证据**：全 21 闸绿（单测 104/0；probe_item 全 PASS 含 asset 59/0；
-check_shots 25/0——game warm≈803851 段、game_20x9 warm=1010153、ghost diff=0.00031）。
-证据 `logs/gates-20261017-artfinal/`（文本摘要 + 全 stdout）。指纹无变更。
-CREDITS §3.1 11 glb 口径、§五、R-3 同步；AI-ASSETS.md 同批补行。
+**闸与证据（artpass）**：全 21 闸绿（单测 104/0；probe_asset 59/0；check_shots 25/0，
+game_20x9 warm=1010153、ghost diff=0.00031）。证据 `logs/gates-20261017-artfinal/`。
+指纹无变更。CREDITS §3.1 11 glb 口径、§五、R-3 同步；AI-ASSETS.md 同批补行。
+
+**建筑三件 AI 直出（Step 5，同晨接续）**：Maker text2model 三件（wall_barrier 0.94³
+footprint + 1.33h 各轴独立、tower_ballista 等比 3.1h、core_jade 等比 2.5h，balanced 档；
+塔 prompt「射击/十字弩」触发平台内容过滤 422→「瞭望台/窗格」中性术语过审）。
+`convert_all.py` +3 static（wall 0.0/0.9、tower 0.1/0.85、core 0.2/0.6）；
+`models.gd` BUILDING_SCENES/BUILDING_SIZE + `spawn_building`（墙各轴独立对齐 footprint，
+塔/核等比以防变形；返回已校准实例由调用方挂 building_root 包装节点）；
+`view_entities` 建筑分支三组 `_part` 盒体拼接 → spawn_building（spec §12 盒体 fallback
+正式退役）；selfcheck glb 6→9、probe_asset 资产清单 +3（59→63 checks）。
+临时目视探针拍三件特写：玉晶/石墙/金帽石塔观感达标后即删。核心 emission 未做（自然光
+下青玉色已达标，bloom 缺席时发光意义有限，砍单）。
+
+**闸与证据（b3）**：headless tests 104/0 + sim/grid/flow/scenario/world 全 PASS；
+窗口 sync/smoke/input/hud/ui_flow/shots/audio/model/orient/save/touch 全 PASS；
+probe_asset 63/0；check_shots 25/0（game_20x9 warm=1010393）。probe_golden 在主工作树
+FAIL——归因**并行会话正在实时修改 sim/（未提交半成品）**的工作树污染（canon/flowfield/
+grid/world + test_* 在飞）；干净 worktree（f0033a6 checkout）复核 probe_golden PASS，
+与建筑 glb 化无关。全 21 闸终值以 sim 收敛后统一重跑。证据 `logs/gates-20261017-b3/`。
 
 ---
 

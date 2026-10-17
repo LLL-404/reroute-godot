@@ -201,6 +201,12 @@ python tools/check_shots.py    # 截图像素校验
   已修正 reroute-maker）：`models.spawn_ore` + selfcheck glb 5→6 + probe_asset 矿格断言更新
   （root 1.0 / inst ≈0.94）。全 21 闸绿（证据 `logs/gates-20261017-artfinal/`）；指纹不变。
   决策记录 = 方案 §11.17/§11.18；许可台账 = CREDITS §3.7 + THIRD-PARTY-NOTICES 第 2 节。
+- 建筑三件 glb 化（2026-10-17 晨）**已完成**：Maker text2model 三件（wall_barrier/tower_
+  ballista/core_jade）直出入库 + `models.spawn_building` + `view_entities` 建筑盒体拼接
+  退役（spec §12 fallback 不再需要）；selfcheck glb 6→9、probe_asset 59→63。
+  外部 21 闸全绿（除 golden——**归因另一 AI 会话正在实时修改 sim/（未提交半成品）的工作
+  树污染**；干净 worktree f0033a6 复核 probe_golden PASS，与本轮无关；全 21 闸终值以
+  sim 收敛后为主）。证据 `logs/gates-20261017-b3/`；决策记录 = 方案 §11.18（建筑段）。
 
 ---
 

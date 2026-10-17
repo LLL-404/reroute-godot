@@ -47,6 +47,10 @@ JOBS = [
     static('rubble_brown', 'df4e5ca1f3ac48ddaa05b8b81207cc61', 0.1, 0.9),
     static('rubble_gray', '65e0be7f31a1404ab374761970eea32e', 0.1, 0.9),
     static('gold_ore', '1b4aea1f55fa4fc6b01da6cc34aaada4', 0.15, 0.75),
+    # 建筑 3 件（2026-10-17 text2model 直出；spec §12 盒体 fallback 退役）
+    static('wall_barrier', 'af89b2b230ed4117aac7875ae3047e16', 0.0, 0.9),
+    static('tower_ballista', '110c1cda73f740768820e2f7abc8e5e1', 0.1, 0.85),
+    static('core_jade', '2c48fa15f9c74a4bb773f8c06a137867', 0.2, 0.6),
 ]
 
 

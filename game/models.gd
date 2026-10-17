@@ -40,6 +40,21 @@ const RUBBLE_SCENES := [
 # 矿格矿石（2026-10-17 新建：multiview 直出砂金矿块，metallic 0.15 / roughness 0.75）
 const ORE_SCENE := "res://assets/models/gold_ore.glb"
 
+# 建筑 3 件（2026-10-17 text2model 直出；替代盒体拼接，spec §12 fallback 退役）
+const BUILDING_SCENES := {
+	"wall": "res://assets/models/wall_barrier.glb",
+	"tower": "res://assets/models/tower_ballista.glb",
+	"core": "res://assets/models/core_jade.glb",
+}
+# 目标口径照被替换的盒体分件总尺寸（view_entities._building 旧盘）：
+# 墙 = 0.94×1.33×0.94（各轴独立，保 footprint 满 0.94 与原遮挡线高）；
+# 塔 = 等比到总高 3.1（细长比例模型，不宜变形）；核 = 等比到总高 2.5。
+const BUILDING_SIZE := {
+	"wall": Vector3(0.94, 1.33, 0.94),
+	"tower": Vector3(0.94, 3.10, 0.94),
+	"core": Vector3(0.94, 2.50, 0.94),
+}
+
 var _cache: Dictionary = {}
 
 
@@ -176,3 +191,23 @@ func spawn_ore(parent: Node, pos: Vector3, footprint: float) -> Node3D:
 	inst.position = Vector3(-c.x * s, -box.position.y * s, -c.z * s)
 	root.position = pos
 	return root
+
+
+## 建筑 3 件（墙/塔/核）：返回已校准的 glb 实例（不建 wrapper、不挂父节点），
+## 调用方挂到自己的 building_root 包装节点下（简化缩放/摆位/音效路径）。
+## 墙各轴独立对齐 BUILDING_SIZE（footprint 优先）；塔/核等比缩放（细长晶体/塔柱不宜变形）。
+func spawn_building(kind_name: String) -> Node3D:
+	var packed := scene(BUILDING_SCENES[kind_name])
+	var inst: Node3D = packed.instantiate()
+	var box := mesh_aabb(inst)
+	var target: Vector3 = BUILDING_SIZE[kind_name]
+	var s: Vector3
+	if kind_name == "wall":
+		s = Vector3(target.x / box.size.x, target.y / box.size.y, target.z / box.size.z)
+	else:
+		var u: float = target.y / box.size.y
+		s = Vector3(u, u, u)
+	inst.scale = s
+	var c := box.get_center()
+	inst.position = Vector3(-c.x * s.x, -box.position.y * s.y, -c.z * s.z)
+	return inst

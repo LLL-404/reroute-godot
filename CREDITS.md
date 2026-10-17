@@ -68,7 +68,7 @@
 
 ## 三、现有素材台账（`assets/` 实测）
 
-### 3.1 模型 `assets/models/` —— 11 个 glb + 配套贴图
+### 3.1 模型 `assets/models/` —— 14 个 glb + 配套贴图
 
 | 文件 | 内容 | 来源 | 许可 | 署名义务 |
 |---|---|---|---|---|
@@ -76,6 +76,7 @@
 | `gold_pile_full.glb` / `gold_pile_partial.glb` / `gold_pile_small.glb` / `gold_pile_low.glb` | 砂金堆四档耗损 | 同上 | 项目自有 | 无 |
 | `rubble_brown.glb` / `rubble_gray.glb` / `rubble_sand.glb` | 瓦砾堆三变体 | 同上 | 项目自有 | 无 |
 | `gold_ore.glb` | 矿格砂金矿块（10-17 新建，multiview 直出） | 同上 | 项目自有 | 无 |
+| `wall_barrier.glb` / `tower_ballista.glb` / `core_jade.glb` | 建筑三件：石砌矮墙 / 石砌金帽塔 / 青玉晶体核心（10-17 新建，文本直出） | 同上 | 项目自有 | 无 |
 | `*_00_D.jpg` / `*_00_N.png`（9 组） | PBR 漫反射 / 法线贴图 | 同上 | 项目自有 | 无 |
 
 ### 3.2 音频 `assets/audio/sfx/` —— 29 个 mp3
@@ -252,4 +253,5 @@ OFL 的再分发义务就没履行（本文 §一 规则 2「登记 ≠ 履行�
 | 2026-10-16 | D1-7 制造积分素材入库：+10 mp3（9 音效 + 结算 BGM，台账 19→29）+ 图标套件 `assets/icon/`（icon2_core 定稿，主图/192/自适应前后景/ico）。新增 §3.5；§3.2/§3.4 计数与 §五 口径同步；对外件 `cashline/docs/AI-ASSETS.md` 待同批补行 |
 | 2026-10-16 | D2-5 详情页素材归置：`shots/store/` 新增 AI 五图（头图 `store_header` + 宣传 `promo_redirect`/`promo_economy`/`promo_ambush`/`promo_barrage`）+ 实机图 5 张副本；新增 §3.6；§五 口径同步 |
 | 2026-10-16 | 对外件收盘：`cashline/docs/AI-ASSETS.md` 按 Godot 交付物全文重写（29 音频 / 10 glb / 图标五件套 / 详情页五图；§五 引擎改 Godot 4.7.2 mono），§五 两条待办勾销 |
+| 2026-10-17 | 建筑三件 AI 直出入库（`wall_barrier`/`tower_ballista`/`core_jade`，模型台账 11→14 glb；建筑盒体拼接退役）|
 | 2026-10-17 | 美术 pass 外部引入收口：ambientCG 列入 §二裁决表（全站 CC0）；新增 §3.7 地表纹理 4 张（Ground093C/Rock061，Color+NormalGL，Roughness 裁剪不随包）；`THIRD-PARTY-NOTICES.txt` 同步补 CC0 节；模型台账 10→11 glb（`gold_ore.glb` 自有 AI 生成，矿格观感替换）；§五 / R-3 口径同步；全 21 闸绿（`logs/gates-20261017-artfinal/`）；AI-ASSETS.md §五 同批补行 |
