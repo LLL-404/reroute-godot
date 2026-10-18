@@ -2222,6 +2222,26 @@ P0 精确在顶线、末点贴/沉低邻顶、高度单调不增。**1829/0 PASS
 
 ---
 
+### 11.26 双端包重出（2026-10-18，含开屏/限帧/自然化三项增量）
+
+**动因**：v2.2「终版」包（10-17 17:50）之后代码继续演进——开屏动画（8177c59）、开屏提速 +
+菜单限帧（5bdadf9/b652f17）、自然化 T1（013dd8d）均不在包内；真机验证与提审流水线需最新包。
+
+**结果（四件）**：
+- `game.exe` 109,551,432B，复签 **Valid**（CN=Reroute；签名后与 v2.2 包 **SHA-256 逐字节同哈希**
+  `0539d11b…2285bc`——「exe = 内容无关模板件」口径第三次实证）；同目录 `--selfcheck` **31/0 PASS**
+- `game.pck` 109,800,796B（较 v2.2 +62,668B；纯代码增量）
+- `reroute-release.apk` 312,119,839B（较 v2.2 +61,799B；apksigner v2/v3 = true，
+  DN `CN=Reroute, OU=GameJam, O=Reroute, C=CN`）
+- `reroute-windows.zip` 183,669,125B（192 条目，testzip None-bad；含已签名 exe + pck +
+  `data_RerouteGodot_windows_x86_64/` + `运行说明.txt`；不含 .idsig）
+- SHA-256：pck `153082ee…d9c5` / apk `44956252…f053` / zip `0a6a324f…c1992`；
+  证据 `logs/gates-20261018-t1nat/export-{win,apk,selfcheck}.out`
+
+**上传件**：APK + zip（Zip 上传表单「可执行文件」填 `game.exe`）；§0.3 B 清单照单执行。
+
+---
+
 ## 12. AI 任务卡模板（派活时照抄）
 
 ```markdown

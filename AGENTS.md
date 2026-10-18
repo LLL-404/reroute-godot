@@ -275,6 +275,12 @@ python tools/check_shots.py    # 截图像素校验
   `probe_sync` +「自然化棱边」段（1829/0；负对照旧实现 + 新断言 = bad=1 FAIL 干净）；
   `probe_shots` +`game_closeup`（6 图）；`check_shots` 25→29；全 22 闸绿（证据
   `logs/gates-20261018-t1nat/`）；store 实机五图副本刷新。决策记录 = 方案 §11.25。
+- 双端包重出（2026-10-18）**已完成**：开屏动画/开屏提速/菜单限帧/自然化 T1 四项增量后重出——
+  `game.exe` 109,551,432B 复签 **Valid**（签名后与 v2.2 包**逐字节同哈希** `0539d11b…2285bc`，
+  「exe = 内容无关模板件」第三次实证）+ 同目录 selfcheck **31/0**；`game.pck` 109,800,796B；
+  `reroute-release.apk` 312,119,839B（apksigner v2/v3 true，CN=Reroute）；`reroute-windows.zip`
+  183,669,125B（192 条目，testzip None-bad）。SHA：pck `153082ee…d9c5` / apk `44956252…f053` /
+  zip `0a6a324f…c1992`。证据 `logs/gates-20261018-t1nat/export-*`；决策记录 = 方案 §11.26。
 
 ---
 
