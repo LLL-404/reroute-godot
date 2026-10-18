@@ -26,14 +26,17 @@ const VECTORS := [
 var state: int
 
 
+## 以 seed 置状态（每个世界/布局各自实例）
 func _init(seed: int) -> void:
 	state = seed
 
 
+## 还原状态（存档读回，确定性续跑）
 func restore(s: int) -> void:
 	state = s
 
 
+## 生成下一个 64 位（SplitMix64 三步混合；右移走 Lua64.lshr 保逻辑移）
 func next_u64() -> int:
 	var s := state + GAMMA # 加法自然回绕 = ulong 语义
 	state = s

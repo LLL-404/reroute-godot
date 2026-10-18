@@ -453,6 +453,7 @@ func find_attack_target(unit: Dictionary) -> int:
 	return best["id"] if best != null else -1
 
 
+## 围点评分 = 自身与六邻到目标的最小流场距离（NEAREST 塔选围攻点的依据）
 func score_around(x: int, y: int) -> int:
 	var best := INT64_MAX
 	var self_d := field.dist_at(x, y)
@@ -472,6 +473,7 @@ func building_at(x: int, y: int):
 	return by_cell.get(grid.idx(x, y))
 
 
+## 扣建筑血量：归零即拆除（核心毁 = 判负；塌墙恢复 Open，流场当 tick 追平）
 func damage_building(id: int, dmg: int) -> void:
 	for i in buildings.size():
 		var b: Dictionary = buildings[i]
@@ -553,6 +555,7 @@ func judge() -> void:
 # ---------------- 规范状态编码（STATE_SCHEMA=6）----------------
 # tick | rng | grid | 供给/结局/开门/战果 | 单位表按 id 升序 | 建筑表按 id 升序。
 # 流场是派生态，不进指纹。
+## 规范状态编码：字段序 = tick|rng|grid|供给/结局/开门/战果|单位表|建筑表（指纹口径）
 func canonical_bytes() -> Canon.Buf:
 	var b := Canon.buffer()
 	b.put_u32(Canon.STATE_SCHEMA)

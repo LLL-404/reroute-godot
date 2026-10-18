@@ -106,6 +106,7 @@ var _band_lo := 0.0
 var _band_hi := 0.0
 
 
+## 构造注入：记宿主 + core（由 view._ready 组装）
 func _init(p_host: Node3D, p_core: ViewCoreScript) -> void:
 	host = p_host
 	core = p_core

@@ -58,12 +58,14 @@ func init(callbacks: Dictionary, hud_ref) -> void:
 
 # ---------------- 公开 API（对齐母版 Shell） ----------------
 
+## 打开标题页：懒建 + 刷新「读档存档」可用性 + 淡入
 func open_title() -> void:
 	_ensure("title")
 	_refresh_title()
 	_show("title")
 
 
+## 打开暂停页（懒建 + 淡入）
 func open_pause() -> void:
 	_ensure("pause")
 	_show("pause")
@@ -82,6 +84,7 @@ func close_all() -> void:
 	_hide_confirm()
 
 
+## 打开结算页：注入胜负标题（色 = hp|danger）与统计文案
 func open_gameover(won: bool, world) -> void:
 	_ensure("gameover")
 	go_title.text = "防线守住了！" if won else "防线失守"
@@ -116,6 +119,7 @@ func open_quit_confirm() -> void:
 	open_confirm("确定退出游戏？", func() -> void: cb["quit"].call())
 
 
+## 当前页名（"" = 对局中；main 消费做流转判定）
 func current_page() -> String:
 	return current
 
@@ -150,26 +154,31 @@ func update() -> void:
 
 # ---------------- 确认弹窗 ----------------
 
+## 确认弹窗是否开启
 func confirm_open() -> bool:
 	return confirm_layer != null and confirm_layer.visible
 
 
+## 关闭确认弹窗（等同取消，不触发回调）
 func close_confirm() -> void:
 	_hide_confirm()
 
 
+## 打开确认弹窗：文本 + 确定回调（取消即丢弃）
 func open_confirm(text: String, fn: Callable) -> void:
 	confirm_text.text = text
 	_confirm_cb = fn
 	confirm_layer.visible = true
 
 
+## 隐藏弹窗并清空回调（幂等）
 func _hide_confirm() -> void:
 	if confirm_layer != null:
 		confirm_layer.visible = false
 	_confirm_cb = Callable()
 
 
+## 弹窗结果路由：ok 且回调有效才执行
 func _resolve_confirm(ok: bool) -> void:
 	var fn := _confirm_cb
 	_hide_confirm()
@@ -177,6 +186,7 @@ func _resolve_confirm(ok: bool) -> void:
 		fn.call()
 
 
+## 构建全局确认弹窗层（晚于 host 加入 → 永在最上）
 func _build_confirm() -> void:
 	confirm_layer = Control.new()
 	confirm_layer.name = "ConfirmLayer"
@@ -228,10 +238,12 @@ func _build_confirm() -> void:
 
 # ---------------- 页面构建 ----------------
 
+## 样式盒快捷构造：委托 ui_style 工厂（唯一真源）
 func _flat(bg: Color, border: Color, radius: int, border_w: int = 1) -> StyleBoxFlat:
 	return UiStyle.flat(bg, border, radius, border_w) # 委托样式工厂（唯一真源 ui_style.gd）
 
 
+## 标签快捷构造：serif=true 走 Noto Serif 子集（屏标题专用）
 func _label(text: String, fs: float, color: Color, serif := false, glow := false) -> Label:
 	return UiStyle.label(text, fs, color, F_SERIF if serif else null, true, glow)
 
@@ -269,6 +281,7 @@ func _rule() -> ColorRect:
 	return r
 
 
+## 按钮快捷构造：主题变体（发射器 a）+ A1 光边；pad_left ≥0 时复制样式盒加左距
 func _button(text: String, primary: bool, w: float, h: float, fs: float, fn: Callable, pad_left: float = -1.0) -> Button:
 	var b := Button.new()
 	b.text = text
@@ -289,6 +302,7 @@ func _button(text: String, primary: bool, w: float, h: float, fs: float, fn: Cal
 	return b
 
 
+## 页面底板：全屏吃指针 + 幕色 + 氛围层（A5 暗角 + A4 噪粒）
 func _page_base(veil: Color) -> Control:
 	var page := Control.new()
 	page.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -307,6 +321,7 @@ func _style_slider(s: HSlider) -> void:
 	s.theme_type_variation = UiStyle.SLIDER_VAR
 
 
+## 构建标题页：底部渐暗帷幕 + 左列式菜单 + 玩法说明浮层
 func _build_title() -> Control:
 	var page := Control.new()
 	page.name = "page_title"
@@ -423,6 +438,7 @@ func _build_title() -> Control:
 	return page
 
 
+## 构建暂停页（继续 / 保存进度 / 设置 / 重开本局 / 回标题）
 func _build_pause() -> Control:
 	var page := _page_base(UiStyle.VEIL_SOFT)
 	page.name = "page_pause"
@@ -468,6 +484,7 @@ func _build_pause() -> Control:
 	return page
 
 
+## 构建结算页（胜负标题 + 统计文案 + 再来一局 / 回标题）
 func _build_gameover() -> Control:
 	var page := _page_base(UiStyle.VEIL_HEAVY)
 	page.name = "page_gameover"
@@ -507,6 +524,7 @@ func _build_gameover() -> Control:
 	return page
 
 
+## 构建存档页（3 槽：读档|存档双模式 + 删除 + 状态行）
 func _build_slots() -> Control:
 	var page := _page_base(UiStyle.VEIL_PAGE)
 	page.name = "page_slots"
@@ -554,6 +572,7 @@ func _build_slots() -> Control:
 	return page
 
 
+## 构建设置页（音乐/音效滑杆 + 全屏开关；改值即应用并落盘）
 func _build_settings() -> Control:
 	var page := _page_base(UiStyle.VEIL_PAGE)
 	page.name = "page_settings"
@@ -661,6 +680,7 @@ func _refresh_title() -> void:
 	btn.disabled = not SaveIO.has_any()
 
 
+## 按模式刷新槽位：读档空槽禁用；删除钮仅读档且非空时显示
 func _refresh_slots() -> void:
 	var page: Control = pages["slots"]
 	for info in SaveIO.list_slots():
@@ -673,6 +693,7 @@ func _refresh_slots() -> void:
 		del.visible = slots_mode == "load" and not empty
 
 
+## 槽位行文本：空 / 无效原因 / 波次 + 时长 + 存档时间
 func _slot_row_text(info: Dictionary) -> String:
 	var slot: int = info["slot"]
 	if info.get("empty", true):
@@ -688,11 +709,13 @@ func _slot_row_text(info: Dictionary) -> String:
 	return "槽 %d · %s · %d:%02d%s" % [slot, wtext, t / 60, t % 60, tail]
 
 
+## 更新存档页状态行（操作反馈）
 func _set_slot_status(text: String) -> void:
 	var status: Label = pages["slots"].find_child("label_slot_status", true, false)
 	status.text = text
 
 
+## 槽位点击：读档走 cb.load_slot；存档走空槽直存或覆盖确认
 func _on_slot_pressed(slot: int) -> void:
 	var info := SaveIO.slot_info(slot)
 	if slots_mode == "load":
@@ -713,12 +736,14 @@ func _on_slot_pressed(slot: int) -> void:
 				_do_save(slot))
 
 
+## 执行存档并回报状态（覆盖确认 / 空槽直存共用）
 func _do_save(slot: int) -> void:
 	var ok: bool = cb["save_slot"].call(slot)
 	_set_slot_status("已保存到槽 %d" % slot if ok else "存档写入失败")
 	_refresh_slots()
 
 
+## 删除槽位：先弹确认，确认后删除并刷新
 func _on_slot_delete(slot: int) -> void:
 	open_confirm("删除槽 %d 的存档？" % slot, func() -> void:
 		SaveIO.delete_slot(slot)
@@ -728,6 +753,7 @@ func _on_slot_delete(slot: int) -> void:
 
 # ---------------- 设置页行为 ----------------
 
+## 设置页回填：读 cfg 填入滑杆/开关（no_signal 防触发落盘）
 func _load_settings_into_ui() -> void:
 	_cfg = UserSettings.load_cfg()
 	var page: Control = pages["settings"]
@@ -745,6 +771,7 @@ func _load_settings_into_ui() -> void:
 	row_fs.visible = OS.get_name() != "Android" # Android 恒全屏，隐藏该行
 
 
+## 应用音频设置并落盘（滑杆改动回调）
 func _apply_settings() -> void:
 	UserSettings.apply_audio(_cfg)
 	UserSettings.save_cfg(_cfg)

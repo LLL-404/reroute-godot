@@ -44,6 +44,7 @@ var bad := 0
 var fail_list: Array = []
 
 
+## 执行全部自检项并返回退出码（0=全过 / 1=有败；导出包验收入口）
 func run(main) -> int:
 	var vi: Dictionary = Engine.get_version_info()
 	print("[SELFCHECK] godot=", str(vi.get("string", "?")), " editor=", str(OS.has_feature("editor")))
@@ -203,17 +204,20 @@ func run(main) -> int:
 	return 0 if bad == 0 else 1
 
 
+## 记录一条失败（bad 计数 + 列表留证）
 func _fail(msg: String) -> void:
 	bad += 1
 	fail_list.append(msg)
 
 
+## 布尔断言：计 checks，不过则记录 label
 func _chk(cond: bool, label: String) -> void:
 	checks += 1
 	if not cond:
 		_fail(label)
 
 
+## 整数断言：计 checks，不过则记录 got/want
 func _cmpi(got: int, want: int, label: String) -> void:
 	checks += 1
 	if got != want:

@@ -17,6 +17,7 @@ static func _parse_json(txt: String) -> Variant:
 	return JSON.parse_string(t)
 
 
+## 槽位号 → 存档文件路径（user://save_slotN.json）
 static func slot_path(slot: int) -> String:
 	return "user://save_slot%d.json" % slot
 

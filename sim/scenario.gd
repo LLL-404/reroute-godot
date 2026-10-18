@@ -46,6 +46,7 @@ var _p: Dictionary # 本局布局参数（MapGen 产物；模板几何静态面�
 var _barrier: Dictionary # 屏障 SOLID 集合（已扣咽喉缺口；"x,y" 键）
 
 
+## 构造剧本：固定节拍/波表常量 + 按 seed 生成布局参数（MapGen）并自校验
 func _init(p_seed: int = DEFAULT_SEED) -> void:
 	seed = p_seed
 	w = 64
@@ -303,6 +304,7 @@ func check_plug_open(g: Grid) -> String:
 	return "插口挖开后盆地口仍不可达"
 
 
+## 核心为源的临时流场跑到收敛（布局自校验的距离场）
 func _dist_from_core(g: Grid) -> FlowField:
 	var ff := FlowField.new(g, false)
 	ff.begin([core])
@@ -311,6 +313,7 @@ func _dist_from_core(g: Grid) -> FlowField:
 	return ff
 
 
+## 布局自校验：建图合法 + 插口挖开后盆地口可达（默认种子必须全过）
 func _validate_layout() -> bool:
 	if check_grid(build_grid()) != "":
 		return false

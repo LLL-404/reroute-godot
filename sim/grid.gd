@@ -63,6 +63,7 @@ var rev: int
 var height_rev: int # 仅运行时改高递增；视图用它检测等量反向改高
 
 
+## 建图：cells/hgt 初值填充 + padded 镜像（fill=OPEN 时 pmap 内区全通）
 func _init(pw: int, ph: int, fill: int = OPEN) -> void:
 	assert(pw > 0 and ph > 0, "地图尺寸必须为正，实得 %d×%d" % [pw, ph])
 	w = pw
@@ -96,6 +97,7 @@ func get_h(x: int, y: int) -> int:
 	return hgt[y * w + x]
 
 
+## 改格高度（rev / height_rev 双递增：改高即改道，流场全量重建）
 func set_h(x: int, y: int, v: int) -> void:
 	var i := y * w + x
 	if hgt[i] == v:
@@ -112,6 +114,7 @@ func init_h(x: int, y: int, v: int) -> void:
 	hp[pad_idx(x, y)] = v
 
 
+## 界内判定
 func inb(x: int, y: int) -> bool:
 	return x >= 0 and y >= 0 and x < w and y < h
 
@@ -129,6 +132,7 @@ func pad_idx(x: int, y: int) -> int:
 	return (y + 1) * stride + (x + 1)
 
 
+## 格类型（界外 = SOLID）
 func at(x: int, y: int) -> int:
 	if not inb(x, y):
 		return SOLID
@@ -140,6 +144,7 @@ func passable(x: int, y: int) -> bool:
 	return inb(x, y) and cells[y * w + x] == OPEN
 
 
+## 改格类型（pmap 同步 + rev 递增；值不变则空转）
 func set_cell(x: int, y: int, cell: int) -> void:
 	var i := y * w + x
 	if cells[i] == cell:

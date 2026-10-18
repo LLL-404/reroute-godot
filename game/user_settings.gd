@@ -14,6 +14,7 @@ const VOL_MAX := 100
 const MUTE_DB := -80.0
 
 
+## 默认配置：音量满格 / 非全屏（首次启动与原行为一致）
 static func default_cfg() -> Dictionary:
 	return { "music": VOL_MAX, "sfx": VOL_MAX, "fullscreen": false }
 
@@ -55,6 +56,7 @@ static func apply_audio(cfg: Dictionary) -> void:
 	_set_bus_volume(SFX_BUS, int(cfg.get("sfx", VOL_MAX)))
 
 
+## 设单条 bus 音量：0 → -80dB 静音；否则线性增益转 dB
 static func _set_bus_volume(bus_name: String, vol: int) -> void:
 	var idx := ensure_bus(bus_name)
 	var v := clampi(vol, VOL_MIN, VOL_MAX)
@@ -72,6 +74,7 @@ static func apply_video(cfg: Dictionary) -> void:
 		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN if want_fs else DisplayServer.WINDOW_MODE_WINDOWED)
 
 
+## 应用全部设置（启动即用 / 设置页改动后的统一入口）
 static func apply_all(cfg: Dictionary) -> void:
 	apply_audio(cfg)
 	apply_video(cfg)

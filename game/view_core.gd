@@ -54,6 +54,7 @@ var _fit_w := 0.0
 var _fit_h := 0.0
 
 
+## 构造注入：记宿主节点（环境/灯光/相机挂其下；由 view._ready 组装）
 func _init(p_host: Node3D) -> void:
 	host = p_host
 

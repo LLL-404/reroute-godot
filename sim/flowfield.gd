@@ -29,6 +29,7 @@ var slots: int
 var pops: int
 
 
+## 初始化：padded 距离/定稿表 + 6 向邻居增量（按行奇偶）+ 桶头；begin 前 dist 全 -1
 func _init(pgrid: Grid, pignore_h: bool = false) -> void:
 	grid = pgrid
 	ignore_h = pignore_h
@@ -80,6 +81,7 @@ func begin(goals: Array) -> void:
 				push(0, p)
 
 
+## 是否收敛：待处理桶项清空（校验/探针的循环终止判据）
 func done() -> bool:
 	return pending == 0
 
@@ -102,6 +104,7 @@ func step(budget: int) -> void:
 			relax(cell, cur) # 陈旧项：首次出桶已定稿，跳过
 
 
+## 定稿 p 并六向扩张：实走边 p→nb 爬 ≤1、下崖任意（单向崖）；ignore_h 免高度检查
 func relax(p: int, d: int) -> void:
 	settled[p] = 1
 	var pmap := grid.pmap
@@ -120,6 +123,7 @@ func relax(p: int, d: int) -> void:
 						push(nd, nb)
 
 
+## 入桶（距离 d 的链表头插，惰性删除）；超理论上界丢弃 = 宁可得不到这条路
 func push(d: int, cell: int) -> void:
 	if d > max_d:
 		return # 超出理论距离上界 = 编程错误，宁可得不到这条路
@@ -133,6 +137,7 @@ func push(d: int, cell: int) -> void:
 	pending += 1
 
 
+## 找 ≥from 的下一个非空桶（无则 -1）
 func next_nonempty_bucket(from: int) -> int:
 	if from < 0:
 		from = 0
@@ -142,6 +147,7 @@ func next_nonempty_bucket(from: int) -> int:
 	return -1
 
 
+## 查询距离（界外 / 未达 = -1）
 func dist_at(x: int, y: int) -> int:
 	if not grid.inb(x, y):
 		return -1

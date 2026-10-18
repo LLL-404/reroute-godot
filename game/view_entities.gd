@@ -56,6 +56,7 @@ var _core_hit_tick := -999 # 最近核心受击音节流点
 var _stat_solids := 0
 
 
+## 构造注入：记宿主 + core/terrain/audio 组件（由 view._ready 组装）
 func _init(p_host: Node3D, p_core: ViewCoreScript, p_terrain: ViewTerrainScript, p_audio: ViewAudioScript) -> void:
 	host = p_host
 	core = p_core

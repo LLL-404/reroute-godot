@@ -42,6 +42,7 @@ class Buf extends RefCounted:
 		return Canon.fnv1a32(data, data.size())
 
 
+## 新建编码缓冲（Buf 工厂；put_* 系列按字段序书写）
 static func buffer() -> Canon.Buf:
 	return Canon.Buf.new()
 

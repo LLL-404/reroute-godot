@@ -28,6 +28,7 @@ static func ihash(x: int, z: int, seed: int) -> float:
 	return float(n) / 2147483647.0
 
 
+## 值噪声：四角格点 ihash 双线性插值，五次平滑权重（C² 连续，去格子感）
 static func vnoise(x: float, z: float, seed: int) -> float:
 	var ix := int(floor(x))
 	var iz := int(floor(z))
@@ -57,10 +58,12 @@ static func fbm(x: float, z: float, oct: int, seed: int) -> float:
 	return sum / norm
 
 
+## 高斯衰减核：距离 d、尺度 s（地标 peak/ridge/basin 的径向衰减权重）
 static func gauss(d: float, s: float) -> float:
 	return exp(-(d * d) / (2.0 * s * s))
 
 
+## smoothstep 归一：t 钳到 [0,1]，取 3t²-2t³（门控/权重公共曲线）
 static func smooth01(t: float) -> float:
 	var tt := clampf(t, 0.0, 1.0)
 	return tt * tt * (3.0 - 2.0 * tt)

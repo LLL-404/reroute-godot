@@ -55,6 +55,7 @@ var _prewarmed := false # 首拍预热帧已下发
 var _ticks := 0 # _process 拍数（第 2 拍起停画主世界）
 
 
+## 初始化：层级 30（HUD 10 / 壳 20 之上，整屏覆盖）
 func _init() -> void:
 	layer = 30 # HUD(10) / 壳(20) 之上，整屏覆盖
 
@@ -113,6 +114,7 @@ func begin(sfx_cb: Callable = Callable(), dark: Dictionary = {}) -> void:
 		sfx_cb.call("intro_stinger.mp3", 0.9)
 
 
+## 构建 3D 子场景：晶体 + 固定机位 + 三灯 + 环境泛光 + 玉色光团 + 金尘（meta 寄存供 _process 驱动）
 func _build_3d() -> void:
 	var world := Node3D.new()
 	world.name = "World"
@@ -287,6 +289,7 @@ func _build_ui() -> void:
 		_char_base_y.append((_char_labels[i] as Label).position.y)
 
 
+## 标题逐字布局：衬线子集无空格字形 → 手动字距；金线与副标语同步定位
 func _layout_chars() -> void:
 	var s := _S()
 	var gap := 26.0 * s
@@ -322,10 +325,12 @@ func _col(k: String) -> Color:
 	return COL_GOLD
 
 
+## 全局缩放系数：按视口高换算（816 基准，钳 1.0..1.6）
 func _S() -> float:
 	return clampf(float(_vp_h) / 816.0, 1.0, 1.6)
 
 
+## 当前相位 0..4：P0 黑场 / P1 晶体 / P2 金字 / P3 标语 / P4 淡出（探针断言用）
 func phase() -> int:
 	# 0..4：P0 黑场 / P1 晶体 / P2 金字 / P3 标语 / P4 淡出（skip 语义归 P4）
 	if t < T_P1:
@@ -346,6 +351,7 @@ func _out_alpha() -> float:
 	return 1.0 - clampf((t - T_P4) / (DUR - T_P4), 0.0, 1.0)
 
 
+## 状态机主拍：t 推进（skip 25× 快进）→ 主世界停画窗口 → 字/线/标语/黑幕按 t 解析 → 3D 灯光/转速/推近 → DUR 释放
 func _process(dt: float) -> void:
 	if done:
 		return
@@ -431,12 +437,14 @@ func _process(dt: float) -> void:
 		queue_free()
 
 
+## 入树：桌面隐藏鼠标（移动端保留触摸指针语义）
 func _enter_tree() -> void:
 	_old_mouse = int(Input.mouse_mode)
 	if not (OS.has_feature("android") or OS.has_feature("ios")):
 		Input.mouse_mode = Input.MOUSE_MODE_HIDDEN
 
 
+## 退树：还原鼠标模式 + 安全网恢复主世界渲染（任何退出路径）
 func _exit_tree() -> void:
 	if _old_mouse >= 0:
 		Input.mouse_mode = _old_mouse

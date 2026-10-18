@@ -144,6 +144,7 @@ func start_match() -> void:
 	shell.close_all()
 
 
+## 暂停（仅进行中且未暂停时有效；HUD 按钮 / Esc / 安卓返回共用）
 func pause_game() -> void:
 	if world.outcome != World.RUNNING or paused:
 		return
@@ -152,6 +153,7 @@ func pause_game() -> void:
 	shell.open_pause()
 
 
+## 继续对局（暂停页「继续」按钮）
 func resume_game() -> void:
 	if not paused:
 		return
@@ -159,12 +161,14 @@ func resume_game() -> void:
 	shell.resume()
 
 
-func restart_game() -> void: # 暂停/结算 → 重开一局
+## 暂停/结算 → 重开一局
+func restart_game() -> void:
 	new_game()
 	start_match()
 
 
-func to_title() -> void: # 暂停/结算 → 标题：备一局新的压着静态战场
+## 暂停/结算 → 标题：备一局新的压着静态战场
+func to_title() -> void:
 	paused = true
 	drag_start = Vector2i(-1, -1)
 	hud.set_visible_hud(false)
@@ -250,23 +254,28 @@ func _android_back_handle() -> void:
 		shell.handle_key(KEY_ESCAPE)
 
 
+## 系统通知入口：Android 返回手势统一路由（其余通知忽略）
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_WM_GO_BACK_REQUEST:
 		_android_back_handle()
 
 
+## HUD 回调：顶栏模式按钮 → 设置操作模式
 func _on_hud_mode(m: String) -> void:
 	set_mode(m)
 
 
+## HUD 回调：顶栏暂停按钮 → 进暂停页
 func _on_hud_pause() -> void:
 	pause_game()
 
 
+## HUD 回调：顶栏热层按钮 → 威胁热层开关
 func _on_hud_heat() -> void:
 	toggle_heat()
 
 
+## HUD 回调：英雄技能按钮 → 下发冲击波命令（冷却/终局守卫在模拟层）
 func _on_hud_skill() -> void:
 	if world != null and int(world.hero["skill_cd"]) == 0:
 		world.apply_command({ "kind": "shock" }) # 冷却/终局守卫在模拟层
@@ -286,6 +295,7 @@ func _visual_anchor() -> Dictionary:
 	}
 
 
+## 开新局：局号 +1 → 新玩法地图 + 蓝图视觉 + 世界重置（标题/重开共用）
 func new_game() -> void:
 	run_index += 1
 	sc = Scenario.new(BASE_SEED + run_index) # 玩法地图 = 每局一套布局（与 RNG 种子同源，确定性）

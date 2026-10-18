@@ -25,6 +25,7 @@ var terrain: ViewTerrainScript
 var entities: ViewEntitiesScript
 
 
+## 视图启动：组装四组件 + 首局 canyon 地貌 + 相机取景 + 音频（顺序 = 原单文件初始化）
 func _ready() -> void:
 	# 组件组装（顺序 = 原单文件初始化顺序：模型管理器 → 渲染基建 → 场地根 → 首局地貌 → 相机 → 音频）
 	core = ViewCoreScript.new(self)

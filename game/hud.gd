@@ -139,10 +139,12 @@ func build(cb: Dictionary) -> void:
 
 # ---------------- 构建 ----------------
 
+## 样式盒快捷构造：委托 ui_style 工厂（唯一真源）
 func _flat(bg: Color, border: Color, radius: int, border_w: int = 1) -> StyleBoxFlat:
 	return UiStyle.flat(bg, border, radius, border_w) # 委托样式工厂（唯一真源 ui_style.gd）
 
 
+## 按钮成套样式：尺寸/字体四态色 + 样式盒 override（发射器 b）+ A1 顶缘光边
 func _style_button(b: Button, w: float, h: float, fs: float) -> void:
 	b.custom_minimum_size = Vector2(w, h)
 	b.size = Vector2(w, h)
@@ -161,10 +163,12 @@ func _style_button(b: Button, w: float, h: float, fs: float) -> void:
 	UiStyle.edge_dress(b, DARK["edge_hi"], UiStyle.RULE) # A1 光边
 
 
+## 标签快捷构造：委托 ui_style 工厂（glow = 金字辉光）
 func _make_label(text: String, fs: float, color: Color, glow: bool = false) -> Label:
 	return UiStyle.label(text, fs, color, null, false, glow)
 
 
+## 构建顶栏：核心血条（三道刻度线）+ 波次 + 供给 + 热层/暂停钮
 func _build_top_bar() -> void:
 	top_bar = Panel.new()
 	top_bar.mouse_filter = Control.MOUSE_FILTER_STOP
@@ -239,6 +243,7 @@ func _build_top_bar() -> void:
 	top_bar.add_child(pause_btn)
 
 
+## 构建左上提示徽章（放墙改道提示；点击排除第三区）
 func _build_hint() -> void:
 	hint_panel = PanelContainer.new()
 	hint_panel.mouse_filter = Control.MOUSE_FILTER_STOP
@@ -255,6 +260,7 @@ func _build_hint() -> void:
 	_toplevel.append(hint_panel)
 
 
+## 构建右下操作模式列（墙/塔/挖矿/填高/挖低/拆/英雄 共 7 钮）
 func _build_mode_col() -> void:
 	mode_buttons = {}
 	for m in MODE_LABELS:
@@ -270,6 +276,7 @@ func _build_mode_col() -> void:
 		_toplevel.append(btn)
 
 
+## 构建技能钮（震荡波；冷却期禁用并显示剩余秒）
 func _build_skill_btn() -> void:
 	skill_btn = Button.new()
 	skill_btn.text = "震荡波"
@@ -281,6 +288,7 @@ func _build_skill_btn() -> void:
 	_toplevel.append(skill_btn)
 
 
+## 构建波次/暗门横幅（卡片 + 左金条强调 + 标题/副标题两行）
 func _build_banner() -> void:
 	banner_root = Control.new()
 	banner_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -309,6 +317,7 @@ func _build_banner() -> void:
 	banner_root.add_child(banner_card)
 
 
+## 构建击杀赏金浮字池（FLOAT_N 个复用 Label，轮转取用）
 func _build_floats() -> void:
 	floats = []
 	for _i in FLOAT_N:
@@ -411,6 +420,7 @@ func _layout() -> void:
 
 # ---------------- 命中区（main 点击排除的唯一来源） ----------------
 
+## 点击排除区（唯一来源）：顶栏条 / 右下角钮区 / 提示徽章三块
 func hit_regions() -> Array:
 	var win := get_viewport().get_visible_rect().size
 	safe = _compute_safe()
@@ -443,6 +453,7 @@ func set_visible_hud(vis: bool) -> void:
 			el2.visible = false
 
 
+## 切换操作模式：点亮对应钮（金色 active 底），其余复位常态
 func set_mode(m: String) -> void:
 	mode = m
 	for key in mode_buttons:

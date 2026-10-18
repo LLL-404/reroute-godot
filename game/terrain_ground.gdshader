@@ -28,6 +28,7 @@ uniform float rock_soft_up = 1.05; // 岩面风格化顶光补偿（陡壁面世
 varying vec3 v_wpos;
 varying vec3 v_wnrm;
 
+// 顶点：世界空间位置 + 世界法线（三平面采样与顶光补偿的输入）
 void vertex() {
 	v_wpos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
 	v_wnrm = normalize(mat3(MODEL_MATRIX) * NORMAL);
@@ -49,6 +50,7 @@ vec3 tri_n(sampler2D t, vec3 uv, vec3 w, float s) {
 	return normalize(wx + wy + wz);
 }
 
+// 片元：沙/岩三平面采样按顶点色 a 混合；法线经顶光补偿后转视图空间
 void fragment() {
 	vec3 n = normalize(v_wnrm);
 	vec3 w = pow(abs(n), vec3(6.0));

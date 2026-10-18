@@ -80,6 +80,7 @@ static func generate(seed: int, salt: int = 0, is_default: bool = false) -> Dict
 	return _generate_varied(seed, salt)
 
 
+## 变奏采样：RNG(seed+salt·1000003) 抽参数（咽喉错位/盆地/插口/矿带/微丘 16 次重试）
 static func _generate_varied(seed: int, salt: int) -> Dictionary:
 	var rng := Rng.new(seed + salt * 1000003)
 	var core_x := 28 + rng.next_int(11) # 28..38

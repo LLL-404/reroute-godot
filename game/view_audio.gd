@@ -19,6 +19,7 @@ var _sfx_next := 0 # 轮换下标
 var _streams: Dictionary = {} # 流缓存（每文件 load 一次）
 
 
+## 构造注入：记宿主节点（音频源挂其下；由 view._ready 组装）
 func _init(p_host: Node3D) -> void:
 	host = p_host
 
