@@ -185,6 +185,9 @@ func _initialize() -> void:
 	view.sync(world)
 	check(view.heat_enabled() == false and int(view.debug_stats()["heat"]) == 0, "热层关闭清空")
 
+	# ---- 落差边自然化（T1：分级 / 剖面形状 / 顶点账目 / 重建确定性）----
+	_terrain_edge_check(view, world)
+
 	# ---- 汇总 ----
 	check(moved_seen >= 20, "移动覆盖（moved_seen=%d）" % moved_seen)
 	_report()
@@ -321,6 +324,182 @@ func _find_free(world, x0: int, y0: int, x1: int, y1: int, exclude: Array, far_f
 				continue
 			return Vector2i(x, y)
 	return Vector2i(-1, -1)
+
+
+## 落差边自然化断言（2026-10-17 T1）：分级以**模拟高度差**为真值（Δ1=可爬坡/Δ≥2=崖壁/
+## 同层=石阶/实心邻=崖壁）；剖面 P0 恒在顶面边框线（无顶缝）且高度单调不增；网格顶点账目
+## 独立重算逐点吻合；同状态重建两次逐位一致。旧实现无 edge_kind_at → 本段干净 FAIL（负对照）。
+func _terrain_edge_check(view, world) -> void:
+	var T = view.terrain
+	if not (T.has_method("edge_kind_at") and T.has_method("edge_profile")):
+		fail("地形自然化接口缺失（edge_kind_at/edge_profile；负对照=旧实现）")
+		return
+	var core_cmap: Dictionary = view.core.get_script().get_script_constant_map()
+	var CELL_N: int = int(core_cmap["CELL_N"])
+
+	# 平整格（六邻同层且空置）→ 填两级验证分级真值
+	var c := _find_flat(world, CELL_N, 8, 24, 20, 34)
+	check(c.x >= 0, "平整格扫描（六邻同层 + 空置 + 邻界内）")
+	if c.x < 0:
+		return
+	var h0: int = world.grid.get_h(c.x, c.y)
+	world.apply_command({ "kind": "fill", "x": c.x, "y": c.y })
+	cmp_int(world.grid.get_h(c.x, c.y), h0 + 1, "填一级成功")
+	var kinds1 := _edge_kinds6(T, c)
+	check(_all_eq(kinds1, 1), "填一级后 6 边全为可爬坡 EDGE_RAMP（kinds=%s）" % str(kinds1))
+	world.apply_command({ "kind": "fill", "x": c.x, "y": c.y })
+	cmp_int(world.grid.get_h(c.x, c.y), h0 + 2, "填二级成功")
+	var kinds2 := _edge_kinds6(T, c)
+	check(_all_eq(kinds2, 2), "填二级后 6 边全为崖壁 EDGE_CLIFF（kinds=%s）" % str(kinds2))
+
+	# 重建后拿网格 → 顶点账目独立重算 + 确定性
+	view.sync(world)
+	var mesh: ArrayMesh = T._hex.mesh
+	var arr1: Array = mesh.surface_get_arrays(0)
+	var v1: PackedVector3Array = arr1[Mesh.ARRAY_VERTEX]
+	var i1: PackedInt32Array = arr1[Mesh.ARRAY_INDEX]
+	var expect := _edge_verts_expect(T, CELL_N)
+	cmp_int(v1.size(), expect, "顶点账目（独立重算：顶面 7×4096 + 逐边 strip×4×(双面×2)）")
+	check(v1.size() > 4096 * 7 and v1.size() < 4096 * 64, "顶点数量级可控（%d）" % v1.size())
+	T._rebuild_field()
+	var arr2: Array = T._hex.mesh.surface_get_arrays(0)
+	var v2: PackedVector3Array = arr2[Mesh.ARRAY_VERTEX]
+	var i2: PackedInt32Array = arr2[Mesh.ARRAY_INDEX]
+	check(v2 == v1 and i2 == i1, "同状态重建逐位一致（顶点 %d/索引 %d）" % [v1.size(), i1.size()])
+
+	# 剖面形状（当前 = 二级高格 vs 邻格：崖壁）
+	_profile_shape_check(T, CELL_N, c.x, c.y, 0, 2)
+	# 降一级 → 可爬坡剖面
+	world.apply_command({ "kind": "lower", "x": c.x, "y": c.y })
+	var hd: int = world.grid.get_h(c.x, c.y)
+	cmp_int(hd, h0 + 1, "降一级成功")
+	var kinds_l := _edge_kinds6(T, c)
+	check(_all_eq(kinds_l, 1), "降一级后 6 边回可爬坡（kinds=%s）" % str(kinds_l))
+	view.sync(world)
+	_profile_shape_check(T, CELL_N, c.x, c.y, 0, 1)
+
+	# 实心邻 → 崖壁；同层起伏 → 石阶（微差）
+	var se := _find_solid_edge(world, CELL_N)
+	check(se.x >= 0, "实心邻边扫描")
+	if se.x >= 0:
+		cmp_int(T.edge_kind_at(se.x, se.y, se.z), 2, "实心邻边 = 崖壁")
+	var me := _find_micro_edge(T, world, CELL_N)
+	check(me.x >= 0, "同层起伏边扫描")
+	if me.x >= 0:
+		cmp_int(T.edge_kind_at(me.x, me.y, me.z), 0, "同层高差边 = 石阶（微差）")
+
+
+## 剖面形状：P0 恒在顶面边框线（无顶缝）；末点贴低邻顶；高度单调不增；外伸在界内。
+func _profile_shape_check(T, CELL_N: int, x: int, y: int, k: int, kind: int) -> void:
+	var t: float = T._cell_top[y * CELL_N + x]
+	var nx := Grid.nx(x, y, k)
+	var ny := Grid.ny(x, y, k)
+	var t_lo: float = T._cell_top[ny * CELL_N + nx]
+	var p: PackedFloat64Array = T.edge_profile(x, y, k, t, t_lo, kind)
+	var pts: int = p.size() / 2
+	check(pts >= 4, "剖面点数 ≥4（kind=%d pts=%d）" % [kind, pts])
+	check(p[0] == 0.0 and p[1] == t, "剖面 P0 在顶面边框线（kind=%d）" % kind)
+	var r_end: float = p[p.size() - 2]
+	var h_end: float = p[p.size() - 1]
+	check(r_end >= 0.004 and r_end <= 0.6, "剖面末端外伸合范围（kind=%d r=%.3f）" % [kind, r_end])
+	check(h_end >= t_lo - 0.03 and h_end <= t_lo + 0.05, "剖面末点贴/沉低邻顶（kind=%d h=%.3f t_lo=%.3f）" % [kind, h_end, t_lo])
+	var desc := true
+	for j in range(1, pts):
+		if p[j * 2 + 1] > p[(j - 1) * 2 + 1] + 0.001:
+			desc = false
+	check(desc, "剖面高度单调不增（kind=%d）" % kind)
+
+
+## 顶点账目独立重算：顶面恒 7 顶点/格；界外边（崖壁·双面）按崖壁剖面 strip×4×2；
+## 内侧画出边按 kind 剖面点数（函数内自调 edge_profile 取点数，跟随实现演进）× 4 顶点；被跳过边 0。
+func _edge_verts_expect(T, CELL_N: int) -> int:
+	var total := 0
+	for y in CELL_N:
+		for x in CELL_N:
+			total += 7
+			var t: float = T._cell_top[y * CELL_N + x]
+			for k in 6:
+				var nx := Grid.nx(x, y, k)
+				var ny := Grid.ny(x, y, k)
+				if nx < 0 or ny < 0 or nx >= CELL_N or ny >= CELL_N:
+					var po: int = T.edge_profile(x, y, k, t, t - 1.0, T.EDGE_CLIFF).size() / 2
+					total += (po - 1) * 4 * 2
+					continue
+				var t2: float = T._cell_top[ny * CELL_N + nx]
+				if t <= t2 + 0.02:
+					continue
+				var pts: int = T.edge_profile(x, y, k, t, t2, T.edge_kind_at(x, y, k)).size() / 2
+				total += (pts - 1) * 4
+	return total
+
+
+func _find_flat(world, CELL_N: int, x0: int, y0: int, x1: int, y1: int) -> Vector2i:
+	for y in range(y0, y1 + 1):
+		for x in range(x0, x1 + 1):
+			if not world.grid.passable(x, y) or world.building_at(x, y) != null or not world.cell_vacant(x, y):
+				continue
+			var hr: Dictionary = world.hero
+			if x == int(hr["x"]) and y == int(hr["y"]):
+				continue
+			var h: int = world.grid.get_h(x, y)
+			var ok := true
+			for k in 6:
+				var nx := Grid.nx(x, y, k)
+				var ny := Grid.ny(x, y, k)
+				if nx < 0 or ny < 0 or nx >= CELL_N or ny >= CELL_N or not world.grid.passable(nx, ny) or world.grid.get_h(nx, ny) != h:
+					ok = false
+					break
+			if ok:
+				return Vector2i(x, y)
+	return Vector2i(-1, -1)
+
+
+func _find_solid_edge(world, CELL_N: int) -> Vector3i:
+	for y in CELL_N:
+		for x in CELL_N:
+			if not world.grid.passable(x, y):
+				continue
+			for k in 6:
+				var nx := Grid.nx(x, y, k)
+				var ny := Grid.ny(x, y, k)
+				if nx >= 0 and ny >= 0 and nx < CELL_N and ny < CELL_N and world.grid.at(nx, ny) == Grid.SOLID:
+					return Vector3i(x, y, k)
+	return Vector3i(-1, -1, -1)
+
+
+func _find_micro_edge(T, world, CELL_N: int) -> Vector3i:
+	for y in CELL_N:
+		for x in CELL_N:
+			if not world.grid.passable(x, y):
+				continue
+			var t: float = T._cell_top[y * CELL_N + x]
+			for k in 6:
+				var nx := Grid.nx(x, y, k)
+				var ny := Grid.ny(x, y, k)
+				if nx < 0 or ny < 0 or nx >= CELL_N or ny >= CELL_N:
+					continue
+				if not world.grid.passable(nx, ny):
+					continue
+				if world.grid.get_h(nx, ny) != world.grid.get_h(x, y):
+					continue
+				if t <= T._cell_top[ny * CELL_N + nx] + 0.02:
+					continue
+				return Vector3i(x, y, k)
+	return Vector3i(-1, -1, -1)
+
+
+func _edge_kinds6(T, c: Vector2i) -> Array:
+	var out := []
+	for k in 6:
+		out.append(T.edge_kind_at(c.x, c.y, k))
+	return out
+
+
+func _all_eq(arr: Array, v: int) -> bool:
+	for a in arr:
+		if a != v:
+			return false
+	return true
 
 
 ## 收口：统一夹具输出 + sync 专属 moved/match 附加列。

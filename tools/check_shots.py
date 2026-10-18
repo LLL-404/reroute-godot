@@ -5,6 +5,7 @@
 阈值取自 2026-10-13 实测渲染值（留 2-5 倍余量，防平台微差；真回归=关键色归零必触发）：
   warm=850724  teal=124  red=163694  green=575  diff(game,heat)=0.309  diff(game,ghost)=0.0009
 D1-5 追加：game_20x9.png（1600x720，20:9）/ game_narrow.png（960x720，4:3）尺寸+关键色。
+T1 追加：game_closeup.png（改造特写：填两级崖壁+裙脚 / 挖一级坑）尺寸+暖色下限。
 跑法：python tools/check_shots.py   （cwd=reroute-godot）
 判定：exit 0 + stdout 含 [SHOTS] PASS。
 """
@@ -121,6 +122,17 @@ if im_game is not None and im_ghost is not None:
     # 校准为 0.0001（真回归=ghost 截图与 game 完全相同 → d2≈0，仍被钳住；下方 green>200 为强信号）
     chk(d2 > 0.0001, 'game 与 ghost 差异不足 %.5f（阈值 0.0001）' % d2)
     print('[SHOTS] diff game-ghost=%.5f' % d2)
+
+# 自然化 T1：改造特写（填两级崖壁+裙脚 / 挖一级坑）；阈值保守（近景构图，真回归=空帧/纯色）
+im_close = load('game_closeup.png')
+chk(im_close is not None, 'game_closeup.png 存在')
+if im_close is not None:
+    chk(im_close.size == (W, H), 'game_closeup 尺寸 %s != %s' % (im_close.size, (W, H)))
+    colors3 = im_close.quantize(colors=256).getcolors()
+    chk(colors3 is not None and len(colors3) > 60, 'game_closeup 唯一色数过少 %d' % (len(colors3 or [])))
+    n_warm3 = scan(im_close, warm)
+    chk(n_warm3 > 300000, 'game_closeup 暖色地形不足 %d（阈值 300000）' % n_warm3)
+    print('[SHOTS] game_closeup warm=%d' % n_warm3)
 
 print('[SHOTS] checks=%d fail=%d' % (checks, len(fails)))
 for f in fails:

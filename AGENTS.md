@@ -267,6 +267,14 @@ python tools/check_shots.py    # 截图像素校验
   `main._sync_fps_cap()` 每帧按 `_camera_free()` 判据同步 Engine.max_fps——标题/暂停/结算
   60fps、对局不限；idle/开屏 240fps→60fps 稳定钉死（开屏 max 17.2ms，编译尖峰被帧预算
   吸收）；probe_smoke 31→34；全闸复验绿。
+- 地形改造自然化 T1（2026-10-18）**已完成**：填/挖落差边由直壁块改**剖面化自然壁**
+  （`view_terrain`：圆唇 + 斜壁/渣坡 + 沉底坡脚 + 沿边 ihash 微扰；按模拟高度差分级 = Δ0 石阶 /
+  Δ1 暖色可爬坡 / Δ≥2·实心·界外 层理崖壁 + 渣坡裙脚；顶面 100% 不动；非顶层点沿边 0.75×r
+  外延闭角缝）；`terrain_ground.gdshader` 增 `rock_soft_up=1.05`（岩权区法线向上偏借顶光——
+  **实测唯一有效墙面提亮杠杆**，顶点法线弯折对墙面光照零效果）+ `nrm_rock` 0.75 柔化。
+  `probe_sync` +「自然化棱边」段（1829/0；负对照旧实现 + 新断言 = bad=1 FAIL 干净）；
+  `probe_shots` +`game_closeup`（6 图）；`check_shots` 25→29；全 22 闸绿（证据
+  `logs/gates-20261018-t1nat/`）；store 实机五图副本刷新。决策记录 = 方案 §11.25。
 
 ---
 

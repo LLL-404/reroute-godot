@@ -22,7 +22,8 @@ uniform float tex_m_rock = 3.6;
 uniform float rough_sand = 0.62;
 uniform float rough_rock = 0.66; // 暗面粗糙度回收（0.74 实测发闷）
 uniform float nrm_sand = 0.75; // 法线强度（0=平，1=贴图全量）
-uniform float nrm_rock = 0.95; // 岩面法线回收（1.30 时暗面自遮蔽过重）
+uniform float nrm_rock = 0.75; // 岩面法线回收（1.30 时暗面自遮蔽过重）
+uniform float rock_soft_up = 1.05; // 岩面风格化顶光补偿（陡壁面世界法线向上偏 a×此值：借顶光/天光，消北侧阴影面死黑；2026-10-17 自然化调色）
 
 varying vec3 v_wpos;
 varying vec3 v_wnrm;
@@ -58,6 +59,8 @@ void fragment() {
 	vec3 sand_c = tri3(sand_col, suv, w) * sand_gain;
 	vec3 rock_c = tri3(rock_col, ruv, w) * rock_gain;
 	ALBEDO = mix(sand_c, rock_c, a) * COLOR.rgb;
-	NORMAL = normalize((VIEW_MATRIX * vec4(normalize(mix(tri_n(sand_nrm, suv, w, nrm_sand), tri_n(rock_nrm, ruv, w, nrm_rock), a)), 0.0)).xyz);
+	vec3 wn3 = normalize(mix(tri_n(sand_nrm, suv, w, nrm_sand), tri_n(rock_nrm, ruv, w, nrm_rock), a));
+	wn3 = normalize(wn3 + vec3(0.0, rock_soft_up * a, 0.0)); // 岩面顶光补偿（风格化：陡壁借顶光）
+	NORMAL = normalize((VIEW_MATRIX * vec4(wn3, 0.0)).xyz);
 	ROUGHNESS = mix(rough_sand, rough_rock, a);
 }

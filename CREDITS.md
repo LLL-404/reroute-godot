@@ -118,12 +118,12 @@ OFL 的「保留字体名称（Reserved Font Name）」条款。
 > 前身：`simhei.ttf`（中易黑体 SimHei，微软 Windows 系统字体）——**商业字体，授权面向系统内
 > 使用，不含随软件嵌入/再分发**。已于 2026-10-14 替换为 Noto Sans SC。详见 §四 R-1。
 
-### 3.4 截图 `shots/` —— 17 张
+### 3.4 截图 `shots/` —— 18 张
 
 自产运行截图（`game` / `heat` / `ghost` / `title` / `gameover` / `hud` / `asset_close` /
 `asset_game` / `model_blade_close` / `models_all` /
 `orient_cross` / `smoke_end` / `smoke_mid` / `slots` / `settings` / `game_20x9` /
-`game_narrow`）。来源：本机实跑。许可：项目自有。署名义务：无。
+`game_narrow` / `game_closeup`）。来源：本机实跑。许可：项目自有。署名义务：无。
 
 > 数量更正：本文初版写 13 张，系照抄 `docs/DEVELOPMENT-PLAN.md` 而未实测。
 > `ls shots/*.png | wc -l` = **15**。已同步修正开发方案。教训即本文 §一 的口径——
@@ -131,6 +131,8 @@ OFL 的「保留字体名称（Reserved Font Name）」条款。
 > D1 轮 +2（`game_20x9`/`game_narrow`）→ 现 **19**。
 > 10-17 清旧 -2（`model_render`/`model_render_top` 为 UMD2 转换期渲染，展示职责由
 > `models_all` 承担）→ 现 **17**（`ls shots/*.png | wc -l` 实测）。
+> 10-18 自然化 T1 +1（`game_closeup` 改造特写：填两级崖壁+裙脚 / 挖一级坑）→ 现 **18**
+> （统计不含未跟踪的 `_tmp_*` 调试件）。
 
 ### 3.5 图标 `assets/icon/` —— 5 个文件
 
