@@ -151,3 +151,11 @@ func register(kit: TestKit) -> void:
 					continue
 				g7.set_cell(xx, yy, Grid.SOLID)
 		kit.ok(sc.check_plug_open(g7) != "", "死盆地未被拒"))
+
+	kit.test("rock-cells-readonly", func():
+		var sc := Scenario.new(20261004)
+		var rc: Array = sc.rock_cells()
+		kit.eq(rc.size(), 217, "快照岩群数")
+		rc.clear()
+		kit.eq(sc.rock_cells().size(), 217, "快照为拷贝（清空不回写）")
+		kit.ok(Scenario.new().rock_cells().is_empty(), "默认种子（历史路径）岩群空"))

@@ -6,8 +6,8 @@ extends RefCounted
 # 几何工具借 core；节点挂点统一走 host。
 # 2026-10-16 世界重做：旧「柱带 + 环带」方块拼装（_rebuild_field 柱体 / _rebuild_ring /
 # _collect_ring）已删除；SOLID 抬升融入同一网格（岩石色 + 1.6m）。
-# 2026-10-16 世界重做②（方案 §11.16）：边框崖壁加「周向起伏 + 南面出怪口豁口」
-# （_rim_scale，对齐当局 spawn 列），场外配色按高度岩化。
+# 2026-10-16 世界重做②（方案 §11.16）：边框崖壁加「周向起伏 + 出怪口豁口」
+# （_rim_scale，对齐当局主口；2026-10-19 拍2 起四侧/世界坐标口径），场外配色按高度岩化。
 # 2026-10-17 三平面贴图：_ground_mat → ShaderMaterial（ground093c/rock061 CC0），
 # 顶点色 a 位 = 岩石权值（沙/岩纹理按权混法线+色），rgb 维持既有分带/层理/抖动。
 # 2026-10-17 六边化（H3）：场区渲染由「lattice 邻格 max-blend」改为**逐格六棱板网格**
@@ -73,7 +73,7 @@ var grid: Grid = null
 var field_h: PackedFloat64Array
 var height_fn: Callable
 var cur_palette: Dictionary = {}
-var _gates := PackedFloat64Array() # 南面出怪口世界 x（崖壁豁口对齐当局 spawn 列）
+var _gate_pts: Array = [] # 出怪口世界坐标（Vector2；四侧）：崖壁豁口对齐当局主口，空 = 无豁口
 
 var heat_on := false
 var heat_root: Node3D = null
@@ -139,16 +139,23 @@ func ground_y(x: int, y: int) -> float:
 # ---- 蓝图 / 地形 ----
 
 ## 应用蓝图：换高度函数与场内高表、重建地面网格、重刷配色与雾。（R1 一次 + 每局一次）
-## anchor：地标位置对齐当局 Scenario（ridge_y/basin_y/core）；空 = 预设坐标（探针口径）。
+## anchor：地标位置对齐当局 Scenario（ridge_y/ridge_off/ridge_pts/basin_*/core gate_x/gate_pts）；
+## 空 = 预设坐标（探针口径）。
 func apply_blueprint(bp: Dictionary, seed: int, anchor: Dictionary = {}) -> void:
 	var composed: Array = Blueprint.compose(bp, seed, anchor)
 	height_fn = composed[0]
 	cur_palette = composed[1]
-	_gates = PackedFloat64Array()
-	var gx: Variant = anchor.get("gate_x", [])
-	if typeof(gx) == TYPE_ARRAY:
-		for v in gx:
-			_gates.append(float(v))
+	_gate_pts = []
+	var gp: Variant = anchor.get("gate_pts", [])
+	if typeof(gp) == TYPE_ARRAY and not gp.is_empty():
+		for v in gp:
+			var vv: Vector2 = v
+			_gate_pts.append(vv)
+	else:
+		var gx: Variant = anchor.get("gate_x", []) # 历史锚：南向 x 列表（等价位 Vector2(gx, 32)）
+		if typeof(gx) == TYPE_ARRAY:
+			for v in gx:
+				_gate_pts.append(Vector2(float(v), 32.0))
 
 	# 场内 64² 格高表：单位/建筑/幽灵/拾取的贴地全走这里
 	field_h = PackedFloat64Array()
@@ -565,14 +572,23 @@ func _edge_color(kind: int, sj: int, col: Color, h_mid: float, x: int, y: int, k
 	return Color(clampf(out.r * kj, 0.0, 1.0), clampf(out.g * kj, 0.0, 1.0), clampf(out.b * kj, 0.0, 1.0), a)
 
 
-## 边框崖壁高度系数：周向确定性起伏（去直边皱褶感）+ 南面出怪口豁口（对齐当局 spawn 列，限南沿）。
+## 边框崖壁高度系数：周向确定性起伏（去直边皱褶感）+ 出怪口豁口（对齐当局主口，四侧：
+## 本格侧别与口侧别一致才吃横向高斯；南向历史锚等价位 Vector2(gx, 32)）。
 func _rim_scale(x: int, y: int) -> float:
 	var s := 0.70 + 0.55 * Blueprint.ihash(x * 7 + 3, y * 7 - 5, 5521)
-	if y == core.CELL_N - 1 and not _gates.is_empty():
-		var wx := core.cell_to_world(x, y).x # 六边 odd-r：奇行 +0.5，必须走统一映射
+	if not _gate_pts.is_empty():
+		var w := core.cell_to_world(x, y) # 六边 odd-r：奇行 +0.5，必须走统一映射
+		var side := Blueprint.gate_side(w.x, w.z)
 		var m := 0.0
-		for gx in _gates:
-			var u := (wx - gx) / RIM_MOUTH_W
+		for gp0 in _gate_pts:
+			var gp: Vector2 = gp0
+			if Blueprint.gate_side(gp.x, gp.y) != side:
+				continue
+			var u := 0.0
+			if side <= 1:
+				u = (w.x - gp.x) / RIM_MOUTH_W # 南/北口：横向沿 x
+			else:
+				u = (w.z - gp.y) / RIM_MOUTH_W # 东/西口：横向沿 z
 			m = maxf(m, exp(-u * u))
 		s *= 1.0 - 0.85 * m # 豁口处崖壁近乎归零（留 1.6m SOLID 门槛石）
 	return s

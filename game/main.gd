@@ -309,18 +309,69 @@ func _on_hud_skill() -> void:
 
 
 ## 视觉地标锚点：岩脊/盆地/前哨峰对齐当局玩法图（纯表现层单向；sim 不知道本系统存在）。
+## 历史模板：单一岩脊行 + 南向 gate_x；自由路径（ridge_y<0）：预设岩脊关闭 → 岩野山体
+## （ridge_pts = 岩群聚类）+ 盆地 2D 凹陷 + 四侧视觉门（gate_pts，仅主口）。
 func _visual_anchor() -> Dictionary:
 	var gates: Array = []
-	for s in sc.spawns:
-		gates.append(float(s.x) - 31.5 + 0.5 * float(s.y & 1)) # 格 x → 世界 x（六边 odd-r：奇行 +0.5）
-	var a := {
-		"basin_y": float(sc.basin_rect.position.y) + float(sc.basin_rect.size.y - 1) * 0.5,
-		"core": sc.core,
-		"gate_x": gates,
-	}
+	var gate_pts: Array = []
+	var nm := maxi(sc.spawns.size() - 1, 0) # 主口数（末位 = 盆地口）
+	for i in sc.spawns.size():
+		var s: Vector2i = sc.spawns[i]
+		var wx := float(s.x) - 31.5 + 0.5 * float(s.y & 1) # 格 x → 世界 x（六边 odd-r：奇行 +0.5）
+		var wz := float(s.y) - 31.5
+		gates.append(wx)
+		if i < nm:
+			gate_pts.append(Vector2(wx, wz)) # 视觉门只对主口开（盆地口在场内，无外沿豁口）
+	var a := { "core": sc.core }
 	if sc.ridge_y >= 0:
-		a["ridge_y"] = sc.ridge_y + 1 # 自由路径无单一脊线（-1）→ 岩脊地标回落预设坐标
+		a["ridge_y"] = sc.ridge_y + 1 # 历史模板：岩脊地标对齐屏障行
+		a["basin_y"] = float(sc.basin_rect.position.y) + float(sc.basin_rect.size.y - 1) * 0.5
+		a["gate_x"] = gates
+		return a
+	var br := sc.basin_rect
+	var bcx := float(br.position.x) + float(br.size.x - 1) * 0.5
+	var bcy := float(br.position.y) + float(br.size.y - 1) * 0.5
+	a["gate_pts"] = gate_pts
+	a["ridge_off"] = true
+	a["ridge_pts"] = _rock_ridges()
+	a["basin_wx"] = bcx - 31.5 + 0.5 * float(int(round(bcy)) & 1)
+	a["basin_wz"] = bcy - 31.5
+	a["basin_sig"] = float(maxi(br.size.x, br.size.y)) * 0.42
 	return a
+
+
+## 岩野山体锚点：岩群格 → 8×8 桶聚类（n≥6，按强度降序取前 10，同分按桶键）→
+## [wx, wz, sigma, amp]；强度 w = min(n/30, 1)：sigma 2.3..4.0m、amp 0.8..1.7m。
+func _rock_ridges() -> Array:
+	var b := {}
+	for c in sc.rock_cells():
+		var cc: Vector2i = c
+		var key: int = (cc.x / 8) * 8 + cc.y / 8
+		var t: Array = b.get(key, [0, 0.0, 0.0])
+		t[0] += 1
+		t[1] += float(cc.x) - 31.5 + 0.5 * float(cc.y & 1)
+		t[2] += float(cc.y) - 31.5
+		b[key] = t
+	var keys: Array = b.keys()
+	keys.sort()
+	var pts: Array = []
+	for key in keys:
+		var t: Array = b[key]
+		var n: int = int(t[0])
+		if n < 6:
+			continue
+		var w := minf(float(n) / 30.0, 1.0)
+		pts.append([float(key), float(t[1]) / float(n), float(t[2]) / float(n), 2.3 + 1.7 * w, 0.8 + 0.9 * w])
+	pts.sort_custom(func(a: Array, bb: Array) -> bool:
+		if a[4] != bb[4]:
+			return a[4] > bb[4]
+		return a[0] < bb[0])
+	if pts.size() > 10:
+		pts.resize(10) # 上限：只留最强岩群，避免全图碎包
+	var out: Array = []
+	for p in pts:
+		out.append([p[1], p[2], p[3], p[4]])
+	return out
 
 
 ## 开新局：局号 +1 → 新玩法地图 + 蓝图视觉 + 世界重置（标题/重开共用）

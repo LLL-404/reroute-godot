@@ -314,6 +314,11 @@ func basin_cell() -> Vector2i:
 	return spawns[spawns.size() - 1]
 
 
+## 自由路径岩群格快照（生成序）：视觉层山体锚点用（只读拷贝；legacy 路径恒空）。
+func rock_cells() -> Array:
+	return _rock_arr.duplicate()
+
+
 # ============ 生成校验（不变量） ============
 
 ## 结构 + 连通性校验（生成重采样与测试共用；返回 "" = 合法）。

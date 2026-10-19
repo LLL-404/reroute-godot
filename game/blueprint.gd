@@ -76,7 +76,9 @@ const FINE_STEP := 0.5
 
 
 ## 地标位置锚定：把预设地标（岩脊/盆地/前哨峰）的坐标对齐到当局 Scenario。
-## anchor 键：ridge_y（岩脊行）/ basin_y（盆地中心行，float）/ core（Vector2i）。
+## anchor 键：ridge_y（岩脊行）/ ridge_off（自由路径：视觉岩脊交给 ridge_pts，预设幅度归零）/
+## basin_y（盆地中心行，float；历史 z 向条带）/ basin_wx + basin_wz（盆地中心世界坐标；给定 = 2D 径向）/
+## basin_sig（2D 盆地 sigma 覆盖）/ core（Vector2i）。gate_x / gate_pts / ridge_pts 在 compose 读。
 ## 缺省空字典 → 全用预设坐标（探针/自检的固定图口径不变）。
 static func _anchored_landmarks(bp: Dictionary, anchor: Dictionary) -> Array:
 	var out: Array = []
@@ -84,11 +86,18 @@ static func _anchored_landmarks(bp: Dictionary, anchor: Dictionary) -> Array:
 		var lm: Dictionary = (lm0 as Dictionary).duplicate()
 		match String(lm["kind"]):
 			"ridge":
-				if anchor.has("ridge_y"):
+				if anchor.get("ridge_off", false):
+					lm["amp"] = 0.0 # 自由路径：无单一岩脊玩法结构（山体改由岩野聚类承担）
+				elif anchor.has("ridge_y"):
 					lm["y"] = int(anchor["ridge_y"])
 			"basin":
-				if anchor.has("basin_y"):
+				if anchor.has("basin_wx"):
+					lm["wx"] = float(anchor["basin_wx"]) # 2D 模式：中心世界坐标（自由路径盆地矩形）
+					lm["wz"] = float(anchor["basin_wz"])
+				elif anchor.has("basin_y"):
 					lm["y"] = float(anchor["basin_y"])
+				if anchor.has("basin_sig"):
+					lm["sigma"] = float(anchor["basin_sig"])
 			"peak":
 				if anchor.has("core"):
 					var c: Vector2i = anchor["core"]
@@ -96,6 +105,14 @@ static func _anchored_landmarks(bp: Dictionary, anchor: Dictionary) -> Array:
 					lm["y"] = c.y
 		out.append(lm)
 	return out
+
+
+## 出怪口侧别分类（视觉门用）：0 南 / 1 北 / 2 东 / 3 西（资格轴 = 世界坐标绝对值较大者）。
+## blueprint 与 view_terrain 共用，避免两侧豁口判定漂移。
+static func gate_side(gx: float, gz: float) -> int:
+	if absf(gz) >= absf(gx):
+		return 0 if gz >= 0.0 else 1
+	return 2 if gx >= 0.0 else 3
 
 
 ## 阈值化拉普拉斯扩散侵蚀：曲率高处（崖脚/立沿）平滑、平坦处不动（塌积观感）。
@@ -138,8 +155,9 @@ static func _bake_eroded(base: Callable, iters: int) -> Callable:
 
 ## 返回 [h_fn: Callable(wx, wz) -> float, palette: Dictionary]。
 ## 地标用格子坐标换算：wz_c = y - HALF + 0.5；wx_c 另加六边 odd-r 奇行 +0.5（peak/core 用）。
-## 场外四层（g 门控渐入）：中频起伏 → 环山体（南面出怪口豁口）→ 台地原 → 远山剪影，
-## 与场内无缝衔接；gate_x（世界坐标 x 列表）来自 anchor（当局 spawn 列）或预设缺省。
+## 场外四层（g 门控渐入）：中频起伏 → 环山体（出怪口豁口，四侧）→ 台地原 → 远山剪影，
+## 与场内无缝衔接；gate_x（世界坐标 x 列表，南向历史口径）或 gate_pts（Vector2 世界坐标，
+## 四侧）来自 anchor；ridge_pts（[wx, wz, sigma, amp] 列表）为岩野山体叠加（自由路径）。
 static func compose(bp: Dictionary, seed: int, anchor: Dictionary = {}) -> Array:
 	var world: Dictionary = bp["world"]
 	var micro: Dictionary = bp["micro"]
@@ -158,6 +176,8 @@ static func compose(bp: Dictionary, seed: int, anchor: Dictionary = {}) -> Array
 	var sky_start := float(world["sky_start"])
 	var sky_w := float(world["sky_w"])
 	var gates: Array = anchor.get("gate_x", world.get("gate_x", []))
+	var gate_pts: Array = anchor.get("gate_pts", [])
+	var ridge_pts: Array = anchor.get("ridge_pts", [])
 	var erode_iter := int(world.get("erode_iter", 0))
 	# 孤岩长丘（开阔荒漠口径，按头图写实）：8 座离散离散缓丘，绕场散布。
 	# 斜率限幅：skirt ≥ h/0.42 → 任何采样行相邻高差 ≤ ~1.5（连续性闸内）。
@@ -211,12 +231,35 @@ static func compose(bp: Dictionary, seed: int, anchor: Dictionary = {}) -> Array
 				var rn := 1.0 - absf(2.0 * ra - 1.0)
 				var crest := 0.75 + 0.40 * rn * rn
 				var rscale := 1.0
-				if mouth_s > 0.0 and wz > 2.0:
-					var m := 0.0
-					for gx in gates:
-						var u := (wx - float(gx)) / 5.0
-						m = maxf(m, exp(-u * u))
-					rscale = 1.0 - mouth_s * m * smooth01((wz - 2.0) / 7.0) # 南面出怪口豁口
+				if mouth_s > 0.0:
+					if not gate_pts.is_empty():
+						# 自由路径：四侧豁口（按出怪口所在侧选资格轴；横向高斯 × 该侧渐入权重）
+						var m := 0.0
+						for gp0 in gate_pts:
+							var gp: Vector2 = gp0
+							var u := 0.0
+							var sw := 0.0
+							match gate_side(gp.x, gp.y):
+								0:
+									u = (wx - gp.x) / 5.0
+									sw = smooth01((wz - 2.0) / 7.0)
+								1:
+									u = (wx - gp.x) / 5.0
+									sw = smooth01((-wz - 2.0) / 7.0)
+								2:
+									u = (wz - gp.y) / 5.0
+									sw = smooth01((wx - 2.0) / 7.0)
+								_:
+									u = (wz - gp.y) / 5.0
+									sw = smooth01((-wx - 2.0) / 7.0)
+							m = maxf(m, exp(-u * u) * sw)
+						rscale = 1.0 - mouth_s * m
+					elif wz > 2.0:
+						var m2 := 0.0
+						for gx in gates:
+							var u2 := (wx - float(gx)) / 5.0
+							m2 = maxf(m2, exp(-u2 * u2))
+						rscale = 1.0 - mouth_s * m2 * smooth01((wz - 2.0) / 7.0) # 南面出怪口豁口（历史口径）
 				h += rim_h * g_rim * crest * rscale # 低沿埂（非崖壁；rim_h 1.1..1.7）
 			var g_butte := smooth01((d - mesa_start) / mesa_w)
 			if g_butte > 0.0:
@@ -239,7 +282,7 @@ static func compose(bp: Dictionary, seed: int, anchor: Dictionary = {}) -> Array
 			elif lm["kind"] == "ridge":
 				var rz := wz - (float(lm["y"]) - HALF + 0.5)
 				var rr := gauss(rz, float(lm["sigma"]))
-				if rr > 0.02: # 远处不采样脊状调制（成本门控）
+				if rr > 0.02 and float(lm["amp"]) != 0.0: # 远处不采样脊状调制（成本门控）；幅度 0 = 自由路径关闭
 					var rid := float(lm.get("ridged", 0.0))
 					if rid > 0.0:
 						var ra := fbm(wx * float(lm.get("rf", 0.075)) + 3.1, wz * float(lm.get("rf", 0.075)) - 1.7, 3, seed + 331)
@@ -247,8 +290,23 @@ static func compose(bp: Dictionary, seed: int, anchor: Dictionary = {}) -> Array
 						h += float(lm["amp"]) * rr * (1.0 - rid + rid * rn)
 					else:
 						h += float(lm["amp"]) * rr
-			else:
-				h += float(lm["amp"]) * gauss(wz - (float(lm["y"]) - HALF + 0.5), float(lm["sigma"]))
+			else: # basin：预设 = z 向条带；锚定世界坐标（wx/wz）= 2D 径向凹陷（自由路径盆地矩形）
+				if lm.has("wx"):
+					var bdx := wx - float(lm["wx"])
+					var bdz := wz - float(lm["wz"])
+					h += float(lm["amp"]) * gauss(sqrt(bdx * bdx + bdz * bdz), float(lm["sigma"]))
+				else:
+					h += float(lm["amp"]) * gauss(wz - (float(lm["y"]) - HALF + 0.5), float(lm["sigma"]))
+		# 岩野山体（自由路径）：岩群聚类点上叠加脊状高斯山包——山形随玩法障碍布局
+		for rp0 in ridge_pts:
+			var rp: Array = rp0
+			var rdx := wx - float(rp[0])
+			var rdz := wz - float(rp[1])
+			var rr2 := gauss(sqrt(rdx * rdx + rdz * rdz), float(rp[2]))
+			if rr2 > 0.02: # 远处不采样脊状调制（成本门控）
+				var rb := fbm(wx * 0.075 + 3.1, wz * 0.075 - 1.7, 3, seed + 331)
+				var rn2 := 1.0 - absf(2.0 * rb - 1.0)
+				h += float(rp[3]) * rr2 * (0.15 + 0.85 * rn2)
 		return h
 	if erode_iter <= 0:
 		return [h_fn, bp["palette"]]

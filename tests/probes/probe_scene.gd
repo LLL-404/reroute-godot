@@ -3,6 +3,7 @@ extends ProbeKit
 # C1 判定：主场景 headless 加载 + 地形构建对拍。
 # 跑法（cwd=reroute-godot）：godot --headless -s res://tests/probes/probe_scene.gd
 # 判定：exit 0 + stdout 含 [SCENE] PASS + stderr 无 ERROR。
+const Blueprint = preload("res://game/blueprint.gd")
 func _initialize() -> void:
 	var t0 := Time.get_ticks_msec()
 	var packed: PackedScene = load("res://game/main.tscn")
@@ -94,5 +95,51 @@ func _initialize() -> void:
 				break
 		check(found, "六边格(24,24) 中心顶点存在")
 
+	# ---- 拍2 视觉联动锚点（自由路径首局接线） ----
+	var anchor: Dictionary = main._visual_anchor()
+	check(anchor.get("ridge_off", false) == true, "自由路径关闭预设岩脊（ridge_off）")
+	var rps: Array = anchor.get("ridge_pts", [])
+	check(rps.size() >= 1 and rps.size() <= 10, "岩野山体点数 1..10（%d）" % rps.size())
+	if not rps.is_empty():
+		var r0: Array = rps[0]
+		check(r0.size() == 4 and float(r0[2]) >= 2.3 and float(r0[3]) >= 0.8 and float(r0[3]) <= 1.7, "岩野山体参数域")
+	check(anchor.has("basin_wx") and anchor.has("basin_wz") and anchor.has("basin_sig"), "2D 盆地锚（wx/wz/sig）")
+	var gps: Array = anchor.get("gate_pts", [])
+	check(gps.size() == main.sc.spawns.size() - 1, "视觉门数 = 主口数（%d）" % gps.size())
+	var in_dom := true
+	for gp in gps:
+		var gv: Vector2 = gp
+		if absf(gv.x) > 32.0 or absf(gv.y) > 32.0:
+			in_dom = false
+	check(in_dom, "视觉门口位在场内坐标域")
+	# 边框豁口：第一主口侧边框格豁开；对侧同横向格不豁
+	if not gps.is_empty():
+		var g0: Vector2 = gps[0]
+		var side := Blueprint.gate_side(g0.x, g0.y)
+		var bx := 0
+		var by := 0
+		var bxo := 0
+		var byo := 0
+		if side <= 1:
+			bx = clampi(int(round(g0.x + 31.5)), 0, 63)
+			by = 63 if side == 0 else 0
+			bxo = bx
+			byo = 0 if side == 0 else 63
+		else:
+			by = clampi(int(round(g0.y + 31.5)), 0, 63)
+			bx = 63 if side == 2 else 0
+			byo = by
+			bxo = 0 if side == 2 else 63
+		var s_carve: float = view.terrain._rim_scale(bx, by)
+		var s_ctrl: float = view.terrain._rim_scale(bxo, byo)
+		check(s_carve < 0.35, "主口边框豁开（%.2f < 0.35）" % s_carve)
+		check(s_ctrl > 0.3, "对侧边框不豁（%.2f > 0.3）" % s_ctrl)
+	# 默认种子锚点历史口径不回归
+	var keep_sc: Scenario = main.sc
+	main.sc = Scenario.new(20261003)
+	var a0: Dictionary = main._visual_anchor()
+	main.sc = keep_sc
+	check(a0.has("ridge_y") and a0.has("gate_x") and a0.has("basin_y") and not a0.has("ridge_pts") and not a0.has("gate_pts"), "默认种子锚点历史口径")
+
 	print("[SCENE] field=", st["field"], " plain=", st["plain"], " solids=", st["solids"], "/", n_solid, " covers=", st["covers"], "/", n_cover, " cam=", st["cam"])
-	finish("SCENE", 16, "ms=%d" % (Time.get_ticks_msec() - t0))
+	finish("SCENE", 25, "ms=%d" % (Time.get_ticks_msec() - t0))

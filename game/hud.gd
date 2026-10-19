@@ -442,10 +442,15 @@ func hit_regions() -> Array:
 # ---------------- 状态更新 ----------------
 
 ## HUD 整体显隐（标题/结算时藏，暂停时留）。同时熄灭飞行中的浮字。
+## 横幅自管显隐：整层复显不得误亮「空横幅」（否则新局 tick 0 会驻留一张空卡片——2026-10-19 修复）。
 func set_visible_hud(vis: bool) -> void:
 	for el in _toplevel:
+		if el == banner_root:
+			continue
 		var c: Control = el
 		c.visible = vis
+	if banner_root != null:
+		banner_root.visible = vis and _banner_until != null
 	if not vis:
 		for f in floats:
 			f["active"] = false

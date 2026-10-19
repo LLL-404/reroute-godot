@@ -25,6 +25,8 @@ func _initialize() -> void:
 
 	# ---- 1. S 缩放与 hit_regions 数值口径 ----
 	check(absf(hud.S - 1.0) < 1e-6, "S=1.0（720/816 夹紧）")
+	# 开局无横幅：整层复显不得误亮「空横幅」（2026-10-19 缺陷修复护栏；旧实现此处空卡片驻留）
+	check(hud.banner_root.visible == false, "开局无横幅（空卡片不驻留）")
 	var regions: Array = hud.hit_regions()
 	cmp_rect(regions[0], Rect2(0, 0, 1280, 64), "命中区·顶栏条")
 	cmp_rect(regions[1], Rect2(1120, 303, 160, 417), "命中区·右下钮簇")
@@ -147,6 +149,15 @@ func _initialize() -> void:
 	check(hud.floats[1]["active"] == false, "隐藏时浮字熄灭")
 	hud.set_visible_hud(true)
 	check(hud.top_bar.visible and hud.mode_buttons["wall"].visible, "整体恢复")
+	# 横幅随整层显隐：活动横幅隐藏后复显保留；清掉活动态后复显仍不亮（自管口径）
+	hud.banner("测试横幅", "副标题", false)
+	hud.set_visible_hud(false)
+	check(not hud.banner_root.visible, "隐藏时活动横幅同隐")
+	hud.set_visible_hud(true)
+	check(hud.banner_root.visible, "复显时活动横幅保留")
+	hud._banner_until = null
+	hud.set_visible_hud(true)
+	check(not hud.banner_root.visible, "无活动横幅时复显仍不亮")
 
 	# ---- 10. HUD 点击排除（端到端，含对照） ----
 	main.set_mode("wall")
@@ -228,7 +239,7 @@ func _initialize() -> void:
 	cmp_rect(hud.hit_regions()[0], Rect2(0, 0, 1280, 64), "安全区复位·顶栏条")
 
 	# ---- 汇总 ----
-	finish("HUD", 30)
+	finish("HUD", 34)
 
 
 # ---------------- 辅助 ----------------
