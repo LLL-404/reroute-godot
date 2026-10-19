@@ -252,3 +252,16 @@ static func overlay_fx(page: Control) -> void:
 	n.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	n.self_modulate = Color(0, 0, 0, GRAIN_ALPHA)
 	page.add_child(n)
+
+
+## 设置页滚动条：暗轨道 + 金滑块（默认主题灰条与金黑面板不合；宽 6S）。
+static func scrollbar(scroll: ScrollContainer, C: Dictionary, S: float) -> void:
+	var bar := scroll.get_v_scroll_bar()
+	bar.custom_minimum_size.x = int(6.0 * S)
+	var track := flat(C["track"], C["track"], int(3 * S), 0)
+	bar.add_theme_stylebox_override("scroll", track)
+	var grab := flat(C["gold_lo"], C["gold_lo"], int(3 * S), 0)
+	bar.add_theme_stylebox_override("grabber", grab)
+	var hl := flat(C["gold"], C["gold"], int(3 * S), 0)
+	bar.add_theme_stylebox_override("grabber_highlight", hl)
+	bar.add_theme_stylebox_override("grabber_pressed", hl)

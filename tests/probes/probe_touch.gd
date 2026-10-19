@@ -59,7 +59,7 @@ func _initialize() -> void:
 		var page: Control = shell._ensure(key)
 		for b in page.find_children("", "Button", true, false):
 			if b is CheckButton:
-				continue # 全屏开关是行内小控件，不参与按钮矩阵
+				continue # 行内小开关（若有）不参与按钮矩阵
 			total += 1
 			var btn: Button = b
 			check(btn.custom_minimum_size.y >= min_h and btn.custom_minimum_size.x >= min_w,
@@ -69,7 +69,7 @@ func _initialize() -> void:
 		var btn2: Button = b
 		check(btn2.custom_minimum_size.y >= min_h and btn2.custom_minimum_size.x >= min_w,
 			"按钮 confirm/%s 触达尺寸 %.0fx%.0f" % [btn2.name, btn2.custom_minimum_size.x, btn2.custom_minimum_size.y])
-	cmp_int(total, 22, "按钮矩阵总数（5+5+2+7+1+2）")
+	cmp_int(total, 54, "按钮矩阵总数（5+5+2+7+33+2）")
 
 	# ---- 6. 触屏拖线（D1-4/6）：按下→拖动（含偏线绕行）→抬起；与鼠标路径世界状态逐字节一致 ----
 	main.view.stop_all_audio()
@@ -83,7 +83,7 @@ func _initialize() -> void:
 	var row := _find_row(main_a.view, main_a.world, 8, 6, 36, 26, 4, [])
 	check(row.x >= 0, "触屏拖线用 4 连可点行")
 	if row.x < 0:
-		finish("TOUCH", 35)
+		finish("TOUCH", 67)
 		return
 	var pa := Vector2i(row.x, row.y)
 	var pb := Vector2i(row.x + 3, row.y)
@@ -123,7 +123,7 @@ func _initialize() -> void:
 	main_b.queue_free()
 	await process_frame
 
-	finish("TOUCH", 35)
+	finish("TOUCH", 67)
 
 
 # ---------------- 实例辅助 ----------------

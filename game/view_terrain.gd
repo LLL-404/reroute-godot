@@ -190,8 +190,7 @@ func apply_blueprint(bp: Dictionary, seed: int, anchor: Dictionary = {}) -> void
 	if core.env != null:
 		var fog: Array = cur_palette["fog"]
 		core.env.fog_light_color = Color(fog[0], fog[1], fog[2])
-		core.env.fog_depth_begin = float(cur_palette["fog_start"])
-		core.env.fog_depth_end = float(cur_palette["fog_end"])
+		core.set_fog_base(float(cur_palette["fog_start"]), float(cur_palette["fog_end"]))
 		# 天空/远霾：比雾色更亮的暖晕（金色时刻地平线）
 		core.env.background_color = Color(minf(fog[0] * 1.32, 1.0), minf(fog[1] * 1.22, 1.0), minf(fog[2] * 1.08, 1.0))
 

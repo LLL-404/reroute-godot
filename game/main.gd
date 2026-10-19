@@ -51,9 +51,13 @@ func _ready() -> void:
 	_setup_shell()
 	_is_probe_run = _detect_probe_run()
 	_settings = UserSettings.load_cfg()
-	UserSettings.apply_all(_settings) # 启动即应用玩家设置（音量 bus / 全屏）
-	if not _is_probe_run:
-		view.apply_quality(UserSettings.quality_level(_settings)) # 画质档（探针恒用默认画质，保 gate 截图口径）
+	if _is_probe_run:
+		UserSettings.apply_audio(_settings) # 探针只应用音量（显示/画质保持默认，保 gate 截图口径）
+	else:
+		UserSettings.apply_all(_settings) # 启动即应用玩家设置（音量 bus / 显示模式 / 分辨率 / 垂直同步）
+		view.apply_video(_settings) # 画质/渲染缩放/AA/阴影/雾/景深/亮度
+		hud.apply_ui_scale(int(_settings.get("ui_pct", 100)))
+		shell.apply_ui_scale(int(_settings.get("ui_pct", 100)))
 	if not _is_probe_run:
 		run_index = maxi(0, int(_settings.get("runs", 0))) # 跨会话续接已玩局数（标题预烘焙不算）
 	new_game()
@@ -146,8 +150,8 @@ func _setup_shell() -> void:
 		"quit": Callable(self, "_quit_game"),
 		"load_slot": Callable(self, "load_game"),
 		"save_slot": Callable(self, "save_game"),
-		"fps_changed": Callable(self, "_on_fps_changed"),
-		"quality_changed": Callable(self, "_on_quality_changed"),
+		"video_changed": Callable(self, "_on_video_changed"),
+		"ui_changed": Callable(self, "_on_ui_changed"),
 	}, hud)
 
 
@@ -174,15 +178,20 @@ func _persist_runs() -> void:
 	UserSettings.save_cfg(_settings)
 
 
-## 设置页帧率改动：更新缓存（落盘归设置页）；下一帧 _sync_fps_cap 生效。
-func _on_fps_changed(cap: int) -> void:
-	_settings["fps"] = cap
+## 设置页视频/画质改动：同步缓存 + 立即应用（显示走 DisplayServer，画质走 view；
+## 帧率改动下一帧由 _sync_fps_cap 接管）。
+func _on_video_changed(cfg: Dictionary) -> void:
+	for k in UserSettings.VIDEO_KEYS:
+		_settings[k] = cfg[k]
+	UserSettings.apply_video(_settings)
+	view.apply_video(_settings)
 
 
-## 设置页画质改动：更新缓存 + 立即应用（渲染分辨率/阴影）。
-func _on_quality_changed(level: int) -> void:
-	_settings["quality"] = level
-	view.apply_quality(level)
+## 设置页 UI 缩放改动：缓存 + HUD 立即重排 + 界面页离开设置页时按新 S 重建。
+func _on_ui_changed(pct: int) -> void:
+	_settings["ui_pct"] = pct
+	hud.apply_ui_scale(pct)
+	shell.apply_ui_scale(pct)
 
 
 ## 暂停（仅进行中且未暂停时有效；HUD 按钮 / Esc / 安卓返回共用）

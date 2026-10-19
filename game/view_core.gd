@@ -42,7 +42,9 @@ var box_mesh: BoxMesh
 var mats: Dictionary = {}
 var env: Environment
 var sun: DirectionalLight3D
-var _quality := 2 # 画面质量档（0 低 / 1 中 / 2 高；由 apply_quality 写入，默认高 = 画质全开）
+var _dof_attrs: CameraAttributesPractical = null # 景深属性（懒建；关闭时不挂相机）
+var _post_q := 2 # 后期处理档（雾距倍率：低 1.6× / 中 1.25× / 高 1.0×）
+var _fog_base := Vector2(55.0, 170.0) # 当前地图视觉动机的雾起止基准（view_terrain 应用调色板时写入）
 
 var camera: Camera3D
 var focus := Vector3.ZERO # 相机注视的地面点（y=0；平移/旋转围绕它）
@@ -94,19 +96,57 @@ func setup() -> void:
 		mats[k] = make_material(c[0], c[1], c[2], [0.10, 0.55, 0.48] if k == "core" else null)
 
 
-## 画面质量档应用（0 低 / 1 中 / 2 高）：3D 渲染分辨率 + FXAA + 直射阴影。
-## 高 = 画质全开（1.0 / 无 FXAA / 阴影开，与原行为一致）；低/中 降渲染分辨率，低再关阴影。
-## 纯表现层；探针/自检运行由 main 门控不调用（默认 2 = 截图 gate 口径不变）。
-func apply_quality(level: int) -> void:
-	var l := clampi(level, 0, 2)
-	_quality = l
+## 地图视觉动机应用调色板时写入雾基准；当前后期档决定实际雾距（换图/改档都幂等）。
+func set_fog_base(start: float, end: float) -> void:
+	_fog_base = Vector2(start, end)
+	_apply_fog()
+
+
+## 按后期档缩放雾距（低 1.6× / 中 1.25× / 高 1.0× = 美术原口径）
+func _apply_fog() -> void:
+	if env == null:
+		return
+	var mults: Array = [1.6, 1.25, 1.0]
+	var m := float(mults[clampi(_post_q, 0, 2)])
+	env.fog_depth_begin = _fog_base.x * m
+	env.fog_depth_end = _fog_base.y * m
+
+
+## 视频/画质应用（纯表现层；探针/自检运行由 main 门控不调用——默认档 = 原行为，保截图 gate 口径）。
+## 渲染缩放：scaling_3d_scale = render_pct/100；抗锯齿：关 / FXAA / TAA（use_taa）；
+## 阴影质量：2/4 分裂 + 最大距离 45/80/100；后期处理：雾距 ×当前地图基准（低 1.6× / 中 1.25× / 高 1.0×）；
+## 景深：远场轻虚化（默认关，CameraAttributesPractical）；画面亮度：Environment adjustment（100% 关闭）。
+func apply_video(cfg: Dictionary) -> void:
+	var aa := clampi(int(cfg.get("aa", 1)), 0, 2)
+	var sq := clampi(int(cfg.get("shadow_q", 2)), 0, 2)
+	var pq := clampi(int(cfg.get("post_q", 2)), 0, 2)
+	var pct := clampi(int(cfg.get("render_pct", 100)), 50, 100)
+	var bpct := clampi(int(cfg.get("bright_pct", 100)), 70, 130)
 	var vp := host.get_viewport()
 	if vp != null:
-		var scales: Array = [0.70, 0.85, 1.0]
-		vp.scaling_3d_scale = float(scales[l])
-		vp.screen_space_aa = Viewport.SCREEN_SPACE_AA_FXAA if l < 2 else Viewport.SCREEN_SPACE_AA_DISABLED
+		vp.scaling_3d_scale = float(pct) / 100.0
+		vp.screen_space_aa = Viewport.SCREEN_SPACE_AA_FXAA if aa == 1 else Viewport.SCREEN_SPACE_AA_DISABLED
+		vp.use_taa = aa == 2
 	if sun != null:
-		sun.shadow_enabled = l >= 1
+		sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_2_SPLITS if sq == 0 else DirectionalLight3D.SHADOW_PARALLEL_4_SPLITS
+		var dists: Array = [45.0, 80.0, 100.0]
+		sun.directional_shadow_max_distance = float(dists[sq])
+	if env != null:
+		_post_q = pq
+		_apply_fog()
+		env.adjustment_enabled = bpct != 100
+		env.adjustment_brightness = float(bpct) / 100.0
+	if camera != null:
+		if bool(cfg.get("dof", false)):
+			if _dof_attrs == null:
+				_dof_attrs = CameraAttributesPractical.new()
+				_dof_attrs.dof_blur_far_enabled = true
+				_dof_attrs.dof_blur_far_distance = 80.0
+				_dof_attrs.dof_blur_far_transition = 60.0
+				_dof_attrs.dof_blur_amount = 0.06
+			camera.attributes = _dof_attrs
+		else:
+			camera.attributes = null
 
 
 ## 创建标准 PBR 材质（可选自发光）

@@ -101,9 +101,10 @@ func apply_blueprint(bp: Dictionary, seed: int, anchor: Dictionary = {}) -> void
 	terrain.apply_blueprint(bp, seed, anchor)
 
 
-## 画面质量档应用（0 低 / 1 中 / 2 高；→ view_core）
-func apply_quality(level: int) -> void:
-	core.apply_quality(level)
+## 视频/画质应用（渲染缩放/抗锯齿/阴影/雾/景深/亮度 + 特效质量；→ view_core / view_entities）
+func apply_video(cfg: Dictionary) -> void:
+	core.apply_video(cfg)
+	entities.apply_fx_quality(int(cfg.get("fx_q", 2)))
 
 
 ## 铺一局的动态内容（→ view_entities）

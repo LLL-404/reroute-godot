@@ -1,6 +1,7 @@
 extends Control
 
 const UiStyle = preload("res://game/ui_style.gd")
+const UserSettings = preload("res://game/user_settings.gd")
 
 # HUD（移植 reroute/scripts/hud.lua）：顶栏（核心血条/波次倒计时/供给/热层钮/暂停钮）
 # + 右下操作模式列 + 技能钮 + 波次横幅 + 击杀赏金浮字池。
@@ -107,7 +108,7 @@ func _ready() -> void:
 func build(cb: Dictionary) -> void:
 	callbacks = cb
 	var win := get_viewport().get_visible_rect().size
-	S = clampf(win.y / 816.0, 1.0, 1.6)
+	S = clampf(win.y / 816.0, 1.0, 1.6) * UserSettings.ui_scale
 	CORE_HP = int(Sim.BUILDINGS[Sim.B_CORE - 1]["hp"])
 	WAVE_NAMES = { Sim.E_SWARM: "虫群", Sim.E_BEHEMOTH: "蛮兽" }
 	MODE_LABELS = [
@@ -356,13 +357,20 @@ func _compute_safe() -> Vector4:
 	return Vector4(l, t, r, b)
 
 
+## UI 缩放档应用（设置页滑块实时生效）：写静态倍率 → 重排（S 在 _layout 内重算）→ 主题按新 S 重建。
+func apply_ui_scale(pct: int) -> void:
+	UserSettings.ui_scale = clampf(float(pct) / 100.0, 0.8, 1.3)
+	_layout()
+	self.theme = UiStyle.build_theme(DARK, S)
+
+
 ## 重排所有控件（窗口尺寸变化时调用；绝对像素布局）。S 在此重算，
 ## 保证布局与 hit_regions() 始终跟随当前视口（build() 里的初值只服务构造）。
 func _layout() -> void:
 	if top_bar == null:
 		return
 	var win := get_viewport().get_visible_rect().size
-	S = clampf(win.y / 816.0, 1.0, 1.6)
+	S = clampf(win.y / 816.0, 1.0, 1.6) * UserSettings.ui_scale
 	safe = _compute_safe()
 	var x0 := safe.x
 	var x1 := win.x - safe.z

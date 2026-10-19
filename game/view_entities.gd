@@ -32,6 +32,7 @@ var cover_nodes: Dictionary = {} # cellkey -> { node, x, y }
 var building_nodes: Dictionary = {} # id -> { node, kind }
 var unit_nodes: Dictionary = {} # id -> { node, px, py, s, kind, hp, traveled, pulse }
 var death_fx: Array = [] # 死亡消散中的单位条目（放大下沉后移除）
+var fx_quality := 2 # 特效质量（0 低 / 1 中 / 2 高）：死亡消散时长（低 = 1 tick 即移除；默认高 = 原行为）
 var hero = null # { node, px, py }
 var ring = null # { node, born }
 
@@ -399,16 +400,26 @@ func sync(world: World) -> void:
 		core.fit_camera()
 
 
-## 死亡消散：放大下沉后移除（box 路径；模型动画路径在资产轮接入）。
 ## 死亡消散：模型的死亡动画播完（Z_DEATH = 28 tick = 1.4s）后移除节点。
+## 特效质量：中 = 半程 0.7s；低 = 1 tick 即移除（省瞬态节点/动画开销）；高 = 原口径。
 func update_death_fx(tick: int) -> void:
+	var life := Z_DEATH
+	if fx_quality == 1:
+		life = int(Z_DEATH * 0.5)
+	elif fx_quality == 0:
+		life = 1
 	for i in range(death_fx.size() - 1, -1, -1):
 		var e: Dictionary = death_fx[i]
 		var age := tick - int(e["dying"])
 		var dn: Node3D = e["node"]
-		if age >= Z_DEATH:
+		if age >= life:
 			dn.free()
 			death_fx.remove_at(i)
+
+
+## 特效质量应用（0 低 / 1 中 / 2 高；由 view.apply_video 转发）。
+func apply_fx_quality(level: int) -> void:
+	fx_quality = clampi(level, 0, 2)
 
 
 ## 震荡波扩散环：英雄冷却跳升 = 刚施放；方框环贴地扩散到技能半径后移除。

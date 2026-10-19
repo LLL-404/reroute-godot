@@ -2325,6 +2325,9 @@ asset 63/0、model 6/0、orient 1/0、save 74/0、touch 39/0、intro 36/0）；`
 
 ### 11.28 设置 v2：帧率上限 + 画面质量档（2026-10-18）
 
+> **注（2026-10-19）**：本节的帧率候选（30/60/90）与画质档（低/中/高）已由 §11.29「设置 v3」扩展取代；
+> 本节保留为演进记录。
+
 **需求**：设置页可自选帧率（30/60/90）与画面质量。
 
 **实现**：
@@ -2342,6 +2345,73 @@ asset 63/0、model 6/0、orient 1/0、save 74/0、touch 39/0、intro 36/0）；`
   经 `fps_changed` / `quality_changed` 回调通知 main（main 同步 `_settings` 缓存并应用）。
 - 回归（用户裁定本轮不新增专测）：`probe_save` 74/0、`probe_smoke` 34/0（限帧断言不变）、
   `check_ui_lint` PASS、5 改动文件 `--check-only` 全过。`shots/settings.png` 重出。
+
+---
+
+### 11.29 设置 v3：完整视频设置 + 平台默认（2026-10-19）
+
+**需求**（用户裁定，替换 §11.28 的两行简版）：
+- 显示：显示模式（全屏/无边框/窗口化，安卓隐藏）、分辨率（原生 + 列表；安卓隐藏，改由
+  渲染缩放承担「渲染精度」）、垂直同步、帧率上限（30/60/120/无限制；安卓仅 30/60）。
+- 画质：预设（低/中/高/极高）、阴影质量、特效质量、抗锯齿（关/FXAA/TAA；安卓仅关/FXAA）、
+  后期处理、景深（默认关）。
+- 性能：渲染缩放滑块（兼安卓「渲染精度」）、UI 缩放滑块、画面亮度滑块。
+- 动态模糊按用户「可考虑移除」裁定**不做**（Godot 无内建实现）；动态分辨率本轮不单列
+  （用户允许「开/关 或 滑块」二选一，取滑块；安卓默认 85% 渲染保流畅）。
+
+**数据层**（`user_settings.gd`）：
+- `video/` 键：display_mode（0 窗口化 / 1 无边框 / 2 全屏）、res_idx（0 原生 = 桌面可用区，
+  1..4 = 2560×1440 / 1920×1080 / 1600×900 / 1280×720；默认 4 保现状）、vsync、
+  fps（0/30/60/120）、quality（0..3）、shadow_q / fx_q / post_q（0..2）、aa（0/1/2）、
+  dof、render_pct（50..100）、ui_pct（80..130）、bright_pct（70..130）；`progress/runs` 不变。
+- 旧档兼容：`video/fullscreen=true` → display_mode 2；v2 只有 `quality` 时，v3 子项按该预设补齐
+  （低/高/极高实测一致，避免「预设档与子项错配」），其余缺失键回平台默认。
+- **平台默认**：PC = 高画质（阴影/特效/后期高，渲染 100%，不限帧）；安卓 = 中画质
+  （阴影/特效/后期中，渲染 85%，60 帧）——移动端优先流畅/续航（对齐用户平台建议）。
+  安卓 Mobile 渲染器无 TAA → `aa_opts()` 仅关/FXAA，`aa_level()` 把 2 回退 1（读档/写盘/预设
+  三处统一合法化）。
+- `QUALITY_PRESETS`：低（阴影低/特效低/AA 关/后期低/缩放 70）、中（中/中/FXAA/中/85）、
+  高（高/高/FXAA/高/100）、极高（高/高/TAA/高/100）——预设只写画质子项，不碰显示/帧率/UI。
+- `apply_video`（OS 层）：PC 应用显示模式（borderless flag + window mode）与窗口尺寸
+  （窗口化/无边框；全屏交桌面），改尺寸后居中到可用区；垂直同步两平台应用；安卓（恒全屏）
+  跳过显示模式/分辨率。`fps_cap()` 平台合法化（安卓 0/120 → 60）。
+
+**表现层**：
+- `view_core.apply_video(cfg)`：`scaling_3d_scale = render_pct/100`；AA（FXAA / `use_taa`）；
+  阴影质量 = 2/4 分裂 + 最大距离 45/80/100；后期处理 = **雾距相对当前地图视觉基准**的倍率
+  （低 1.6× / 中 1.25× / 高 1.0×）——基准由 `view_terrain` 应用调色板时经 `set_fog_base`
+  写入（worldgen 拍 2 每图雾距 50..62 / 195..260 不被覆盖；默认档实测像素零差）；
+  亮度 = `Environment.adjustment_*`（100% 关闭）；景深 = `CameraAttributesPractical`
+  远场轻虚化（far 80 / transition 60 / amount 0.06，默认关）。
+- `view_entities`：特效质量 = 死亡消散时长（高 28 tick 原口径 / 中 14 / 低 1）。
+- 探针/自检运行（`main._is_probe_run`）只应用音频；显示/画质/UI 缩放一律不应用，保 gate 口径。
+
+**UI**（`screens.gd`）：
+- 设置页四组（音频/显示/画质/性能）+ `ScrollContainer`（纵向滚动；金黑滚动条走
+  `UiStyle.scrollbar` 工厂，L2 合规）；chips 58×38（≥ probe_touch 触达矩阵下限），行左对齐；
+  命名 `btn_<key>_<值>` / `sld_<key>` / `lbl_<key>_val`。
+- 改值统一出口 `_commit_video`：落盘 → `video_changed` → main 同步缓存 + `apply_video`（OS）
+  + `view.apply_video`（画质）；UI 缩放走 `ui_changed` → HUD 立即 `_layout`，界面页标记脏、
+  离开设置页/回对局时按新 S 重建（拖动中不自毁）。
+- 平台差异：安卓隐藏显示模式/分辨率行；帧率仅 30/60；抗锯齿仅关/FXAA。
+
+**平台适配核对（对齐用户 2026-10-19 建议）**：
+- 渲染器：`project.godot` 无显式覆盖 → Godot 4 默认 desktop Forward+ / Android Mobile。
+- 纹理压缩：Windows 预设 S3TC/BPTC；Android 预设走默认 ETC2/ASTC（导入侧
+  `textures/vram_compression/import_etc2_astc=true`）。
+- 输入：触屏经引擎 `emulate_mouse_from_touch` 走同一套鼠标事件（§11.9，probe_touch 覆盖）；
+  安全区（刘海/手势条）与 UI 缩放已接入。
+- PC 分辨率：窗口列表含 1920×1080 / 2560×1440 / 原生；UI 随视口高度 S 自适应（1.0..1.6）。
+- 未做（明确留档）：动态分辨率（需真机调参，避免画面脉动）、PC 悬停提示/快捷键、
+  真机中低端机实测（用户侧）。
+
+**回归**：`probe_save` 77/0（显示模式 chips 替代全屏开关 + 三项默认滑块断言）、
+`probe_touch` 71/0（按钮矩阵 54）、`probe_smoke` 34/0、`probe_hud` 73/0、
+`probe_ui_flow` 39/0、`probe_sync` 1845/0、`probe_scene` 25/0、`probe_shots` 6/0、
+`check_shots` 29/0、单测 107/0、`check_ui_lint` PASS、改动文件 `--check-only` 全过；
+`probe_input` 首跑 1 条既有机器相关抖动、复跑 58/0 PASS。临时接线/目视脚本（预设模板、
+TAA/DOF/亮度、UI 缩放重建、默认档像素零差）验证后删除。`shots/settings.png` 重出。
+证据 `logs/gates-20261019-settings3/`。
 
 ---
 

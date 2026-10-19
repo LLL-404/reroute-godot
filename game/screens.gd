@@ -1,7 +1,7 @@
 extends CanvasLayer
 
 # 界面壳（移植 reroute/scripts/screens.lua + ScreenManager 的页栈语义）：标题 / 暂停 / 结算
-# / 存档（3 槽，读|存双模式）/ 设置（音量+全屏+帧率+画质）五屏 + 通用确认弹窗。
+# / 存档（3 槽，读|存双模式）/ 设置（音频 / 显示 / 画质 / 性能 四组）五屏 + 通用确认弹窗。
 # 游戏流转即屏状态：进行中 = current_page()==""；暂停 = "pause"；结算 = "gameover"；
 # 标题 = "title"；存档页 = "slots"；设置页 = "settings"。
 # 页面懒建缓存复用；切换带 0.18s 淡入；按钮回调由 main 注入；存档/设置模块直接 preload。
@@ -33,7 +33,8 @@ var slots_from := "title" # 返回目标页
 # 设置页状态
 var settings_from := "title"
 var _cfg: Dictionary = {}
-var _chips: Dictionary = {} # 设置页选项钮：key（"fps"/"quality"）→ {值: Button}（选中态刷新用）
+var _chips: Dictionary = {} # 设置页选项钮：key（"fps"/"quality"…）→ {值: Button}（选中态刷新用）
+var _ui_dirty := false # UI 缩放改动后待重建（拖动滑块中不拆自己，离页/关页时统一重建）
 
 # 确认弹窗
 var confirm_layer: Control = null
@@ -46,7 +47,7 @@ func init(callbacks: Dictionary, hud_ref) -> void:
 	cb = callbacks
 	hud = hud_ref
 	C = hud.DARK
-	S = clampf(get_viewport().get_visible_rect().size.y / 816.0, 1.0, 1.6)
+	_recalc_s()
 	layer = 20 # 壳在 HUD（layer 10）之上
 	host = Control.new()
 	host.name = "ScreenHost"
@@ -55,6 +56,36 @@ func init(callbacks: Dictionary, hud_ref) -> void:
 	host.theme = UiStyle.build_theme(C, S)
 	add_child(host)
 	_build_confirm()
+
+
+# ---------------- UI 缩放（设置页「UI 缩放」滑块） ----------------
+
+## 按当前视口与玩家 UI 倍率重算 S（初始化 / 页面重建共用）。
+func _recalc_s() -> void:
+	S = clampf(get_viewport().get_visible_rect().size.y / 816.0, 1.0, 1.6) * UserSettings.ui_scale
+
+
+## UI 缩放应用：无页面时立即重算并换主题；已有页面时标记脏（离开设置页时统一重建，
+## 避免拖动滑块过程中拆掉当前页）。
+func apply_ui_scale(pct: int) -> void:
+	UserSettings.ui_scale = clampf(float(pct) / 100.0, 0.8, 1.3)
+	if pages.is_empty():
+		_recalc_s()
+		if host != null:
+			host.theme = UiStyle.build_theme(C, S)
+	else:
+		_ui_dirty = true
+
+
+## 按新 S 重建全部页面（旧页 queue_free 延迟回收；后续按需惰建）。
+func _rebuild_pages() -> void:
+	for k in pages:
+		pages[k].queue_free()
+	pages.clear()
+	_chips.clear()
+	_ui_dirty = false
+	_recalc_s()
+	host.theme = UiStyle.build_theme(C, S)
 
 
 # ---------------- 公开 API（对齐母版 Shell） ----------------
@@ -79,8 +110,11 @@ func resume() -> void:
 
 ## 清空到对局（空栈）。也可用于从结算直接回对局。
 func close_all() -> void:
-	for k in pages:
-		pages[k].visible = false
+	if _ui_dirty:
+		_rebuild_pages() # UI 缩放待重建：直接弃页，回对局后按需惰建
+	else:
+		for k in pages:
+			pages[k].visible = false
 	current = ""
 	_hide_confirm()
 
@@ -322,12 +356,13 @@ func _style_slider(s: HSlider) -> void:
 	s.theme_type_variation = UiStyle.SLIDER_VAR
 
 
-## 选项行（设置页帧率/画质共用）：88 宽标签（同滑杆行口径）+ 一排互斥钮（选中态由
+## 选项行（设置页所有 chips 共用）：88 宽标签（同滑杆行口径）+ 一排互斥钮（选中态由
 ## _refresh_chips 切主题变体；按钮本身走 _button 工厂，无逐钮 override）。
-func _option_row(key: String, label: String, opts: Array, fn: Callable) -> HBoxContainer:
+## 尺寸 58×38 ≥ 触屏矩阵下限（probe_touch 口径），命名 btn_<key>_<值>。
+func _option_row(key: String, label: String, opts: Array) -> HBoxContainer:
 	var row := HBoxContainer.new()
 	row.name = "row_" + key
-	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.alignment = BoxContainer.ALIGNMENT_BEGIN
 	row.add_theme_constant_override("separation", int(6 * S))
 	var lbl := _label(label, 12.0 * S, C["muted"])
 	lbl.custom_minimum_size = Vector2(88.0 * S, 0)
@@ -335,11 +370,46 @@ func _option_row(key: String, label: String, opts: Array, fn: Callable) -> HBoxC
 	var map: Dictionary = {}
 	for o in opts:
 		var v := int(o[0])
-		var b := _button(str(o[1]), false, 56.0 * S, 30.0 * S, 11.0 * S, fn.bind(v))
+		var b := _button(str(o[1]), false, 58.0 * S, 38.0 * S, 11.0 * S, _on_video_chip.bind(key, v))
 		b.name = "btn_%s_%d" % [key, v]
 		row.add_child(b)
 		map[v] = b
 	_chips[key] = map
+	return row
+
+
+## 设置页分组标题（暗金小字 + 细线）。
+func _group_header(text: String) -> VBoxContainer:
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", int(4 * S))
+	v.add_child(_label(text, 11.0 * S, C["gold"]))
+	v.add_child(_rule())
+	return v
+
+
+## 设置页滑杆行：88 宽标签 + 滑杆 + 读数（命名 sld_<key> / lbl_<key>_val，探针按名取）。
+func _slider_row(key: String, label: String, vmin: int, vmax: int, fn: Callable) -> HBoxContainer:
+	var row := HBoxContainer.new()
+	row.name = "row_" + key
+	row.alignment = BoxContainer.ALIGNMENT_BEGIN
+	row.add_theme_constant_override("separation", int(10 * S))
+	var lbl := _label(label, 12.0 * S, C["muted"])
+	lbl.custom_minimum_size = Vector2(88.0 * S, 0)
+	row.add_child(lbl)
+	var sld := HSlider.new()
+	sld.name = "sld_" + key
+	sld.min_value = vmin
+	sld.max_value = vmax
+	sld.step = 1
+	sld.custom_minimum_size = Vector2(180.0 * S, 24.0 * S)
+	sld.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	_style_slider(sld)
+	row.add_child(sld)
+	var val := _label(str(vmax), 12.0 * S, C["gold_hi"])
+	val.name = "lbl_%s_val" % key
+	val.custom_minimum_size = Vector2(38.0 * S, 0)
+	row.add_child(val)
+	sld.value_changed.connect(fn)
 	return row
 
 
@@ -594,7 +664,7 @@ func _build_slots() -> Control:
 	return page
 
 
-## 构建设置页（音乐/音效滑杆 + 全屏开关；改值即应用并落盘）
+## 构建设置页（音频 / 显示 / 画质 / 性能 四组；滚动容器承载；改值即应用并落盘）
 func _build_settings() -> Control:
 	var page := _page_base(UiStyle.VEIL_PAGE)
 	page.name = "page_settings"
@@ -603,78 +673,69 @@ func _build_settings() -> Control:
 	center.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	page.add_child(center)
 	var pcard := PanelContainer.new()
-	pcard.custom_minimum_size = Vector2(440.0 * S, 0)
+	pcard.custom_minimum_size = Vector2(480.0 * S, 0)
 	pcard.theme_type_variation = UiStyle.CARD_VAR
 	UiStyle.corner_dress(pcard, C["gold_lo"]) # C 饰线
 	center.add_child(pcard)
 	var margin := MarginContainer.new()
 	for side in ["left", "right", "top", "bottom"]:
-		margin.add_theme_constant_override("margin_" + side, int(24 * S))
+		margin.add_theme_constant_override("margin_" + side, int(20 * S))
 	var col := VBoxContainer.new()
-	col.add_theme_constant_override("separation", int(12 * S))
+	col.add_theme_constant_override("separation", int(10 * S))
 	col.alignment = BoxContainer.ALIGNMENT_CENTER
 	col.add_child(_title_bar(_label("设置", 22.0 * S, C["gold_hi"], true)))
 	col.add_child(_rule())
 
-	var row_music := HBoxContainer.new()
-	row_music.alignment = BoxContainer.ALIGNMENT_CENTER
-	row_music.add_theme_constant_override("separation", int(10 * S))
-	var lbl_music := _label("音乐音量", 12.0 * S, C["muted"])
-	lbl_music.custom_minimum_size = Vector2(88.0 * S, 0)
-	row_music.add_child(lbl_music)
-	var sld_music := HSlider.new()
-	sld_music.name = "sld_music"
-	sld_music.min_value = UserSettings.VOL_MIN
-	sld_music.max_value = UserSettings.VOL_MAX
-	sld_music.step = 1
-	sld_music.custom_minimum_size = Vector2(180.0 * S, 24.0 * S)
-	sld_music.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	_style_slider(sld_music)
-	row_music.add_child(sld_music)
-	var val_music := _label("100", 12.0 * S, C["gold_hi"])
-	val_music.name = "lbl_music_val"
-	val_music.custom_minimum_size = Vector2(38.0 * S, 0)
-	row_music.add_child(val_music)
-	col.add_child(row_music)
+	# 滚动体：设置项多于单屏（720p 卡片高约 600），纵向滚动；横向禁滚（行宽按卡片定）
+	var scroll := ScrollContainer.new()
+	scroll.name = "settings_scroll"
+	scroll.custom_minimum_size = Vector2(0, minf(get_viewport().get_visible_rect().size.y * 0.62, 620.0 * S))
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	UiStyle.scrollbar(scroll, C, S)
+	var body := VBoxContainer.new()
+	body.name = "settings_body"
+	body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	body.add_theme_constant_override("separation", int(8 * S))
+	scroll.add_child(body)
+	col.add_child(scroll)
 
-	var row_sfx := HBoxContainer.new()
-	row_sfx.alignment = BoxContainer.ALIGNMENT_CENTER
-	row_sfx.add_theme_constant_override("separation", int(10 * S))
-	var lbl_sfx := _label("音效音量", 12.0 * S, C["muted"])
-	lbl_sfx.custom_minimum_size = Vector2(88.0 * S, 0)
-	row_sfx.add_child(lbl_sfx)
-	var sld_sfx := HSlider.new()
-	sld_sfx.name = "sld_sfx"
-	sld_sfx.min_value = UserSettings.VOL_MIN
-	sld_sfx.max_value = UserSettings.VOL_MAX
-	sld_sfx.step = 1
-	sld_sfx.custom_minimum_size = Vector2(180.0 * S, 24.0 * S)
-	sld_sfx.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	_style_slider(sld_sfx)
-	row_sfx.add_child(sld_sfx)
-	var val_sfx := _label("100", 12.0 * S, C["gold_hi"])
-	val_sfx.name = "lbl_sfx_val"
-	val_sfx.custom_minimum_size = Vector2(38.0 * S, 0)
-	row_sfx.add_child(val_sfx)
-	col.add_child(row_sfx)
+	var android := OS.get_name() == "Android"
+	# —— 音频 ——
+	body.add_child(_group_header("音频"))
+	body.add_child(_slider_row("music", "音乐音量", UserSettings.VOL_MIN, UserSettings.VOL_MAX, _on_music_changed))
+	body.add_child(_slider_row("sfx", "音效音量", UserSettings.VOL_MIN, UserSettings.VOL_MAX, _on_sfx_changed))
 
-	var row_fs := HBoxContainer.new()
-	row_fs.name = "row_fullscreen"
-	row_fs.alignment = BoxContainer.ALIGNMENT_CENTER
-	row_fs.add_theme_constant_override("separation", int(10 * S))
-	var lbl_fs := _label("全屏", 12.0 * S, C["muted"])
-	lbl_fs.custom_minimum_size = Vector2(88.0 * S, 0)
-	row_fs.add_child(lbl_fs)
-	var chk_fs := CheckButton.new()
-	chk_fs.name = "chk_fullscreen"
-	chk_fs.focus_mode = Control.FOCUS_NONE
-	row_fs.add_child(chk_fs)
-	col.add_child(row_fs)
+	# —— 显示 ——（安卓恒全屏：显示模式/分辨率隐藏，渲染精度走「性能」组渲染缩放）
+	body.add_child(_group_header("显示"))
+	var row_dm := _option_row("display_mode", "显示模式", [[0, "窗口化"], [1, "无边框"], [2, "全屏"]])
+	row_dm.visible = not android
+	body.add_child(row_dm)
+	var row_res := _option_row("res_idx", "分辨率", [[0, "原生"], [1, "1440p"], [2, "1080p"], [3, "900p"], [4, "720p"]])
+	row_res.visible = not android
+	body.add_child(row_res)
+	body.add_child(_option_row("vsync", "垂直同步", [[0, "关"], [1, "开"]]))
+	var fps_opts: Array = []
+	for v in UserSettings.fps_opts():
+		fps_opts.append([int(v), "无限制" if int(v) == 0 else str(int(v))])
+	body.add_child(_option_row("fps", "帧率上限", fps_opts))
 
-	# 帧率上限（对局生效；菜单态取 min(上限,60)）：低→高 排布，「不限」= vsync 全速
-	col.add_child(_option_row("fps", "帧率上限", [[30, "30"], [60, "60"], [90, "90"], [0, "不限"]], _on_fps_chip))
-	# 画面质量（渲染分辨率 + 阴影档；改动即时生效）
-	col.add_child(_option_row("quality", "画面质量", [[0, "低"], [1, "中"], [2, "高"]], _on_quality_chip))
+	# —— 画质 ——（预设 = 一键模板；子项可单独改，改动即时生效）
+	body.add_child(_group_header("画质"))
+	body.add_child(_option_row("quality", "画质预设", [[0, "低"], [1, "中"], [2, "高"], [3, "极高"]]))
+	body.add_child(_option_row("shadow_q", "阴影质量", [[0, "低"], [1, "中"], [2, "高"]]))
+	body.add_child(_option_row("fx_q", "特效质量", [[0, "低"], [1, "中"], [2, "高"]]))
+	var aa_opts: Array = []
+	for v in UserSettings.aa_opts():
+		aa_opts.append([int(v), ["关", "FXAA", "TAA"][int(v)]])
+	body.add_child(_option_row("aa", "抗锯齿", aa_opts))
+	body.add_child(_option_row("post_q", "后期处理", [[0, "低"], [1, "中"], [2, "高"]]))
+	body.add_child(_option_row("dof", "景深", [[0, "关"], [1, "开"]]))
+
+	# —— 性能 ——
+	body.add_child(_group_header("性能"))
+	body.add_child(_slider_row("render_pct", "渲染缩放", 50, 100, _on_render_changed))
+	body.add_child(_slider_row("ui_pct", "UI 缩放", 80, 130, _on_ui_changed))
+	body.add_child(_slider_row("bright_pct", "画面亮度", 70, 130, _on_bright_changed))
 
 	var btn_back := _button("返回", false, 220.0 * S, 40.0 * S, 12.0 * S, func() -> void:
 		_show(settings_from))
@@ -682,20 +743,6 @@ func _build_settings() -> Control:
 	col.add_child(btn_back)
 	margin.add_child(col)
 	pcard.add_child(margin)
-
-	# 行为接线：滑杆/开关改值即应用 + 落盘（user://settings.cfg）
-	sld_music.value_changed.connect(func(v: float) -> void:
-		_cfg["music"] = int(v)
-		val_music.text = str(int(v))
-		_apply_settings())
-	sld_sfx.value_changed.connect(func(v: float) -> void:
-		_cfg["sfx"] = int(v)
-		val_sfx.text = str(int(v))
-		_apply_settings())
-	chk_fs.toggled.connect(func(on: bool) -> void:
-		_cfg["fullscreen"] = on
-		UserSettings.apply_video(_cfg)
-		UserSettings.save_cfg(_cfg))
 	return page
 
 
@@ -780,29 +827,87 @@ func _on_slot_delete(slot: int) -> void:
 
 # ---------------- 设置页行为 ----------------
 
-## 设置页回填：读 cfg 填入滑杆/开关（no_signal 防触发落盘）
+## 设置页回填：读 cfg 填入滑杆/选项钮（no_signal 防触发落盘/应用）
 func _load_settings_into_ui() -> void:
 	_cfg = UserSettings.load_cfg()
 	var page: Control = pages["settings"]
-	var sld_music: HSlider = page.find_child("sld_music", true, false)
-	var sld_sfx: HSlider = page.find_child("sld_sfx", true, false)
-	var val_music: Label = page.find_child("lbl_music_val", true, false)
-	var val_sfx: Label = page.find_child("lbl_sfx_val", true, false)
-	var chk_fs: CheckButton = page.find_child("chk_fullscreen", true, false)
-	var row_fs: Control = page.find_child("row_fullscreen", true, false)
-	sld_music.set_value_no_signal(_cfg["music"])
-	sld_sfx.set_value_no_signal(_cfg["sfx"])
-	val_music.text = str(_cfg["music"])
-	val_sfx.text = str(_cfg["sfx"])
-	chk_fs.set_pressed_no_signal(_cfg["fullscreen"])
-	row_fs.visible = OS.get_name() != "Android" # Android 恒全屏，隐藏该行
+	for key in ["music", "sfx", "render_pct", "ui_pct", "bright_pct"]:
+		var sld: HSlider = page.find_child("sld_" + key, true, false)
+		var lbl: Label = page.find_child("lbl_%s_val" % key, true, false)
+		if sld != null:
+			sld.set_value_no_signal(int(_cfg.get(key, 100)))
+		if lbl != null:
+			lbl.text = str(int(_cfg.get(key, 100)))
 	_refresh_chips()
 
 
-## 应用音频设置并落盘（滑杆改动回调）
+## 滑杆读数刷新（lbl_<key>_val）
+func _set_val_label(key: String, v: int) -> void:
+	var lbl: Label = pages["settings"].find_child("lbl_%s_val" % key, true, false)
+	if lbl != null:
+		lbl.text = str(v)
+
+
+## 音频滑杆改动：应用 bus + 落盘（不触碰视频链路）
 func _apply_settings() -> void:
 	UserSettings.apply_audio(_cfg)
 	UserSettings.save_cfg(_cfg)
+
+
+## 音乐滑杆：写 cfg → 读数 → 应用+落盘
+func _on_music_changed(v: float) -> void:
+	_cfg["music"] = int(v)
+	_set_val_label("music", int(v))
+	_apply_settings()
+
+
+## 音效滑杆：写 cfg → 读数 → 应用+落盘
+func _on_sfx_changed(v: float) -> void:
+	_cfg["sfx"] = int(v)
+	_set_val_label("sfx", int(v))
+	_apply_settings()
+
+
+## 渲染缩放滑杆：写 cfg → 读数 → 落盘 + 通知 main 立即应用（scaling_3d_scale）
+func _on_render_changed(v: float) -> void:
+	_cfg["render_pct"] = int(v)
+	_set_val_label("render_pct", int(v))
+	_commit_video()
+
+
+## 画面亮度滑杆：写 cfg → 读数 → 落盘 + 通知 main 立即应用（Environment adjustment）
+func _on_bright_changed(v: float) -> void:
+	_cfg["bright_pct"] = int(v)
+	_set_val_label("bright_pct", int(v))
+	_commit_video()
+
+
+## UI 缩放滑杆：落盘 + 通知 main（HUD 立即重排；界面页离开设置页时按新 S 重建）
+func _on_ui_changed(v: float) -> void:
+	_cfg["ui_pct"] = int(v)
+	_set_val_label("ui_pct", int(v))
+	UserSettings.save_cfg(_cfg)
+	cb["ui_changed"].call(int(v))
+
+
+## 视频/画质改动统一出口：落盘 + 通知 main 立即应用 + 选项钮/滑杆回填
+func _commit_video() -> void:
+	UserSettings.save_cfg(_cfg)
+	cb["video_changed"].call(_cfg)
+	_refresh_chips()
+	_sync_video_sliders()
+
+
+## 滑杆回填（画质预设会改 render_pct；no_signal 防递归）
+func _sync_video_sliders() -> void:
+	var page: Control = pages["settings"]
+	for key in ["render_pct", "ui_pct", "bright_pct"]:
+		var sld: HSlider = page.find_child("sld_" + key, true, false)
+		var lbl: Label = page.find_child("lbl_%s_val" % key, true, false)
+		if sld != null:
+			sld.set_value_no_signal(int(_cfg.get(key, 100)))
+		if lbl != null:
+			lbl.text = str(int(_cfg.get(key, 100)))
 
 
 ## 选项钮选中态刷新：与 _cfg 现值相同 = 主钮金样式，其余 = 次钮（主题变体切换，零 override）。
@@ -815,20 +920,19 @@ func _refresh_chips() -> void:
 			b.theme_type_variation = UiStyle.BTN_PRIMARY_VAR if int(v) == sel else UiStyle.BTN_MENU_VAR
 
 
-## 帧率上限点选：落盘 + 通知 main（限帧组合按 _sync_fps_cap 每帧生效）+ 刷选中态
-func _on_fps_chip(cap: int) -> void:
-	_cfg["fps"] = cap
-	UserSettings.save_cfg(_cfg)
-	cb["fps_changed"].call(cap)
-	_refresh_chips()
-
-
-## 画面质量点选：落盘 + 通知 main 立即应用（渲染分辨率/阴影）+ 刷选中态
-func _on_quality_chip(level: int) -> void:
-	_cfg["quality"] = level
-	UserSettings.save_cfg(_cfg)
-	cb["quality_changed"].call(level)
-	_refresh_chips()
+## 选项钮点选：写 cfg；画质预设额外套用一键模板（阴影/特效/AA/后期/渲染缩放）；
+## 统一落盘 + 通知 main 立即应用 + 回填（fps/显示/画质全走这一条路）。
+func _on_video_chip(key: String, val: int) -> void:
+	if key == "vsync" or key == "dof":
+		_cfg[key] = val != 0
+	else:
+		_cfg[key] = val
+	if key == "quality":
+		var preset: Dictionary = UserSettings.QUALITY_PRESETS[clampi(val, 0, UserSettings.QUALITY_PRESETS.size() - 1)]
+		for k in preset:
+			_cfg[k] = preset[k]
+		_cfg["aa"] = UserSettings.aa_level(int(_cfg.get("aa", 1))) # 安卓无 TAA：极高 → FXAA
+	_commit_video()
 
 
 # ---------------- 页切换 ----------------
@@ -857,6 +961,9 @@ func _ensure(name: String) -> Control:
 
 ## 显示指定页面（其余隐藏，0.18s 淡入）；回标题时顺带刷新「继续对局」可用性。
 func _show(name: String) -> void:
+	if _ui_dirty:
+		_rebuild_pages()
+		_ensure(name)
 	for k in pages:
 		pages[k].visible = (k == name)
 	current = name

@@ -141,9 +141,14 @@ func _initialize() -> void:
 	var sld_music: HSlider = page_set.find_child("sld_music", true, false)
 	var sld_sfx: HSlider = page_set.find_child("sld_sfx", true, false)
 	var lbl_music: Label = page_set.find_child("lbl_music_val", true, false)
-	var chk_fs: CheckButton = page_set.find_child("chk_fullscreen", true, false)
+	var sld_render: HSlider = page_set.find_child("sld_render_pct", true, false)
+	var sld_ui: HSlider = page_set.find_child("sld_ui_pct", true, false)
+	var sld_bright: HSlider = page_set.find_child("sld_bright_pct", true, false)
 	cmp_approx(sld_music.value, 100.0, "默认音乐音量 100")
 	check(lbl_music.text == "100", "音量读数标签（%s）" % lbl_music.text)
+	cmp_approx(sld_render.value, 100.0, "默认渲染缩放 100")
+	cmp_approx(sld_ui.value, 100.0, "默认 UI 缩放 100")
+	cmp_approx(sld_bright.value, 100.0, "默认画面亮度 100")
 	sld_music.value = 40.0
 	check(int(UserSettings.load_cfg()["music"]) == 40, "拖动音乐滑杆即落盘")
 	var bgm_idx := AudioServer.get_bus_index("BGM")
@@ -153,12 +158,11 @@ func _initialize() -> void:
 	sld_sfx.value = 0.0
 	cmp_approx(AudioServer.get_bus_volume_db(AudioServer.get_bus_index("SFX")), -80.0, "SFX bus 0 → 静音 -80dB")
 	check(int(UserSettings.load_cfg()["sfx"]) == 0, "音效 0 落盘")
-	chk_fs.button_pressed = true
-	var fs_mode := DisplayServer.window_get_mode()
-	check(fs_mode == DisplayServer.WINDOW_MODE_FULLSCREEN or fs_mode == DisplayServer.WINDOW_MODE_EXCLUSIVE_FULLSCREEN, "全屏开关生效")
-	check(bool(UserSettings.load_cfg()["fullscreen"]), "全屏落盘")
-	chk_fs.button_pressed = false
-	check(DisplayServer.window_get_mode() == DisplayServer.WINDOW_MODE_WINDOWED, "关全屏回窗口")
+	await _click_btn(page_set, "btn_display_mode_1")
+	check(int(UserSettings.load_cfg()["display_mode"]) == 1, "无边框显示模式落盘")
+	await _click_btn(page_set, "btn_display_mode_0")
+	check(int(UserSettings.load_cfg()["display_mode"]) == 0, "窗口化显示模式落盘")
+	check(DisplayServer.window_get_mode() == DisplayServer.WINDOW_MODE_WINDOWED, "显示模式回窗口化")
 	for _i in 20:
 		await process_frame
 	root.get_texture().get_image().save_png("res://shots/settings.png")
@@ -226,7 +230,7 @@ func _initialize() -> void:
 	UserSettings.save_cfg(orig_cfg)
 	UserSettings.apply_all(orig_cfg)
 
-	finish("SAVE", 70)
+	finish("SAVE", 77)
 
 
 # ---------------- 辅助 ----------------
