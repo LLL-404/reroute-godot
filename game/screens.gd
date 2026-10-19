@@ -1,7 +1,7 @@
 extends CanvasLayer
 
 # 界面壳（移植 reroute/scripts/screens.lua + ScreenManager 的页栈语义）：标题 / 暂停 / 结算
-# / 存档（3 槽，读|存双模式）/ 设置（音量+全屏）五屏 + 通用确认弹窗。
+# / 存档（3 槽，读|存双模式）/ 设置（音量+全屏+帧率+画质）五屏 + 通用确认弹窗。
 # 游戏流转即屏状态：进行中 = current_page()==""；暂停 = "pause"；结算 = "gameover"；
 # 标题 = "title"；存档页 = "slots"；设置页 = "settings"。
 # 页面懒建缓存复用；切换带 0.18s 淡入；按钮回调由 main 注入；存档/设置模块直接 preload。
@@ -33,6 +33,7 @@ var slots_from := "title" # 返回目标页
 # 设置页状态
 var settings_from := "title"
 var _cfg: Dictionary = {}
+var _chips: Dictionary = {} # 设置页选项钮：key（"fps"/"quality"）→ {值: Button}（选中态刷新用）
 
 # 确认弹窗
 var confirm_layer: Control = null
@@ -319,6 +320,27 @@ func _page_base(veil: Color) -> Control:
 ## 滑杆金化：暗槽 + 古金边 + 已过段亮金（grabber 图标走默认主题，不引贴图）。
 func _style_slider(s: HSlider) -> void:
 	s.theme_type_variation = UiStyle.SLIDER_VAR
+
+
+## 选项行（设置页帧率/画质共用）：88 宽标签（同滑杆行口径）+ 一排互斥钮（选中态由
+## _refresh_chips 切主题变体；按钮本身走 _button 工厂，无逐钮 override）。
+func _option_row(key: String, label: String, opts: Array, fn: Callable) -> HBoxContainer:
+	var row := HBoxContainer.new()
+	row.name = "row_" + key
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", int(6 * S))
+	var lbl := _label(label, 12.0 * S, C["muted"])
+	lbl.custom_minimum_size = Vector2(88.0 * S, 0)
+	row.add_child(lbl)
+	var map: Dictionary = {}
+	for o in opts:
+		var v := int(o[0])
+		var b := _button(str(o[1]), false, 56.0 * S, 30.0 * S, 11.0 * S, fn.bind(v))
+		b.name = "btn_%s_%d" % [key, v]
+		row.add_child(b)
+		map[v] = b
+	_chips[key] = map
+	return row
 
 
 ## 构建标题页：底部渐暗帷幕 + 左列式菜单 + 玩法说明浮层
@@ -649,6 +671,11 @@ func _build_settings() -> Control:
 	row_fs.add_child(chk_fs)
 	col.add_child(row_fs)
 
+	# 帧率上限（对局生效；菜单态取 min(上限,60)）：低→高 排布，「不限」= vsync 全速
+	col.add_child(_option_row("fps", "帧率上限", [[30, "30"], [60, "60"], [90, "90"], [0, "不限"]], _on_fps_chip))
+	# 画面质量（渲染分辨率 + 阴影档；改动即时生效）
+	col.add_child(_option_row("quality", "画面质量", [[0, "低"], [1, "中"], [2, "高"]], _on_quality_chip))
+
 	var btn_back := _button("返回", false, 220.0 * S, 40.0 * S, 12.0 * S, func() -> void:
 		_show(settings_from))
 	btn_back.name = "btn_settings_back"
@@ -769,12 +796,39 @@ func _load_settings_into_ui() -> void:
 	val_sfx.text = str(_cfg["sfx"])
 	chk_fs.set_pressed_no_signal(_cfg["fullscreen"])
 	row_fs.visible = OS.get_name() != "Android" # Android 恒全屏，隐藏该行
+	_refresh_chips()
 
 
 ## 应用音频设置并落盘（滑杆改动回调）
 func _apply_settings() -> void:
 	UserSettings.apply_audio(_cfg)
 	UserSettings.save_cfg(_cfg)
+
+
+## 选项钮选中态刷新：与 _cfg 现值相同 = 主钮金样式，其余 = 次钮（主题变体切换，零 override）。
+func _refresh_chips() -> void:
+	for key in _chips:
+		var sel := int(_cfg.get(key, 0))
+		var map: Dictionary = _chips[key]
+		for v in map:
+			var b: Button = map[v]
+			b.theme_type_variation = UiStyle.BTN_PRIMARY_VAR if int(v) == sel else UiStyle.BTN_MENU_VAR
+
+
+## 帧率上限点选：落盘 + 通知 main（限帧组合按 _sync_fps_cap 每帧生效）+ 刷选中态
+func _on_fps_chip(cap: int) -> void:
+	_cfg["fps"] = cap
+	UserSettings.save_cfg(_cfg)
+	cb["fps_changed"].call(cap)
+	_refresh_chips()
+
+
+## 画面质量点选：落盘 + 通知 main 立即应用（渲染分辨率/阴影）+ 刷选中态
+func _on_quality_chip(level: int) -> void:
+	_cfg["quality"] = level
+	UserSettings.save_cfg(_cfg)
+	cb["quality_changed"].call(level)
+	_refresh_chips()
 
 
 # ---------------- 页切换 ----------------

@@ -1,9 +1,11 @@
 extends RefCounted
 
-# 玩家设置（音量 / 全屏）持久化与应用：user://settings.cfg（ConfigFile）。
+# 玩家设置（音量 / 全屏 / 帧率 / 画质）持久化与应用：user://settings.cfg（ConfigFile）。
 # 纯数据 + 应用函数；不引用任何视图模块（音频 bus 按名查找 / 创建）。
 # 音量口径：滑杆 0..100 → 线性增益 v/100 → dB（0 = -80dB 静音）；默认 100 保现状响度。
 # 全屏：PC 有效；Android / headless 跳过（Android 恒全屏）。
+# 帧率：0 = 不限（vsync 全速），可选 30/60/90；菜单/标题/结算恒 ≤60（组合取法在 main._sync_fps_cap）。
+# 画质：0 低 / 1 中 / 2 高（渲染分辨率 + 阴影；应用在 view_core.apply_quality）。
 # 本文件不使用 class_name；调用方以 preload 引用（同 blueprint.gd 口径）。
 
 const CFG_PATH := "user://settings.cfg"
@@ -12,11 +14,13 @@ const SFX_BUS := "SFX"
 const VOL_MIN := 0
 const VOL_MAX := 100
 const MUTE_DB := -80.0
+const FPS_OPTS := [0, 30, 60, 90] # 帧率上限候选（0 = 不限）
+const QUALITY_OPTS := [0, 1, 2] # 画面质量档：0 低 / 1 中 / 2 高
 
 
-## 默认配置：音量满格 / 非全屏 / 局数进度 0（首次启动与原行为一致）
+## 默认配置：音量满格 / 非全屏 / 不限帧 / 画质高 / 局数进度 0（首次启动与原行为一致）
 static func default_cfg() -> Dictionary:
-	return { "music": VOL_MAX, "sfx": VOL_MAX, "fullscreen": false, "runs": 0 }
+	return { "music": VOL_MAX, "sfx": VOL_MAX, "fullscreen": false, "fps": 0, "quality": 2, "runs": 0 }
 
 
 ## 读配置（缺失文件 / 字段一律回默认，绝不抛）。
@@ -27,6 +31,9 @@ static func load_cfg() -> Dictionary:
 		cfg["music"] = clampi(int(cf.get_value("audio", "music", cfg["music"])), VOL_MIN, VOL_MAX)
 		cfg["sfx"] = clampi(int(cf.get_value("audio", "sfx", cfg["sfx"])), VOL_MIN, VOL_MAX)
 		cfg["fullscreen"] = bool(cf.get_value("video", "fullscreen", cfg["fullscreen"]))
+		var f := int(cf.get_value("video", "fps", cfg["fps"]))
+		cfg["fps"] = f if FPS_OPTS.has(f) else int(cfg["fps"])
+		cfg["quality"] = clampi(int(cf.get_value("video", "quality", cfg["quality"])), 0, QUALITY_OPTS.size() - 1)
 		cfg["runs"] = maxi(0, int(cf.get_value("progress", "runs", cfg["runs"])))
 	return cfg
 
@@ -40,6 +47,9 @@ static func save_cfg(cfg: Dictionary) -> void:
 	cf.set_value("audio", "music", clampi(int(cfg.get("music", VOL_MAX)), VOL_MIN, VOL_MAX))
 	cf.set_value("audio", "sfx", clampi(int(cfg.get("sfx", VOL_MAX)), VOL_MIN, VOL_MAX))
 	cf.set_value("video", "fullscreen", bool(cfg.get("fullscreen", false)))
+	var f := int(cfg.get("fps", 0))
+	cf.set_value("video", "fps", f if FPS_OPTS.has(f) else 0)
+	cf.set_value("video", "quality", clampi(int(cfg.get("quality", 2)), 0, QUALITY_OPTS.size() - 1))
 	cf.set_value("progress", "runs", maxi(0, int(cfg.get("runs", prev_runs))))
 	cf.save(CFG_PATH)
 
@@ -83,3 +93,14 @@ static func apply_video(cfg: Dictionary) -> void:
 static func apply_all(cfg: Dictionary) -> void:
 	apply_audio(cfg)
 	apply_video(cfg)
+
+
+## 帧率上限（0 = 不限；非法值回 0）。菜单/对局组合取法在 main._sync_fps_cap，本文件只做合法性。
+static func fps_cap(cfg: Dictionary) -> int:
+	var f := int(cfg.get("fps", 0))
+	return f if FPS_OPTS.has(f) else 0
+
+
+## 画面质量档（0 低 / 1 中 / 2 高；越界夹取）。
+static func quality_level(cfg: Dictionary) -> int:
+	return clampi(int(cfg.get("quality", 2)), 0, QUALITY_OPTS.size() - 1)

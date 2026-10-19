@@ -101,6 +101,11 @@ func apply_blueprint(bp: Dictionary, seed: int, anchor: Dictionary = {}) -> void
 	terrain.apply_blueprint(bp, seed, anchor)
 
 
+## 画面质量档应用（0 低 / 1 中 / 2 高；→ view_core）
+func apply_quality(level: int) -> void:
+	core.apply_quality(level)
+
+
 ## 铺一局的动态内容（→ view_entities）
 func build_terrain(pgrid: Grid) -> void:
 	entities.build_terrain(pgrid)

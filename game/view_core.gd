@@ -42,6 +42,7 @@ var box_mesh: BoxMesh
 var mats: Dictionary = {}
 var env: Environment
 var sun: DirectionalLight3D
+var _quality := 2 # 画面质量档（0 低 / 1 中 / 2 高；由 apply_quality 写入，默认高 = 画质全开）
 
 var camera: Camera3D
 var focus := Vector3.ZERO # 相机注视的地面点（y=0；平移/旋转围绕它）
@@ -91,6 +92,21 @@ func setup() -> void:
 	for k in MAT:
 		var c: Array = MAT[k]
 		mats[k] = make_material(c[0], c[1], c[2], [0.10, 0.55, 0.48] if k == "core" else null)
+
+
+## 画面质量档应用（0 低 / 1 中 / 2 高）：3D 渲染分辨率 + FXAA + 直射阴影。
+## 高 = 画质全开（1.0 / 无 FXAA / 阴影开，与原行为一致）；低/中 降渲染分辨率，低再关阴影。
+## 纯表现层；探针/自检运行由 main 门控不调用（默认 2 = 截图 gate 口径不变）。
+func apply_quality(level: int) -> void:
+	var l := clampi(level, 0, 2)
+	_quality = l
+	var vp := host.get_viewport()
+	if vp != null:
+		var scales: Array = [0.70, 0.85, 1.0]
+		vp.scaling_3d_scale = float(scales[l])
+		vp.screen_space_aa = Viewport.SCREEN_SPACE_AA_FXAA if l < 2 else Viewport.SCREEN_SPACE_AA_DISABLED
+	if sun != null:
+		sun.shadow_enabled = l >= 1
 
 
 ## 创建标准 PBR 材质（可选自发光）

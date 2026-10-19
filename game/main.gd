@@ -14,7 +14,7 @@ const BASE_SEED := 20261003
 const CAM_PAN_SPEED := 24.0 # WASD 平移速度（世界单位/秒）
 const CAM_ROT_SPEED := 1.5 # Q/E 旋转速度（rad/s）
 const CAM_KEYS := [KEY_W, KEY_A, KEY_S, KEY_D, KEY_Q, KEY_E] # 相机键（不参与对局操作）
-const MENU_FPS := 60 # 菜单/标题/结算限帧（压风扇/GPU；对局态不限，vsync 全速——用户口径 2026-10-17）
+const MENU_FPS := 60 # 菜单/标题/结算限帧（压风扇/GPU）；对局态 = 玩家上限（默认 0 不限，vsync 全速——用户口径 2026-10-17/18）
 
 var view = null # View（preload 脚本实例）；动态引用
 var world: World = null
@@ -52,6 +52,8 @@ func _ready() -> void:
 	_is_probe_run = _detect_probe_run()
 	_settings = UserSettings.load_cfg()
 	UserSettings.apply_all(_settings) # 启动即应用玩家设置（音量 bus / 全屏）
+	if not _is_probe_run:
+		view.apply_quality(UserSettings.quality_level(_settings)) # 画质档（探针恒用默认画质，保 gate 截图口径）
 	if not _is_probe_run:
 		run_index = maxi(0, int(_settings.get("runs", 0))) # 跨会话续接已玩局数（标题预烘焙不算）
 	new_game()
@@ -144,6 +146,8 @@ func _setup_shell() -> void:
 		"quit": Callable(self, "_quit_game"),
 		"load_slot": Callable(self, "load_game"),
 		"save_slot": Callable(self, "save_game"),
+		"fps_changed": Callable(self, "_on_fps_changed"),
+		"quality_changed": Callable(self, "_on_quality_changed"),
 	}, hud)
 
 
@@ -168,6 +172,17 @@ func _persist_runs() -> void:
 		return
 	_settings["runs"] = run_index
 	UserSettings.save_cfg(_settings)
+
+
+## 设置页帧率改动：更新缓存（落盘归设置页）；下一帧 _sync_fps_cap 生效。
+func _on_fps_changed(cap: int) -> void:
+	_settings["fps"] = cap
+
+
+## 设置页画质改动：更新缓存 + 立即应用（渲染分辨率/阴影）。
+func _on_quality_changed(level: int) -> void:
+	_settings["quality"] = level
+	view.apply_quality(level)
 
 
 ## 暂停（仅进行中且未暂停时有效；HUD 按钮 / Esc / 安卓返回共用）
@@ -396,10 +411,14 @@ func new_game() -> void:
 	print("[Game] 新对局 run=", run_index, " seed=", BASE_SEED + run_index, " sc_seed=", sc.seed)
 
 
-## 菜单限帧：非对局态（标题/暂停/结算，判据同 _camera_free）限 60fps 压风扇/GPU；
-## 对局态 max_fps=0（vsync 锁显示器刷新率全速）。每帧幂等同步，无状态簿记。
+## 限帧：非对局态（标题/暂停/结算，判据同 _camera_free）取 min(玩家上限, 60) 压风扇/GPU；
+## 对局态 = 玩家上限（0 = vsync 锁刷新率全速）。探针/自检恒用 0/60 口径（忽略玩家设置，
+## 保 gate 确定性）。每帧幂等同步，无状态簿记。
 func _sync_fps_cap() -> void:
-	var want := 0 if _camera_free() else MENU_FPS
+	var cap := 0 if _is_probe_run else UserSettings.fps_cap(_settings)
+	var want := cap
+	if not _camera_free():
+		want = MENU_FPS if cap <= 0 else mini(cap, MENU_FPS)
 	if Engine.max_fps != want:
 		Engine.max_fps = want
 

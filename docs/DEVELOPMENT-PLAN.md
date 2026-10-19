@@ -2323,6 +2323,28 @@ asset 63/0、model 6/0、orient 1/0、save 74/0、touch 39/0、intro 36/0）；`
 
 ---
 
+### 11.28 设置 v2：帧率上限 + 画面质量档（2026-10-18）
+
+**需求**：设置页可自选帧率（30/60/90）与画面质量。
+
+**实现**：
+- `user_settings.gd`：`settings.cfg` 增 `video/fps`（0 = 不限，30/60/90；默认 0 保现状）与
+  `video/quality`（0 低 / 1 中 / 2 高；默认 2 保现状）；非法值回默认 / 夹取。新增纯函数
+  `fps_cap()` / `quality_level()`（应用组合归 main，模块内仍不引用视图）。
+- 限帧组合（`main._sync_fps_cap`）：对局态 = 玩家上限（0 → vsync 全速）；菜单/标题/结算 =
+  `min(上限, 60)`（上限 0 → 60）——既有「只限菜单」口径保留，玩家设 30 时菜单同步降到 30。
+  探针/自检运行恒用 0/60 口径（忽略玩家设置，保 gate 确定性）。
+- 画质（`view_core.apply_quality` + `view.apply_quality` 转发）：`scaling_3d_scale`
+  0.70 / 0.85 / 1.0；低档关直射阴影（`sun.shadow_enabled = level >= 1`）；低/中开 FXAA
+  （`screen_space_aa`）。默认高档 = 原行为；探针运行不应用（保截图 gate 口径）。
+- UI（`screens.gd`）：设置页新增两行互斥选项钮（`_option_row` = 88 宽标签 + 56×30 chips；
+  选中走 `UiStyle.BTN_PRIMARY_VAR`、其余 `BTN_MENU_VAR`，零逐钮 override）；点选即落盘 +
+  经 `fps_changed` / `quality_changed` 回调通知 main（main 同步 `_settings` 缓存并应用）。
+- 回归（用户裁定本轮不新增专测）：`probe_save` 74/0、`probe_smoke` 34/0（限帧断言不变）、
+  `check_ui_lint` PASS、5 改动文件 `--check-only` 全过。`shots/settings.png` 重出。
+
+---
+
 ## 12. AI 任务卡模板（派活时照抄）
 
 ```markdown
