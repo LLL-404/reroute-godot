@@ -300,7 +300,9 @@ python tools/check_shots.py    # 截图像素校验
   60 帧（Android 默认 Mobile 渲染器 + ETC2/ASTC；触屏/安全区沿用 §11.9）。探针运行只应用音频
   （显示/画质/UI 不应用，保 gate 口径）。回归：save 77、touch 71（矩阵 54）、smoke 34、hud 73、
   ui_flow 39、sync 1845、scene 25、shots 6、check_shots 29、单测 107、lint PASS；
-  证据 `logs/gates-20261019-settings3/`；决策记录 = 方案 §11.29。
+  证据 `logs/gates-20261019-settings3/`；决策记录 = 方案 §11.29。发布口径（2026-10-20）：
+  Android 预设显式 ETC2（APK 实测无 S3TC、纹理双变体导出各取一份）；C#/.NET 不支持
+  armeabi-v7a，最终包保持 arm64-v8a + x86_64 双 ABI（约 312MB），不做 ABI 裁剪。
 
 ---
 

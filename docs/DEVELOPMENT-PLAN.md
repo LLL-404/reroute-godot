@@ -2397,13 +2397,16 @@ asset 63/0、model 6/0、orient 1/0、save 74/0、touch 39/0、intro 36/0）；`
 
 **平台适配核对（对齐用户 2026-10-19 建议）**：
 - 渲染器：`project.godot` 无显式覆盖 → Godot 4 默认 desktop Forward+ / Android Mobile。
-- 纹理压缩：Windows 预设 S3TC/BPTC；Android 预设走默认 ETC2/ASTC（导入侧
-  `textures/vram_compression/import_etc2_astc=true`）。
+- 纹理压缩：Windows 预设 S3TC/BPTC；Android 预设显式 `texture_format/s3tc_bptc=false` +
+  `etc2_astc=true`（导入侧双变体 `.s3tc.ctex` / `.etc2.ctex`，导出各取一份；APK 实测 4 个
+  `.etc2` 地形贴图 + 32 个 lossless，0 个 `.s3tc`）。
+- ABI（2026-10-20 复核）：Godot C#/.NET Android 导出不支持 armeabi-v7a（仅 arm64-v8a +
+  x86_64），最终包保持双 ABI（约 312MB），不做裁剪；minSdk 24 / targetSdk 36。
 - 输入：触屏经引擎 `emulate_mouse_from_touch` 走同一套鼠标事件（§11.9，probe_touch 覆盖）；
   安全区（刘海/手势条）与 UI 缩放已接入。
 - PC 分辨率：窗口列表含 1920×1080 / 2560×1440 / 原生；UI 随视口高度 S 自适应（1.0..1.6）。
 - 未做（明确留档）：动态分辨率（需真机调参，避免画面脉动）、PC 悬停提示/快捷键、
-  真机中低端机实测（用户侧）。
+  纹理单格式/降采样（保兼容面与画质）、真机中低端机实测（用户侧）。
 
 **回归**：`probe_save` 77/0（显示模式 chips 替代全屏开关 + 三项默认滑块断言）、
 `probe_touch` 71/0（按钮矩阵 54）、`probe_smoke` 34/0、`probe_hud` 73/0、
