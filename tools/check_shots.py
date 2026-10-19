@@ -5,6 +5,7 @@
 阈值取自 2026-10-13 实测渲染值（留 2-5 倍余量，防平台微差；真回归=关键色归零必触发）：
   warm=850724  teal=124  red=163694  green=575  diff(game,heat)=0.309  diff(game,ghost)=0.0009
 D1-5 追加：game_20x9.png（1600x720，20:9）/ game_narrow.png（960x720，4:3）尺寸+关键色。
+D1-5 扩展（2026-10-20）：game_tablet.png（1600x1200，4:3 平板）/ game_16x10.png（1280x800，16:10）尺寸+关键色。
 T1 追加：game_closeup.png（改造特写：填两级崖壁+裙脚 / 挖一级坑）尺寸+暖色下限。
 跑法：python tools/check_shots.py   （cwd=reroute-godot）
 判定：exit 0 + stdout 含 [SHOTS] PASS。
@@ -111,6 +112,22 @@ for name, im, dims in (('game_20x9.png', im_w9, (1600, 720)), ('game_narrow.png'
     chk(n_warm2 > 250000, '%s 暖色地形不足 %d（阈值 250000）' % (name, n_warm2))
     chk(n_teal2 > 30, '%s 核心青玉不足 %d（阈值 30）' % (name, n_teal2))
     print('[SHOTS] %s warm=%d teal=%d' % (name, n_warm2, n_teal2))
+
+# D1-5 扩展：平板 4:3（1600x1200）与 16:10（1280x800）
+im_tablet = load('game_tablet.png')
+im_16x10 = load('game_16x10.png')
+for name, im, dims in (('game_tablet.png', im_tablet, (1600, 1200)), ('game_16x10.png', im_16x10, (1280, 800))):
+    chk(im is not None, name + ' 存在')
+    if im is None:
+        continue
+    chk(im.size == dims, '%s 尺寸 %s != %s' % (name, im.size, dims))
+    colors4 = im.quantize(colors=256).getcolors()
+    chk(colors4 is not None and len(colors4) > 60, '%s 唯一色数过少 %d' % (name, len(colors4 or [])))
+    n_warm4 = scan(im, warm)
+    n_teal4 = scan(im, teal)
+    chk(n_warm4 > 250000, '%s 暖色地形不足 %d（阈值 250000）' % (name, n_warm4))
+    chk(n_teal4 > 30, '%s 核心青玉不足 %d（阈值 30）' % (name, n_teal4))
+    print('[SHOTS] %s warm=%d teal=%d' % (name, n_warm4, n_teal4))
 
 if im_game is not None and im_heat is not None:
     d1 = diff_ratio(im_game, im_heat)

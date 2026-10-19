@@ -303,6 +303,9 @@ python tools/check_shots.py    # 截图像素校验
   证据 `logs/gates-20261019-settings3/`；决策记录 = 方案 §11.29。发布口径（2026-10-20）：
   Android 预设显式 ETC2（APK 实测无 S3TC、纹理双变体导出各取一份）；C#/.NET 不支持
   armeabi-v7a，最终包保持 arm64-v8a + x86_64 双 ABI（约 312MB），不做 ABI 裁剪。
+- 截图覆盖扩展（2026-10-20）**已完成**：`probe_shots` 6→8 图（+`shots/game_tablet.png`
+  1600×1200 4:3 平板 + `shots/game_16x10.png` 1280×800 16:10），`check_shots` 29→39；
+  平板构图/HUD 目验通过；证据 `logs/gates-20261020-tablet/`。
 
 ---
 

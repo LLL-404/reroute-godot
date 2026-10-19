@@ -1,14 +1,14 @@
 extends ProbeKit
 
 # C3 判定：窗口渲染出帧（非 headless 运行）。
-# 布置一局丰富场景（单位/墙阵/双塔/英雄），推进 90 tick 后截 6 张：
+# 布置一局丰富场景（单位/墙阵/双塔/英雄），推进 90 tick 后截 8 张：
 #   shots/game.png          对局全景（含地形/建筑/单位/核心）
 #   shots/heat.png          威胁热层开启
 #   shots/ghost.png         放墙预览幽灵（斜线逐格绿板，D5-3 目视件）
-#   shots/game_20x9.png / game_narrow.png  宽屏/窄屏目视件（D1-5）
+#   shots/game_20x9.png / game_narrow.png / game_tablet.png / game_16x10.png  宽屏/窄屏/平板目视件（D1-5 扩展）
 #   shots/game_closeup.png  改造特写（自然化 T1：填两级崖壁+裙脚 / 挖一级坑，相机拉近）
 # 跑法（cwd=reroute-godot）：godot -s res://tests/probes/probe_shots.gd   （窗口模式，勿加 --headless）
-# 判定：exit 0 + stdout 含 [SHOTS] PASS（6 图非空）；像素口径交给 tools/check_shots.py。
+# 判定：exit 0 + stdout 含 [SHOTS] PASS（8 图非空）；像素口径交给 tools/check_shots.py。
 
 
 func _initialize() -> void:
@@ -79,6 +79,14 @@ func _initialize() -> void:
 	for _i in 5:
 		await process_frame
 	_shot("res://shots/game_narrow.png")
+	root.size = Vector2i(1600, 1200)
+	for _i in 5:
+		await process_frame
+	_shot("res://shots/game_tablet.png")
+	root.size = Vector2i(1280, 800)
+	for _i in 5:
+		await process_frame
+	_shot("res://shots/game_16x10.png")
 	root.size = Vector2i(1280, 720)
 	for _i in 3:
 		await process_frame
@@ -100,7 +108,7 @@ func _initialize() -> void:
 		for _i in 3:
 			await process_frame
 		_shot("res://shots/game_closeup.png")
-		finish("SHOTS", 6)
+		finish("SHOTS", 8)
 		return
 	finish("SHOTS", 5)
 
