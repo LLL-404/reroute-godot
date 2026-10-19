@@ -144,7 +144,12 @@ func _initialize() -> void:
 		else:
 			n_rubble += 1
 			rub_nodes.append(cv["node"])
-	cmp_int(n_ore + n_rubble, 25, "覆盖层总数")
+	var n_cover := 0
+	for y in world.grid.h:
+		for x in world.grid.w:
+			if world.grid.at(x, y) == Grid.COVER:
+				n_cover += 1
+	cmp_int(n_ore + n_rubble, n_cover, "覆盖层总数 = 当局 COVER 格数（%d）" % n_cover)
 	check(n_ore >= 4 and n_rubble >= 4, "矿 %d / 瓦砾 %d 双类共存" % [n_ore, n_rubble])
 	if ore_nodes.size() > 0:
 		var gn: Node3D = ore_nodes[0]

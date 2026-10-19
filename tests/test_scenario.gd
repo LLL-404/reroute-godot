@@ -1,7 +1,8 @@
 extends RefCounted
 
-# scenario 单测（2026-10-16 世界生成后重写）：数值表合同、默认种子（黄金图 20261003）快照、
-# 高度模板、结构校验契约、路径长标定与指纹确定性与负对照。
+# scenario 单测（2026-10-16 世界生成后重写；2026-10-19 增自由路径扁平快照）：数值表合同、
+# 默认种子（黄金图 20261003）快照、自由路径（游戏内第 1 局 20261004）快照、高度模板、
+# 结构校验契约、路径长标定与指纹确定性与负对照。
 
 # 白盒仅用于制造边界（wave_scale_pct 直写触发指纹分叉）；行为断言一律走公开面。
 
@@ -91,6 +92,65 @@ func register(kit: TestKit) -> void:
 		kit.eq(sc.ore_cells.size(), 17, "矿总表（盆地在前、中场在后）")
 		kit.eq(sc.ore_cells[0], Vector2i(5, 56), "矿表首 = 盆地矿")
 		kit.eq(sc.ore_cells[16], Vector2i(35, 21), "矿表末 = 中场矿"))
+
+	kit.test("freeform-snapshot", func():
+		var sc := Scenario.new(20261004) # 游戏内第 1 局种子（自由路径扁平快照，2026-10-19 铸造；再调参需同步）
+		kit.eq(sc._freeform, true, "自由路径标记")
+		kit.eq(sc.resample_salt, 3, "盐")
+		kit.eq(sc.template_id, -1, "自由路径无模板")
+		kit.eq(sc.ridge_y, -1, "自由路径无单一脊线")
+		kit.eq(sc.chokes.size(), 0, "自由路径无固定咽喉")
+		kit.eq(sc.core, Vector2i(43, 14), "核心")
+		kit.eq(sc.hero_spawn, Vector2i(43, 16), "英雄位（核心朝内 2）")
+		kit.eq(sc.spawns.size(), 3, "双主口 + 盆地口")
+		kit.eq(sc.spawns[0], Vector2i(14, 50), "主口 1")
+		kit.eq(sc.spawns[1], Vector2i(3, 41), "主口 2")
+		kit.eq(sc.spawns[2], Vector2i(30, 15), "盆地口（压块心矿）")
+		kit.eq(sc.basin_rect, Rect2i(27, 11, 9, 8), "盆地矩形")
+		kit.eq(sc.basin_plug, Vector2i(35, 15), "插口（右棱中）")
+		kit.eq(sc.mid_ore.size(), 5, "中场矿数")
+		kit.eq(sc.mid_ore[0], Vector2i(41, 21), "中场矿左缘")
+		kit.eq(sc.mid_ore[4], Vector2i(45, 21), "中场矿右缘")
+		kit.eq(sc.basin_ore.size(), 12, "盆地矿数")
+		kit.eq(sc.ore_cells.size(), 17, "矿总表（盆地在前、中场在后）")
+		kit.eq(sc._rock_arr.size(), 217, "岩群数")
+		kit.eq(sc._hill_arr.size(), 285, "微丘数")
+		kit.eq(sc._sparse_arr.size(), 9, "散土数")
+		kit.eq(sc._sparse_arr[0], Vector2i(13, 30), "散土首格")
+		# 山头高度分带（按六边距离取 d3/d4 格，不手算坐标）
+		var d3 := Vector2i(-1, -1)
+		var d4 := Vector2i(-1, -1)
+		for y in sc.h:
+			for x in sc.w:
+				var d := Grid.hex_dist(x, y, sc.core.x, sc.core.y)
+				if d == 3 and d3.x < 0:
+					d3 = Vector2i(x, y)
+				if d == 4 and d4.x < 0:
+					d4 = Vector2i(x, y)
+		kit.eq(sc.height_at(sc.core.x, sc.core.y), 3, "核心山头 h3")
+		kit.eq(sc.height_at(d3.x, d3.y), 2, "山头 d3 = h2")
+		kit.eq(sc.height_at(d4.x, d4.y), 1, "山头 d4 = h1")
+		var hcell: Vector2i = sc._hill_arr[0]
+		kit.eq(sc.height_at(hcell.x, hcell.y), 1, "微丘 h1")
+		# 建图落格
+		var g := sc.build_grid()
+		kit.eq(g.at(sc.core.x, sc.core.y), Grid.SOLID, "核心实心")
+		kit.eq(g.at(sc.spawns[2].x, sc.spawns[2].y), Grid.COVER, "盆地口压矿")
+		kit.eq(g.at(sc.basin_plug.x, sc.basin_plug.y), Grid.COVER, "插口唯一覆盖")
+		kit.eq(g.at(sc._rock_arr[0].x, sc._rock_arr[0].y), Grid.SOLID, "岩群实心")
+		kit.eq(g.at(sc._sparse_arr[0].x, sc._sparse_arr[0].y), Grid.COVER, "散土覆盖")
+		kit.eq(g.get_h(sc._hill_arr[0].x, sc._hill_arr[0].y), 1, "微丘落盘")
+		kit.eq(sc.check_grid(g), "", "结构校验全绿")
+		# 路径长（核心流场 → 主口；盆地口密闭）
+		var ff := FlowField.new(sc.build_grid(), false)
+		ff.begin([sc.core])
+		while not ff.done():
+			ff.step(1 << 20)
+		kit.eq(ff.dist_at(sc.spawns[0].x, sc.spawns[0].y), 470, "主口 1 路径长")
+		kit.eq(ff.dist_at(sc.spawns[1].x, sc.spawns[1].y), 530, "主口 2 路径长")
+		kit.eq(ff.dist_at(sc.spawns[2].x, sc.spawns[2].y), -1, "盆地口密闭")
+		# 指纹（自由分支铸造值；默认图 0x7dea2b02 不受影响）
+		kit.eq(sc.fingerprint(Canon.new()), 0xf5f49e0c, "自由路径指纹"))
 
 	kit.test("waves-contract", func():
 		var sc := Scenario.new()

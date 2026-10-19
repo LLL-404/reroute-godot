@@ -14,9 +14,9 @@ const VOL_MAX := 100
 const MUTE_DB := -80.0
 
 
-## 默认配置：音量满格 / 非全屏（首次启动与原行为一致）
+## 默认配置：音量满格 / 非全屏 / 局数进度 0（首次启动与原行为一致）
 static func default_cfg() -> Dictionary:
-	return { "music": VOL_MAX, "sfx": VOL_MAX, "fullscreen": false }
+	return { "music": VOL_MAX, "sfx": VOL_MAX, "fullscreen": false, "runs": 0 }
 
 
 ## 读配置（缺失文件 / 字段一律回默认，绝不抛）。
@@ -27,15 +27,20 @@ static func load_cfg() -> Dictionary:
 		cfg["music"] = clampi(int(cf.get_value("audio", "music", cfg["music"])), VOL_MIN, VOL_MAX)
 		cfg["sfx"] = clampi(int(cf.get_value("audio", "sfx", cfg["sfx"])), VOL_MIN, VOL_MAX)
 		cfg["fullscreen"] = bool(cf.get_value("video", "fullscreen", cfg["fullscreen"]))
+		cfg["runs"] = maxi(0, int(cf.get_value("progress", "runs", cfg["runs"])))
 	return cfg
 
 
-## 写配置（值先夹取到合法域）。
+## 写配置（值先夹取到合法域）。先读旧档保留未给出的键（如 runs 进度：设置页保存不吞进度）。
 static func save_cfg(cfg: Dictionary) -> void:
 	var cf := ConfigFile.new()
+	var prev_runs := 0
+	if cf.load(CFG_PATH) == OK:
+		prev_runs = maxi(0, int(cf.get_value("progress", "runs", 0)))
 	cf.set_value("audio", "music", clampi(int(cfg.get("music", VOL_MAX)), VOL_MIN, VOL_MAX))
 	cf.set_value("audio", "sfx", clampi(int(cfg.get("sfx", VOL_MAX)), VOL_MIN, VOL_MAX))
 	cf.set_value("video", "fullscreen", bool(cfg.get("fullscreen", false)))
+	cf.set_value("progress", "runs", maxi(0, int(cfg.get("runs", prev_runs))))
 	cf.save(CFG_PATH)
 
 

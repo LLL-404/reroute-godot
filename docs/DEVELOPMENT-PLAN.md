@@ -342,34 +342,36 @@
 
 ---
 
-## 2. 事实基线（2026-10-16 世界程序化生成 + 视觉升级后全量重核）
+## 2. 事实基线（2026-10-19 世界生成 2.0 后全量重核）
 
-所有数据均为此后实跑所得（原始 stdout 见 `logs/gates-20261016-visual/`；窗口/无头口径见 §2.1）。
+所有数据均为此后实跑所得（原始 stdout 见 `logs/gates-20261019-worldgen/`；窗口/无头口径见 §2.1）。
 
 | 项 | 证据 | 命令 |
 |---|---|---|
-| 单测 104 例全绿 | `[UNIT-DONE] passed=104 failed=0` + `[UNIT-ALL-GREEN]` | `<godot> --headless --path <P> -s res://tests/run_tests.gd` |
-| 黄金回放 16 指纹逐位一致 | `[GOLDEN] checks=2 bad=0` + `[GOLDEN] PASS` | `<godot> --headless --path <P> -s res://tests/probes/probe_golden.gd` |
-| 主场景构建对拍 | `[SCENE] checks=11 bad=0` + `[SCENE] PASS`（field=4096 / plain=39312 / solids·covers 对拍 + 单地面网格 56169 顶点 / 334176 索引 / 连续性抽检） | `<godot> --headless --path <P> -s res://tests/probes/probe_scene.gd` |
-| 视觉同步逐位对拍 1803 断言 | `[SYNC] checks=1803 bad=0 moved=46 match=100` | `<godot> --path <P> -s res://tests/probes/probe_sync.gd`（**窗口模式**） |
-| 输入闭环 57 断言 | `[INPUT] checks=57 bad=0` | `<godot> --path <P> -s res://tests/probes/probe_input.gd`（**窗口模式**） |
+| 单测 106 例全绿 | `[UNIT-DONE] passed=106 failed=0` + `[UNIT-ALL-GREEN]` | `<godot> --headless --path <P> -s res://tests/run_tests.gd` |
+| 黄金回放 16 指纹逐位一致 | `[GOLDEN] checks=2 bad=0` + `[GOLDEN] PASS`（默认种子零漂移） | `<godot> --headless --path <P> -s res://tests/probes/probe_golden.gd` |
+| 主场景构建对拍 | `[SCENE] checks=16 bad=0` + `[SCENE] PASS`（field=4096 / plain=39820 / solids 499/499 / covers 27/27 对拍 + 单地面网格连续性抽检） | `<godot> --headless --path <P> -s res://tests/probes/probe_scene.gd` |
+| 视觉同步逐位对拍 1845 断言 | `[SYNC] checks=1845 bad=0 moved=64 match=100` | `<godot> --path <P> -s res://tests/probes/probe_sync.gd`（**窗口模式**） |
+| 输入闭环 58 断言 | `[INPUT] checks=58 bad=0` | `<godot> --path <P> -s res://tests/probes/probe_input.gd`（**窗口模式**） |
 | 三屏流转 39 断言 | `[UI_FLOW] checks=39 bad=0` | `<godot> --path <P> -s res://tests/probes/probe_ui_flow.gd`（**窗口模式**） |
 | HUD 69 断言 | `[HUD] checks=69 bad=0` | `<godot> --path <P> -s res://tests/probes/probe_hud.gd`（**窗口模式**） |
-| 全局冒烟一局到底 | `[SMOKE] checks=31 bad=0` + `[SMOKE] PASS`（run=1 seed=20261004：outcome=LOST tick=4942 kills=133 supply=1058 peak_units=76 towers=6 skills=4） | `<godot> --path <P> -s res://tests/probes/probe_smoke.gd`（**窗口模式**） |
-| 验收截图可出 | `[SHOTS] checks=5 bad=0`（含 20:9 / 窄屏目视件） | `<godot> --path <P> -s res://tests/probes/probe_shots.gd`（**窗口模式**） |
-| 截图像素校验 | `[SHOTS] checks=25 fail=0`（game warm=804330 teal=2829） | `python tools/check_shots.py` |
-| 资产 57 断言 | `[ASSET] checks=57 bad=0` | `<godot> --path <P> -s res://tests/probes/probe_asset.gd`（**窗口模式**） |
-| 模型动画齐备 | `blade/worker/king anims: Attack/Crawl/Death/Hurt/Idle` | `<godot> --path <P> -s res://tests/probes/probe_model.gd`（**窗口模式**） |
-| 朝向截面图 | `[ORIENT] cross shot saved` | `<godot> --path <P> -s res://tests/probes/probe_orient.gd`（**窗口模式**） |
+| 全局冒烟一局到底 | `[SMOKE] checks=34 bad=0` + `[SMOKE] PASS`（run=1 seed=20261004：outcome=LOST tick=2902 kills=52 supply=422 peak_units=29 towers=5 skills=3；frames=146 mismatch=0） | `<godot> --path <P> -s res://tests/probes/probe_smoke.gd`（**窗口模式**） |
+| 验收截图可出 | `[SHOTS] checks=6 bad=0`（含 20:9 / 窄屏 / 近景目视件） | `<godot> --path <P> -s res://tests/probes/probe_shots.gd`（**窗口模式**） |
+| 截图像素校验 | `[SHOTS] checks=29 fail=0`（game warm=915206 teal=2733） | `python tools/check_shots.py` |
+| 资产 63 断言 | `[ASSET] checks=63 bad=0` | `<godot> --path <P> -s res://tests/probes/probe_asset.gd`（**窗口模式**） |
+| 蓝图 11 断言 | `[BLUEPRINT] checks=11 bad=0`（pal_min=0.060 / shp_min=0.131） | `<godot> --headless --path <P> -s res://tests/probes/probe_blueprint.gd` |
+| 模型动画齐备 | `[MODEL] checks=6 bad=0`（blade/worker/king anims: Attack/Crawl/Death/Hurt/Idle） | `<godot> --path <P> -s res://tests/probes/probe_model.gd`（**窗口模式**） |
+| 朝向截面图 | `[ORIENT] checks=1 bad=0` + cross shot saved | `<godot> --path <P> -s res://tests/probes/probe_orient.gd`（**窗口模式**） |
 | 音频 56 断言 | `[AUDIO] checks=56 bad=0` | `<godot> --path <P> -s res://tests/probes/probe_audio.gd`（**窗口模式**） |
 | 存档/设置/退出/返回 74 断言 | `[SAVE] checks=74 bad=0` 含安卓返回路由 | `<godot> --path <P> -s res://tests/probes/probe_save.gd`（**窗口模式**） |
 | 触屏可点 39 断言 | `[TOUCH] checks=39 bad=0`（含按钮触达尺寸矩阵） | `<godot> --path <P> -s res://tests/probes/probe_touch.gd`（**窗口模式**） |
-| 模拟模块 5 探针 | `[SIM/GRID/FLOW/SCENARIO/WORLD]` 各自 `checks=N bad=0` + `PASS`（5/22/52/68/20） | `tests/probes/probe_{sim,grid,flow,scenario,world}.gd`（headless） |
-| Windows 导出可用 | exit 0，`export/game.exe` 109,550,080 B + `game.pck` 80,584,368 B（2026-10-16 晚重出；复签 `SIGNED=Valid`） | `<godot> --headless --path <P> --export-release "Windows Desktop" <P>/export/game.exe` |
-| 导出包自证 | `[SELFCHECK] checks=22 bad=0` + `[SELFCHECK] PASS` + exit 0 | `<godot> --headless --main-pack export/game.pck --selfcheck`（本机 SAC 拦未签名 exe，见 §11.12） |
+| 开屏 36 断言 | `[INTRO] checks=36 bad=0` + `[INTRO] PASS` | `<godot> --path <P> -s res://tests/probes/probe_intro.gd`（**窗口模式**） |
+| 模拟模块 5 探针 | `[SIM/GRID/FLOW/SCENARIO/WORLD]` 各自 `checks=N bad=0` + `PASS`（5/40/53/77/20；scenario 含 48 种子自由域 sweep：盐峰 29 / 三主口 11 / 指纹互异） | `tests/probes/probe_{sim,grid,flow,scenario,world}.gd`（headless） |
+| Windows 导出可用 | exit 0，`export/game.exe` 109,551,432 B + `game.pck` 109,800,796 B（2026-10-18 重出；复签 `SIGNED=Valid`） | `<godot> --headless --path <P> --export-release "Windows Desktop" <P>/export/game.exe` |
+| 导出包自证 | `[SELFCHECK] checks=31 bad=0` + `[SELFCHECK] PASS` + exit 0（跑法 = 同目录 `game.exe --selfcheck`，见 §11.19 注） | `export/game.exe --selfcheck` |
 
-- `<godot>` = `D:/G/game/Godot_v4.7.2-stable_mono_win64/Godot_v4.7.2-stable_mono_win64_console.exe`
-- `<P>` = `D:/G/game/games/reroute-godot`
+- `<godot>` = `C:/G/game/Godot_v4.7.2-stable_mono_win64/Godot_v4.7.2-stable_mono_win64_console.exe`
+- `<P>` = `C:/Users/Administrator/Documents/默认项目/reroute-godot`
 - 无头 CLI **必须用 `_console.exe` 变体**，普通 `.exe` 不输出 stdout。
 
 ### 2.1 ⚠️ 头号环境陷阱（务必先看）
@@ -381,7 +383,7 @@
 在 headless 下必然失败或空转。**这些探针必须窗口模式运行**。
 
 本次会话中实测：
-- `probe_input.gd` 在 headless 下 8 项断言失败；窗口模式下 57 项全绿。
+- `probe_input.gd` 在 headless 下 8 项断言失败；窗口模式下 58 项全绿。
 - `probe_asset.gd` / `probe_model.gd` / `probe_orient.gd` 在 headless 下
   `get_texture()` 返回 null → `Cannot call method 'save_png' on a null value`，
   进程不退出（空转）；窗口模式下分别 PASS / 出图正常。
@@ -404,12 +406,15 @@
 - 边界外恒 `SOLID`；`Grid` 另存一份加帧镜像 `pmap`（通行）/`hp`（高度），供流场做
   纯下标邻域运算。
 
-### 3.2 地图要素（`Scenario._init` × `sim/mapgen.gd` 生成，2026-10-16 起）
+### 3.2 地图要素（`Scenario` × `sim/mapgen.gd` 生成，2026-10-16 起；2026-10-19 彻底自由化，见 §11.27）
 
-布局不再手搓：`MapGen.generate(seed, salt)` 在参数域内变奏采样（结构模板固定：北岸核心山头 /
-双咽喉岩脊 / 西南盆地插口陷阱 / 南场微丘），`Scenario` 校验结构不变量后建格；校验失败换盐
-重采样（≤64 次）。**首局种子 = `BASE_SEED` 20261003**，其后每局 `+run_index`（与仿真 RNG
-同源、确定性）。下表 = 种子 20261003 钉子值（单测/探针断言面，口径与参数域见 §11.14）：
+布局不再手搓。**2026-10-19 起为三路生成**（§11.27）：默认种子 20261003 → `_generate_default`
+（字节冻结，锚点/指纹零漂移）；其余种子 salt 0..47 → `_generate_freeform`（每局自由核心位 /
+2~3 主口 / 盆地 / 岩野 / 微丘；`Scenario` 校验结构不变量后建格，失败换盐重采样）；
+salt 48..63 → `_generate_varied_legacy(seed, salt-48)` 兜底（原 G2 模板池，常规不触发）。
+**首局种子 = `BASE_SEED` 20261003**，其后每局 `+run_index`（与仿真 RNG 同源、确定性；
+`run_index` 跨会话持久化在 `user://settings.cfg`）。下表 = 默认种子 20261003 钉子值
+（单测/探针断言面；自由路径的每局不变量 + 样本快照见 §11.27）：
 
 | 要素 | 坐标（seed 20261003） | 说明 |
 |---|---|---|
@@ -1082,10 +1087,11 @@ HUD 全部控件、标题/暂停/结算三屏、三件套音频、真实 glb 资
 
 | 闸 | 命令 | 通过判据 | 需窗口 |
 |---|---|---|---|
-| 单测 | `run_tests.gd` | `passed=104 failed=0` + `[UNIT-ALL-GREEN]` | 否 |
+| 单测 | `run_tests.gd` | `passed=106 failed=0` + `[UNIT-ALL-GREEN]` | 否 |
 | 黄金回放 | `tests/probes/probe_golden.gd` | `[GOLDEN] checks=2 bad=0` + `PASS`（16 指纹） | 否 |
 | 模拟模块 | `tests/probes/probe_{sim,grid,flow,scenario,world}.gd` | 各自 `[TAG] checks=N bad=0` + `PASS` | 否 |
-| 场景构建 | `tests/probes/probe_scene.gd` | `[SCENE] checks=11 bad=0` + `PASS`（field=4096 / plain=39312 / 单地面网格对拍） | 否 |
+| 场景构建 | `tests/probes/probe_scene.gd` | `[SCENE] checks=16 bad=0` + `PASS`（field=4096 / plain=39820 / 单地面网格对拍） | 否 |
+| 蓝图 | `tests/probes/probe_blueprint.gd` | `[BLUEPRINT] checks=11 bad=0` + `PASS` | 否 |
 | 视觉同步 | `tests/probes/probe_sync.gd` | `[SYNC] PASS match=100 bad=0` | **是** |
 | 输入闭环 | `tests/probes/probe_input.gd` | `[INPUT] PASS bad=0` | **是** |
 | HUD | `tests/probes/probe_hud.gd` | `[HUD] PASS bad=0` | **是** |
@@ -1094,8 +1100,9 @@ HUD 全部控件、标题/暂停/结算三屏、三件套音频、真实 glb 资
 | 全局冒烟 | `tests/probes/probe_smoke.gd` | `[SMOKE] PASS` | **是** |
 | 资产/模型 | `tests/probes/probe_{asset,model,orient}.gd` | 各自 `[TAG] PASS`（model/orient 出图；checks=6/1） | **是** |
 | 音频 | `tests/probes/probe_audio.gd` | `[AUDIO] PASS bad=0` | **是** |
-| 截图像素 | `tests/probes/probe_shots.gd` + `python tools/check_shots.py` | 探针 `[SHOTS] checks=5 bad=0` + 像素 `[SHOTS] checks=25 fail=0` | **是** |
-| 导出自证 | `<godot> --headless --main-pack export/game.pck --selfcheck`（本机 SAC 拦未签名 exe，见 §11.12） | `[SELFCHECK] PASS` + exit 0 | 否 |
+| 截图像素 | `tests/probes/probe_shots.gd` + `python tools/check_shots.py` | 探针 `[SHOTS] checks=6 bad=0` + 像素 `[SHOTS] checks=29 fail=0` | **是** |
+| 开屏 | `tests/probes/probe_intro.gd` | `[INTRO] checks=36 bad=0` + `PASS` | **是** |
+| 导出自证 | 同目录 `game.exe --selfcheck`（本机 SAC 拦未签名 exe，口径更正见 §11.19 注） | `[SELFCHECK] PASS` + exit 0 | 否 |
 | **触屏闭环** | `tests/probes/probe_touch.gd` | `[TOUCH] checks=39 bad=0` + `PASS`（触摸可点 + 按钮触达尺寸矩阵）；拖线/技能等全操作路径 D1 扩展 | **是** |
 | **Android 可玩** | `adb install` + 启动 + 手动完成一局 | 无崩溃、`adb logcat` 无 ERROR、7 个模式钮 + 技能 + 暂停 + 热层全部可点 | 真机/模拟器 |
 | **Android 自证（自动）** | `adb shell am start ... --es -- --selfcheck` 或 logcat 抓 `[SELFCHECK] PASS` | `[SELFCHECK] PASS` + exit 0 | — |
@@ -1115,6 +1122,7 @@ HUD 全部控件、标题/暂停/结算三屏、三件套音频、真实 glb 资
 | 改动位置 | 必跑 |
 |---|---|
 | `sim/**` | 单测 + 全部 headless 探针 + `probe_golden` |
+| `sim/mapgen.gd` / `sim/scenario.gd`（布局生成） | 单测（`test_mapgen`/`test_scenario` 自由域 sweep + 快照）+ `probe_{scenario,scene,blueprint,golden}` + **全部窗口探针**（地图数据变化波及截图/输入/音频选格） |
 | `game/main.gd` | `probe_input` + `probe_ui_flow` + `probe_smoke` + `probe_touch` + `probe_save` |
 | `game/view.gd` / `game/view_*.gd` | `probe_sync` + `probe_scene` + `probe_shots`/`check_shots` + `probe_audio`（改 `view_audio` 时） |
 | `game/hud.gd` / `screens.gd` | `probe_hud` + `probe_ui_flow` + `probe_touch`（触屏可点）+ `probe_save` |
@@ -2242,6 +2250,79 @@ P0 精确在顶线、末点贴/沉低邻顶、高度单调不增。**1829/0 PASS
 
 ---
 
+### 11.27 世界生成 2.0：玩法层彻底自由化（2026-10-19）
+
+**动因**：用户要求「Minecraft 式」程序化生成——每局地形骨架不再套模板，而是每种子自由生长；
+拍板「彻底自由化（大改）」，允许玩法布局随生成变化。拆两拍交付：**拍 1（本次）= 玩法世界
+生成自由化**；**拍 2（后续）= 视觉联动**（岩脊/山体/动机池跟随自由布局）。难度不漂移的
+硬约束不变：裸图路径长必须落在 `PATH_REF 548 ±15%`（[466,630]）带内。
+
+**生成路由（`sim/mapgen.gd`）**：默认种子 20261003 → `_generate_default`（字节冻结，锚点/
+指纹零漂移）；其余种子 salt 0..47 → `_generate_freeform`（新）；salt 48..63 →
+`_generate_varied_legacy(seed, salt-48)` 兜底（原 G2 模板池，保留但不参与常规生成；
+`FREEFORM_SALT_MAX=48`）。64 种子实测：兜底 0 次、盐峰 29、指纹 64 局互异。
+
+**自由生成不变量**（`Scenario._check_freeform` 全量校验，失败换盐重采样）：
+- 核心位：离边 ≥ `CORE_MARGIN 6`，净空半径 `CORE_CLEAR 5`；山头 = h3（hex 距 ≤2）+ h2(d3) + h1(d4)
+- 主口 2~3 个：距核心环带 `MAIN_D 47..54`（直接锚定 466..630 路径带），彼此 ≥ `MAIN_GAP_MIN 14`，
+  带 3×3 净空且 h0
+- 盆地 6..9 × 7..9：四周单圈实心环 + **唯一** `COVER` 插口（棱中、距角 ≥2 格）、内部 12 格矿块、
+  盆地口贴块心矿
+- 中场矿 5 格；矿格共 17；岩野/微丘/散土由整数 fBm 三带（岩石占 60..220‰、微丘 20..160‰ 护栏、
+  散土 `SPARSE_MIN/MAX 5..9`）落格：岩野格 `SOLID`、散土格 `COVER`、微丘格 h1
+- 复算裸图流场双主口路径长落 [466,630]；盆地实心环 + 插口开门可达（`check_plug_open`）
+
+**参数标定记录（本轮两处修正）**：
+- 微丘噪声带 `[38000,45500] → [42000,47000]`（`MOUND_LO_T/HI_T`）：32 桶直方图质量积分定带
+  （保留噪声质量 100%→66%），微丘中位 499→314 格（≈90‰，落 80~110‰ 目标带）；
+  护栏 `MOUND_LO/HI_PERM 20/160` 余量充足。
+- 插口避角 off-by-one：`next_int(bw-3/bh-3) → next_int(bw-4/bh-4)`（「距角 ≥2 格」设计口径落地）。
+
+**读取面（波次路由）**：`Scenario.wave_cell(entry_index)`——双主口保持历史「出怪口 id−1」口径
+（与旧图逐位同历史）；三主口按波次表序轮转 0..2（绝不落到盆地口）。`Scenario.basin_cell()` =
+`spawns` 末位，插口挖开后盆地向其补漏兵（世界侧 trickle）。`World.run_waves` 走
+`emit_wave_at(pos, ...)`；`emit_wave(spawn_idx, ...)` 保留为兼容壳（旧测试同路径）。
+`fingerprint()` 新增 `_fingerprint_freeform` 分支（默认分支零改动，剧本指纹 `0x7dea2b02` 不变）；
+样本种子 20261004 自由指纹 `0xf5f49e0c`（单测钉死）。
+
+**存档与局号**：不升 `STATE_SCHEMA`（仍 6）——`save.decode` 的 `sc_fp` 校验自动拒绝「旧变幅
+种子」的存档，默认种子存档照常可读。`run_index` 跨会话：`user://settings.cfg` 新增 `runs`
+计数，`start_match()` 落盘；标题预烘焙局不计数；探针/selfcheck 经 `_detect_probe_run()` 门控，
+不污染计数。视觉锚点：`main._visual_anchor()` 在无单一脊线（`ridge_y=-1`）时不再传 `ridge_y`；
+`blueprint` 锚点读取全 `has()` 守卫（回落预设）。
+
+**测试与探针（单测 104→106）**：
+- `test_mapgen`：`64-seed-sweep` 重写为自由路径结构不变量（盐窗/核心留边/主口周缘/盆地尺寸/
+  插口棱中/矿数 17/岩丘计数带/布局签名 ≥60 互异/三主口样本 ≥6；原 `determinism-fresh-vs-cache`
+  假绿——自由图 `chokes` 为空使断言静默短路——重写为 spawns/插口/岩丘计数对拍）；新增
+  `freeform-negative-controls` 7 条负对照（主口净空被填 / 岩群格被清 / 微丘降平 / 核心山头削平 /
+  盆地环开洞 / 插口填实 / 死盆地不可达）。
+- `test_scenario`：新增 `freeform-snapshot` 扁平快照（种子 20261004：盐 3 / 核心 (43,14) /
+  英雄 (43,16) / 主口 (14,50)(3,41)(30,15) / 盆地 (27,11,9×8) / 插口 (35,15) / 中场矿 (41..45,21) /
+  盆地矿 12 / 岩 217 / 丘 285 / 散土 9 / 路径 470·530 / 指纹 `0xf5f49e0c`）。
+- `probe_scenario`：48 种子自由域全扫（77 checks：兜底 0 / 合法率 100% / 指纹互异 ≥46 /
+  三主口 ≥3）+ `wave_cell`/`basin_cell` 解析段（双主口历史映射逐条、三主口轮转覆盖全主口）。
+- 窗口探针三处「旧图/旧机」耦合断言修复（根因均非玩法回归）：`probe_asset` 覆盖层总数改
+  数据驱动（= 当局 COVER 格数，旧硬编码 25 为默认图值）；`probe_audio._find_ore_cover` 改全域
+  扫描（旧两矩形是默认图矿位）；`probe_input` 反向改高对改 h 感知选格（旧断言靠默认图北台地）
+  + Q/E 旋转改墙钟 400ms 按住（本机 ~2000fps 下 10 帧仅数毫秒，帧计时阈值失效）。
+
+**闸结果**：单测 106/0；无头 8 探针全绿（`probe_golden` PASS，16 指纹零漂移）；窗口 13 探针
+全绿（sync 1845/0、input 58/0、hud 69/0、ui_flow 39/0、smoke 34/0、shots 6/0、audio 56/0、
+asset 63/0、model 6/0、orient 1/0、save 74/0、touch 39/0、intro 36/0）；`check_shots` 29/0；
+`check_ui_lint` 绿；`dotnet build` 0 警告 0 错误。冒烟局（run=1 seed 20261004）新值 =
+`LOST tick=2902 kills=52 supply=422 peak_units=29`。全部截图重出 + store 实机五图副本刷新。
+证据 `logs/gates-20261019-worldgen/`（含 64 种子 sweep 前后对照 `worldgen-sweep-64-{pre,post}.out`；
+64 局全扫 ≈31s、最慢单种子 2.8s）。
+
+**已知非致命**：`ui_style.gd:62` 在 4.7.2 下报引擎 ERROR「MenuButton 变体与内建类撞名」
+（v2.2 遗留，主题仍构建成功、探针不受影响；待单独清理）。
+
+**拍 2 待办（视觉联动）**：岩脊/山体/地标随自由布局生成（`_visual_anchor` 扩展）、三主口视觉门、
+动机池与岩野/盆地形态联动；TapTap 常规 app 提审流水线（§11.22）以此为前置。
+
+---
+
 ## 12. AI 任务卡模板（派活时照抄）
 
 ```markdown
@@ -2253,7 +2334,7 @@ P0 精确在顶线、末点贴/沉低邻顶、高度单调不增。**1829/0 PASS
             除非任务本身就是 D4 的重录>
 - 实现要求：<引用 §5 相关条款>
 - 验收命令（注意哪些必须窗口模式，见 §2.1）：
-    <godot> --headless --path <P> -s res://tests/run_tests.gd      # 期望 passed=104 failed=0
+    <godot> --headless --path <P> -s res://tests/run_tests.gd      # 期望 passed=106 failed=0
     <godot> --path <P> -s res://tests/probes/probe_xxx.gd                       # 期望 [XXX] PASS
 - 证据要求：stdout 原文 + exit code + （涉及画面时）截图且必须目视
 - 失败预案：<该任务在 §7.11 砍单顺序里的位置>
@@ -2266,8 +2347,8 @@ P0 精确在顶线、末点贴/沉低邻顶、高度单调不增。**1829/0 PASS
 
 ```bash
 # 0. 环境
-GODOT="D:/G/game/Godot_v4.7.2-stable_mono_win64/Godot_v4.7.2-stable_mono_win64_console.exe"
-P="D:/G/game/games/reroute-godot"
+GODOT="C:/G/game/Godot_v4.7.2-stable_mono_win64/Godot_v4.7.2-stable_mono_win64_console.exe"
+P="C:/Users/Administrator/Documents/默认项目/reroute-godot"
 
 # 1. 建立基线（全绿才动手）
 "$GODOT" --headless --path "$P" -s res://tests/run_tests.gd
@@ -2288,7 +2369,7 @@ sim/sim.gd → sim/scenario.gd → sim/grid.gd → sim/flowfield.gd → sim/worl
 
 ### 13.1 冲刺期特别提醒
 
-- 今天是 **2026-10-14**。**官方建议 10-18 前提交**，硬截止 10-21。
+- **硬截止 2026-10-21（今天 = 2026-10-19）。** 官方建议 10-18 前提交（已过，进入收尾期）。
   先看 §7.0 确认自己站在哪一天。
 - **开发者日志每天一篇，不许攒**。规则禁止一天内连发，要凑够 5 篇只能每天写。
   这是全程参与奖（¥200,000 奖池）的硬条件。

@@ -2,12 +2,15 @@ class_name Scenario
 extends RefCounted
 
 # 数值表 + 64² 程序化布局（2026-10-16 世界生成：手搓夹具 → MapGen 变奏级生成；
-# 2026-10-17 G2：MapGen 升级五模板池，本文件负责按参数建图/校验，结构面见 mapgen.gd）。
-# 固定结构元素：核心在北岸中上；屏障带横贯（双咽喉口 ±1 宽 3，形状随模板 T0..T4）；
-# 南岸双出怪口；西南盆地密闭岩环（插口是唯一覆盖格，内部藏矿）= 开门陷阱；中场安全矿；南场 2×2 微丘。
+# 2026-10-19 世界生成 2.0：非默认种子走 MapGen 自由路径——核心/2~3 主口/盆地陷阱/岩群/微丘
+# 全部由种子决定；本文件负责按参数建图/校验（自由路径走 _apply_freeform + _check_freeform）。
+# 不变量（自由路径）：核心六边半径 2/3/4 三级山头 + 主口 3×3 净空（h0）+ 裸图路径长标定带；
+# 盆地密闭岩环（插口是唯一覆盖格、内部藏矿、盆地口压块心）= 开门陷阱；中场安全矿 5 格；
+# 岩群/微丘占比带（生成器自检）+ 净空蒙版（生成器保证，Scenario 只读）。
 # 生成纪律：布局纯整数（sim Rng 采样，见 mapgen.gd）；本文件负责「采样 → 结构不变量校验 →
 # 失败换盐重采样 ≤64 次」。校验口径（check_grid / check_plug_open）同时是测试的读取面。
 # 波次表与固定节奏（end_tick/trickle 等）不参与变奏。
+# 默认种子（20261003）走 _generate_default + 旧结构校验：剧本指纹 0x7dea2b02 与黄金脚本零影响。
 
 const DEFAULT_SEED := 20261003
 # 裸图路径长标定（2026-10-16 手搓夹具实测，FlowField 直/斜 10/14 口径）：两主口 = 548。
@@ -43,7 +46,15 @@ var sparse_phase: int # 表土纹理相位（y=17 行，x % 9 == phase 为覆盖
 var mesa: Rect2i # 南场微丘（2×2，h1）
 var resample_salt: int # 实际采用的盐（诊断用；不进指纹：布局由参数完全决定）
 var _p: Dictionary # 本局布局参数（MapGen 产物；模板几何静态面的查询源）
-var _barrier: Dictionary # 屏障 SOLID 集合（已扣咽喉缺口；"x,y" 键）
+var _barrier: Dictionary # 屏障 SOLID 集合（已扣咽喉缺口；"x,y" 键；legacy 专用）
+var _freeform := false # 自由路径标记（默认/legacy = false；分派 build/校验/指纹/出怪点）
+var _gen_invalid := false # 生成器自检未过（仅盐重采样信号；apply 仍写全字段保证不崩）
+var _rock_arr: Array = [] # 自由路径：岩群格（生成序，进指纹）
+var _hill_arr: Array = [] # 自由路径：微丘格（h1；生成序，进指纹）
+var _sparse_arr: Array = [] # 自由路径：散土格（生成序，进指纹）
+var _rock := {} # 岩群 O(1) 查询表（build/校验热路径）
+var _hill := {} # 微丘 O(1) 查询表
+var _sparse := {} # 散土 O(1) 查询表
 
 
 ## 构造剧本：固定节拍/波表常量 + 按 seed 生成布局参数（MapGen）并自校验
@@ -98,8 +109,16 @@ func _init(p_seed: int = DEFAULT_SEED) -> void:
 	assert(false, "[scenario] 布局 %d 次重采样仍不合法 seed=%d（生成器/不变量坏了）" % [RESAMPLE_MAX, p_seed])
 
 
-## 布局参数 → 实例字段（纯赋值，不校验）。屏障蒙版 = 模板带 − 咽喉缺口 + 附壁。
+## 布局参数 → 实例字段（纯赋值，不校验）。自由路径与旧模板分派。
 func _apply_layout(p: Dictionary) -> void:
+	if bool(p.get("freeform", false)):
+		_apply_freeform(p)
+		return
+	_apply_legacy(p)
+
+
+## 旧模板路径 → 实例字段。屏障蒙版 = 模板带 − 咽喉缺口 + 附壁。
+func _apply_legacy(p: Dictionary) -> void:
 	var cx: int = p["core_x"]
 	_p = p
 	template_id = int(p.get("template", 0))
@@ -142,6 +161,52 @@ func _apply_layout(p: Dictionary) -> void:
 		_barrier[str(c.x) + "," + str(c.y)] = true
 
 
+## 自由路径参数 → 实例字段（纯赋值；valid=false 只置标记，校验直接拒）。
+## 出怪口约定：spawns 末位恒为盆地口（波次 id 1/2 打主口、渗怪走末位）。
+func _apply_freeform(p: Dictionary) -> void:
+	_freeform = true
+	_gen_invalid = not bool(p.get("valid", true))
+	_p = p
+	template_id = -1
+	ridge_y = -1 # 自由路径无单一脊线（视觉锚点回落预设，见 main._visual_anchor）
+	chokes = []
+	core = Vector2i(int(p["core_x"]), int(p["core_y"]))
+	hero_spawn = Vector2i(int(p["hero_x"]), int(p["hero_y"]))
+	spawns = []
+	for m in p["mains"]:
+		spawns.append(Vector2i(m.x, m.y))
+	spawns.append(Vector2i(p["basin_spawn"].x, p["basin_spawn"].y))
+	basin_rect = Rect2i(int(p["basin_x0"]), int(p["basin_y0"]), int(p["basin_w"]), int(p["basin_h"]))
+	basin_plug = Vector2i(int(p["plug_x"]), int(p["plug_y"]))
+	basin_ore = []
+	for o in p["basin_ore"]:
+		basin_ore.append(Vector2i(o.x, o.y))
+	mid_ore = []
+	for o in p["mid_ore"]:
+		mid_ore.append(Vector2i(o.x, o.y))
+	ore_cells = []
+	ore_cells.append_array(basin_ore)
+	ore_cells.append_array(mid_ore)
+	sparse_phase = -1
+	mesa = Rect2i(-1, -1, 0, 0)
+	_barrier = {}
+	_rock_arr = []
+	_hill_arr = []
+	_sparse_arr = []
+	_rock = {}
+	_hill = {}
+	_sparse = {}
+	for c in p["rocks"]:
+		_rock_arr.append(Vector2i(c.x, c.y))
+		_rock[str(c.x) + "," + str(c.y)] = true
+	for c in p["hills"]:
+		_hill_arr.append(Vector2i(c.x, c.y))
+		_hill[str(c.x) + "," + str(c.y)] = true
+	for c in p["sparse"]:
+		_sparse_arr.append(Vector2i(c.x, c.y))
+		_sparse[str(c.x) + "," + str(c.y)] = true
+
+
 ## 该列的咽喉口行（口心 ±1 列内，取其咽喉 c.y；否则 -1）。
 func _gate_row_at(x: int) -> int:
 	for c in chokes:
@@ -158,9 +223,21 @@ func _barrier_top(x: int) -> int:
 	return ridge_y
 
 
-## 高度模板：北岸台地 h1；核心山头 h3 + 南向两级台阶（h2）；咽喉口行爬出 h1（随列屏障顶行，
-## 北岸台地边界随之弯曲/升降）；南岸低地/咽喉谷道/盆地坑 h0；南场微丘（2×2）h1。
+## 高度模板（默认/legacy）：北岸台地 h1；核心山头 h3 + 南向两级台阶（h2）；咽喉口行爬出 h1
+## （随列屏障顶行，北岸台地边界随之弯曲/升降）；南岸低地/咽喉谷道/盆地坑 h0；南场微丘（2×2）h1。
+## 自由路径：核心山头 = 六边半径 2/3/4 三级（h3/h2/h1）+ 噪声微丘 h1（可爬坡）。
 func height_at(x: int, y: int) -> int:
+	if _freeform:
+		var d := Grid.hex_dist(x, y, core.x, core.y)
+		if d <= 2:
+			return 3
+		if d == 3:
+			return 2
+		if d == 4:
+			return 1
+		if _hill.has(str(x) + "," + str(y)):
+			return 1
+		return 0
 	if y <= 9 and x >= core.x - 3 and x <= core.x + 3:
 		return 3
 	if y <= 12 and x >= core.x - 2 and x <= core.x + 2:
@@ -186,6 +263,8 @@ func build_grid() -> Grid:
 				g.set_cell(x, y, Grid.SOLID)
 			elif ore.has(str(x) + "," + str(y)):
 				g.set_cell(x, y, Grid.COVER) # 矿格先于屏障判定，否则会被写成不可挖的实心
+			elif _rock.has(str(x) + "," + str(y)):
+				g.set_cell(x, y, Grid.SOLID) # 自由路径岩群（legacy 路径 _rock 恒空）
 			elif _barrier.has(str(x) + "," + str(y)):
 				g.set_cell(x, y, Grid.SOLID)
 			elif basin_rect.has_point(Vector2i(x, y)):
@@ -194,11 +273,13 @@ func build_grid() -> Grid:
 					or y == basin_rect.position.y or y == basin_rect.position.y + basin_rect.size.y - 1
 				if ring:
 					g.set_cell(x, y, Grid.COVER if (x == basin_plug.x and y == basin_plug.y) else Grid.SOLID)
-			elif y == 17 and x % 9 == sparse_phase:
+			elif _sparse.has(str(x) + "," + str(y)):
+				g.set_cell(x, y, Grid.COVER) # 自由路径散土（legacy 路径 _sparse 恒空）
+			elif not _freeform and y == 17 and x % 9 == sparse_phase:
 				g.set_cell(x, y, Grid.COVER) # 稀疏表土纹理：可挖但不给矿，不遮挡咽喉与建造走廊
 	g.set_cell(core.x, core.y, Grid.SOLID) # 核心占地
 	g.set_cell(hero_spawn.x, hero_spawn.y, Grid.OPEN) # 英雄落位格恒通行
-	for i in range(0, 2): # 主出怪口保持通行（盆地口不在此列）
+	for i in range(0, spawns.size() - 1): # 主出怪口保持通行（末位盆地口不在此列）
 		g.set_cell(spawns[i].x, spawns[i].y, Grid.OPEN)
 	for y in h: # 高度模板（建图期写入，不参与 rev 计数口径）
 		for x in w:
@@ -214,11 +295,33 @@ func is_ore(x: int, y: int) -> bool:
 	return false
 
 
+# ============ 出怪点解析（世界波次/渗怪共用） ============
+
+## 波次表条目 entry_index 的出怪格。旧路径 = 历史口径逐位一致（id 1/2 → spawns[0/1]）。
+## 三主口自由路径 = 按表序轮转三个主口（波表总量不变，负载均摊）。
+func wave_cell(entry_index: int) -> Vector2i:
+	var id: int = waves[entry_index][1]
+	if not _freeform:
+		return spawns[id - 1]
+	var nm: int = spawns.size() - 1
+	if nm <= 2:
+		return spawns[id - 1]
+	return spawns[entry_index % nm]
+
+
+## 盆地口（spawns 末位）：渗怪与开门陷阱用。
+func basin_cell() -> Vector2i:
+	return spawns[spawns.size() - 1]
+
+
 # ============ 生成校验（不变量） ============
 
 ## 结构 + 连通性校验（生成重采样与测试共用；返回 "" = 合法）。
 ## 口径：边框实心属 build_grid 常量；凡「布局可观测」的玩意都在这里管。
+## 自由路径走 _check_freeform（同签名，测试读取面不变）。
 func check_grid(g: Grid) -> String:
+	if _freeform:
+		return _check_freeform(g)
 	# 1) 屏障形态：蒙版全实心；咽喉缺口（口心 ±1 × 该列屏障行）全通行、口心 h1
 	for key in _barrier:
 		var parts: PackedStringArray = String(key).split(",")
@@ -289,6 +392,91 @@ func check_grid(g: Grid) -> String:
 	return ""
 
 
+## 自由路径结构校验（返回 "" = 合法）：主口净空/高度/间距、核心山头、矿数与可达、
+## 盆地密闭（环 + 内腔 + 盆地口）、裸图路径标定带（所有主口）、生成器自检标记。
+func _check_freeform(g: Grid) -> String:
+	if _gen_invalid:
+		return "生成器自检未过"
+	var nm: int = spawns.size() - 1 # 主口数（末位 = 盆地口）
+	# 1) 主口：3×3 净空、h0、彼此间距
+	for i in nm:
+		var s: Vector2i = spawns[i]
+		for dy in range(-1, 2):
+			for dx in range(-1, 2):
+				if g.at(s.x + dx, s.y + dy) != Grid.OPEN:
+					return "出怪口 %d 净空破例 (%d,%d)" % [i + 1, s.x + dx, s.y + dy]
+		if g.get_h(s.x, s.y) != 0:
+			return "出怪口 %d 高度破例" % [i + 1]
+		for j in range(i + 1, nm):
+			var t: Vector2i = spawns[j]
+			if Grid.hex_dist(s.x, s.y, t.x, t.y) < MapGen.MAIN_GAP_MIN - 2:
+				return "主口间距过近 %d-%d" % [i + 1, j + 1]
+	# 2) 英雄位 / 核心山头
+	if g.at(hero_spawn.x, hero_spawn.y) != Grid.OPEN:
+		return "英雄位被封 (%d,%d)" % [hero_spawn.x, hero_spawn.y]
+	if g.at(core.x, core.y) != Grid.SOLID:
+		return "核心格非实心"
+	if g.get_h(core.x, core.y) != 3:
+		return "核心山头 h3 破例"
+	# 3) 矿：数目 / 占格 / 不压岩
+	if mid_ore.size() != 5 or basin_ore.size() < 10:
+		return "矿数破例 mid=%d basin=%d" % [mid_ore.size(), basin_ore.size()]
+	for o in ore_cells:
+		if g.at(o.x, o.y) != Grid.COVER:
+			return "矿格非覆盖 (%d,%d)" % [o.x, o.y]
+		if _rock.has(str(o.x) + "," + str(o.y)):
+			return "矿格压岩 (%d,%d)" % [o.x, o.y]
+	# 3b) 地貌落格：岩群实心 / 散土覆盖 / 微丘 h1（生成器 ↔ 建图分工的读取面）
+	if _rock_arr.is_empty() or _hill_arr.is_empty():
+		return "地貌为空（岩/丘至少各一格）"
+	for c in _rock_arr:
+		if g.at(c.x, c.y) != Grid.SOLID:
+			return "岩群格非实心 (%d,%d)" % [c.x, c.y]
+	for c in _sparse_arr:
+		if g.at(c.x, c.y) != Grid.COVER:
+			return "散土格非覆盖 (%d,%d)" % [c.x, c.y]
+	for c in _hill_arr:
+		if g.get_h(c.x, c.y) != 1:
+			return "微丘高度破例 (%d,%d)" % [c.x, c.y]
+	# 4) 盆地环：一圈实心、插口唯一覆盖格
+	var b := basin_rect
+	for y in range(b.position.y, b.position.y + b.size.y):
+		for x in range(b.position.x, b.position.x + b.size.x):
+			var edge := x == b.position.x or x == b.position.x + b.size.x - 1 \
+				or y == b.position.y or y == b.position.y + b.size.y - 1
+			if not edge:
+				continue
+			var want := Grid.SOLID
+			if x == basin_plug.x and y == basin_plug.y:
+				want = Grid.COVER
+			if g.at(x, y) != want:
+				return "盆地环破例 (%d,%d)" % [x, y]
+	# 5) 连通与路径（核心为源）：内腔/盆地口密闭、主口在标定带、中场矿邻格可达
+	var ff := _dist_from_core(g)
+	var probe := Vector2i(b.position.x + 1, b.position.y + b.size.y - 2)
+	if ff.dist_at(probe.x, probe.y) != -1:
+		return "盆地内腔未密闭 (%d,%d)" % [probe.x, probe.y]
+	if ff.dist_at(spawns[nm].x, spawns[nm].y) != -1:
+		return "盆地口未密闭"
+	for i in nm:
+		var d := ff.dist_at(spawns[i].x, spawns[i].y)
+		if d < 0:
+			return "主出怪口 %d 不可达" % [i + 1]
+		if d < PATH_LO or d > PATH_HI:
+			return "路径长越界 %d: %d ∉ [%d,%d]" % [i + 1, d, PATH_LO, PATH_HI]
+	for o in mid_ore:
+		var ok := false
+		for k in 6:
+			var ox := Grid.nx(o.x, o.y, k)
+			var oy := Grid.ny(o.x, o.y, k)
+			if g.passable(ox, oy) and ff.dist_at(ox, oy) >= 0:
+				ok = true
+				break
+		if not ok:
+			return "中场矿不可达 (%d,%d)" % [o.x, o.y]
+	return ""
+
+
 ## 全开门（插口 + 盆地矿全部挖开）后：盆地口（或其邻格）必须可达。
 ## 破坏性：会就地挖开插口与盆地矿（调用方传一次性网格）。
 func check_plug_open(g: Grid) -> String:
@@ -296,9 +484,10 @@ func check_plug_open(g: Grid) -> String:
 	for o in basin_ore:
 		g.set_cell(o.x, o.y, Grid.OPEN)
 	var ff := _dist_from_core(g)
+	var bs: Vector2i = spawns[spawns.size() - 1] # 盆地口（末位）
 	for dy in range(-1, 2):
 		for dx in range(-1, 2):
-			var c := Vector2i(spawns[2].x + dx, spawns[2].y + dy)
+			var c := Vector2i(bs.x + dx, bs.y + dy)
 			if g.passable(c.x, c.y) and ff.dist_at(c.x, c.y) >= 0:
 				return ""
 	return "插口挖开后盆地口仍不可达"
@@ -324,6 +513,8 @@ func _validate_layout() -> bool:
 ## 2026-10-16 布局生成化后与 Lua 固定布局不再逐位同构；字段序 = seed 前置 + 原序 + 布局参数段。
 func fingerprint(canon: Canon) -> int:
 	var b := canon.buffer()
+	if _freeform:
+		return _fingerprint_freeform(b)
 	b.put_i32(seed)
 	b.put_i32(w)
 	b.put_i32(h)
@@ -360,6 +551,62 @@ func fingerprint(canon: Canon) -> int:
 	for o in ore_cells:
 		b.put_i32(o.x)
 		b.put_i32(o.y)
+	b.put_u32(waves.size())
+	for wv in waves:
+		b.put_i32(wv[0])
+		b.put_i32(wv[1])
+		b.put_i32(wv[2])
+		b.put_i32(wv[3])
+	return b.fingerprint()
+
+
+## 自由路径指纹（字段序独立分支；默认种子不受影响——冻结规则见 AGENTS 第六节）。
+## b = Canon.buffer()（不注类型，避免嵌套类引用噪音）。
+func _fingerprint_freeform(b) -> int:
+	b.put_i32(seed)
+	b.put_i32(w)
+	b.put_i32(h)
+	b.put_i32(core.x)
+	b.put_i32(core.y)
+	b.put_i32(hero_spawn.x)
+	b.put_i32(hero_spawn.y)
+	b.put_u32(spawns.size())
+	for s in spawns:
+		b.put_i32(s.x)
+		b.put_i32(s.y)
+	b.put_i32(basin_plug.x)
+	b.put_i32(basin_plug.y)
+	b.put_i32(basin_rect.position.x)
+	b.put_i32(basin_rect.position.y)
+	b.put_i32(basin_rect.size.x)
+	b.put_i32(basin_rect.size.y)
+	b.put_u32(basin_ore.size())
+	for o in basin_ore:
+		b.put_i32(o.x)
+		b.put_i32(o.y)
+	b.put_u32(mid_ore.size())
+	for o in mid_ore:
+		b.put_i32(o.x)
+		b.put_i32(o.y)
+	b.put_u32(_rock_arr.size())
+	for c in _rock_arr:
+		b.put_i32(c.x)
+		b.put_i32(c.y)
+	b.put_u32(_hill_arr.size())
+	for c in _hill_arr:
+		b.put_i32(c.x)
+		b.put_i32(c.y)
+	b.put_u32(_sparse_arr.size())
+	for c in _sparse_arr:
+		b.put_i32(c.x)
+		b.put_i32(c.y)
+	b.put_i32(end_tick)
+	b.put_i32(hard_cap_tick)
+	b.put_i32(trickle_every)
+	b.put_i32(wave_scale_pct)
+	for y in h: # 高度（核心山头 + 微丘）入指纹
+		for x in w:
+			b.put_u8(height_at(x, y))
 	b.put_u32(waves.size())
 	for wv in waves:
 		b.put_i32(wv[0])

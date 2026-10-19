@@ -276,15 +276,16 @@ func _find_open(world, x0: int, y0: int, x1: int, y1: int) -> Vector2i:
 	return Vector2i(-1, -1)
 
 
+## 找任一「有覆盖层节点」的矿格（数据驱动全扫：自由路径每局矿位不同，不得钉死旧图坐标）。
 func _find_ore_cover(view, world) -> Vector2i:
-	var rects := [[4, 56, 6, 59], [30, 20, 34, 20]]
-	for r in rects:
-		for y in range(int(r[1]), int(r[3]) + 1):
-			for x in range(int(r[0]), int(r[2]) + 1):
-				if world.grid.at(x, y) != Grid.COVER:
-					continue
-				if view.cover_nodes.has(x * 1000 + y):
-					return Vector2i(x, y)
+	for y in world.grid.h:
+		for x in world.grid.w:
+			if world.grid.at(x, y) != Grid.COVER:
+				continue
+			if not view.is_ore.call(x, y):
+				continue
+			if view.cover_nodes.has(x * 1000 + y):
+				return Vector2i(x, y)
 	return Vector2i(-1, -1)
 
 

@@ -1,7 +1,7 @@
 extends ProbeKit
 
 # R5 验证探针：scenario 程序化布局（默认种子锚点 / 高度模板 / 建图结构 / 生成校验读取面 /
-# 裸图流场路径合同 / 指纹守门 / 波次表 / 模板池全扫）。
+# 裸图流场路径合同 / 指纹守门 / 波次表 / 自由世界全扫 / 出怪点解析）。
 # 判定：exit 0 + stdout 含 `[SCENARIO] PASS`。
 
 
@@ -169,24 +169,53 @@ func _initialize() -> void:
 	check(sc.is_ore(33, 21) and sc.is_ore(5, 56) and sc.is_ore(7, 59), "is_ore true")
 	check(not sc.is_ore(sc.basin_plug.x, sc.basin_plug.y) and not sc.is_ore(4, 54) and not sc.is_ore(0, 0), "is_ore false plug/interior/border")
 
-	# --- 模板池全扫（G2 完整变幅证据：五模板覆盖 + 各局校验合法 + 布局指纹互异）---
-	var tpl_seen := {}
+	# --- 自由世界全扫（2026-10-19 世界生成 2.0：自由盐内收敛 + 各局校验合法 + 指纹互异）---
 	var fps := {}
 	var sweep_ok := true
 	var salt_max := 0
+	var mains3 := 0
 	for i in 48:
 		var s := 20261004 + i
 		var sx := Scenario.new(s)
-		tpl_seen[sx.template_id] = true
 		if sx.resample_salt > salt_max:
 			salt_max = sx.resample_salt
+		if sx.resample_salt >= 48:
+			sweep_ok = false # 落入 legacy 兜底 = 自由路径回归
 		if sx.check_grid(sx.build_grid()) != "":
 			sweep_ok = false
 		if sx.check_plug_open(sx.build_grid()) != "":
 			sweep_ok = false
+		if sx.spawns.size() == 4:
+			mains3 += 1
 		fps[sx.fingerprint(canon)] = true
-	check(sweep_ok, "模板池全扫合法（盐峰 %d）" % salt_max)
-	check(tpl_seen.size() >= 5, "模板覆盖 %d/5 种" % tpl_seen.size())
-	check(fps.size() >= 44, "布局指纹互异 %d/48 局" % fps.size())
+	check(sweep_ok, "自由世界全扫合法（盐峰 %d）" % salt_max)
+	check(fps.size() >= 46, "布局指纹互异 %d/48 局" % fps.size())
+	check(mains3 >= 3, "三主口样本 %d/48" % mains3)
 
-	finish("SCENARIO", 70, "d0=%d d1=%d d2=%d fp=0x%x tpls=%d" % [d0, d1, d2, fp, tpl_seen.size()])
+	# --- 出怪点解析（wave_cell / basin_cell；三主口按表序轮转、双主口同历史口径）---
+	var two := Scenario.new(20261004)
+	check(two.wave_cell(0) == two.spawns[two.waves[0][1] - 1], "双主口 wave_cell 历史口径")
+	check(two.basin_cell() == two.spawns[two.spawns.size() - 1], "basin_cell 恒末位")
+	var three: Scenario = null
+	for i in 48:
+		var sj := Scenario.new(20261004 + i)
+		if sj.spawns.size() == 4:
+			three = sj
+			break
+	check(three != null, "样本含三主口局")
+	if three != null:
+		var seen := {}
+		var only_mains := true
+		for ei in three.waves.size():
+			var wc: Vector2i = three.wave_cell(ei)
+			var is_main := false
+			for j in 3:
+				if wc == three.spawns[j]:
+					is_main = true
+			if not is_main:
+				only_mains = false
+			seen[wc] = true
+		check(only_mains, "三主口波次只落主口")
+		check(seen.size() == 3, "三主口轮转覆盖 %d/3" % seen.size())
+
+	finish("SCENARIO", 70, "d0=%d d1=%d d2=%d fp=0x%x salt=%d m3=%d" % [d0, d1, d2, fp, salt_max, mains3])

@@ -14,7 +14,7 @@ Engineering 保真度极高：模拟核心是**确定性**的，有 16 指纹黄
 |---|---|
 | `sim/` | 模拟核心十二模块，纯逻辑、**无浮点、无渲染**：`lua64`(语义 shim) / `canon` / `rng` / `grid` / `flowfield` / `mapgen`(布局生成) / `scenario`(布局构造+校验) / `sim`(数值表) / `world` / `verify` / `golden_baseline` / `save`(存档编解码) |
 | `game/` | 表现层，只读模拟：`main`(主循环/输入) / `view`(3D 门面) + 组件 `view_core`/`view_terrain`/`view_entities`/`view_audio`（D5-1 拆分 2026-10-15） / `models` / `blueprint` / `hud` / `screens`(五屏+确认弹窗) / `save_io`(槽位 I/O) / `user_settings`(音量/全屏) / `selfcheck` |
-| `tests/` | 单测 104 例 + **21 个验收探针**（`tests/probes/`，公共夹具 `probe_kit.gd`，D5-2 2026-10-15；`probe_intro` 2026-10-17） |
+| `tests/` | 单测 106 例 + **21 个验收探针**（`tests/probes/`，公共夹具 `probe_kit.gd`，D5-2 2026-10-15；`probe_intro` 2026-10-17） |
 | `tools/` | Python 工具：`check_shots.py` / `convert_all.py` / `umd2_to_gltf.py` / `verify_glb.py` |
 | `assets/` | `audio/sfx`(30 mp3) / `fonts`(Noto Sans SC) / `models`(glb) / `icon`(图标五件套) |
 | `docs/` | 开发方案（权威）、审计报告、`devlogs/` |
@@ -37,11 +37,11 @@ game/  ←──  tests/probes/    （探针驱动表现层与整机）
 ## 三、跑闸（先读这个再动手）
 
 ```bash
-GODOT="D:/G/game/Godot_v4.7.2-stable_mono_win64/Godot_v4.7.2-stable_mono_win64_console.exe"
-P="D:/G/game/games/reroute-godot"
+GODOT="C:/G/game/Godot_v4.7.2-stable_mono_win64/Godot_v4.7.2-stable_mono_win64_console.exe"
+P="C:/Users/Administrator/Documents/默认项目/reroute-godot"
 
 # headless 安全：单测 + 模拟模块探针 + 场景构建
-"$GODOT" --headless --path "$P" -s res://tests/run_tests.gd                    # 104 单测
+"$GODOT" --headless --path "$P" -s res://tests/run_tests.gd                    # 106 单测
 for p in golden scene blueprint sim grid flow scenario world; do
   "$GODOT" --headless --path "$P" -s res://tests/probes/probe_$p.gd
 done
@@ -61,7 +61,7 @@ python tools/check_shots.py    # 截图像素校验
 1. **无头 CLI 用 `_console.exe` 变体**，普通 `.exe` 不输出 stdout。
 2. **`--headless` 下根视口只有 64×64**。凡涉及屏幕坐标或渲染纹理的探针
    （`sync` / `input` / `hud` / `ui_flow` / `smoke` / `shots` / `audio` /
-   `asset` / `model` / `orient` / `save` / `touch`）**必须窗口模式运行**。
+   `asset` / `model` / `orient` / `save` / `touch` / `intro`）**必须窗口模式运行**。
 
 ## 五、调试陷阱（都会伪装成「挂起」）
 
@@ -281,6 +281,17 @@ python tools/check_shots.py    # 截图像素校验
   `reroute-release.apk` 312,119,839B（apksigner v2/v3 true，CN=Reroute）；`reroute-windows.zip`
   183,669,125B（192 条目，testzip None-bad）。SHA：pck `153082ee…d9c5` / apk `44956252…f053` /
   zip `0a6a324f…c1992`。证据 `logs/gates-20261018-t1nat/export-*`；决策记录 = 方案 §11.26。
+- 世界生成 2.0「玩法层彻底自由化」（2026-10-19）**已完成**：非默认种子 salt 0..47 走
+  `_generate_freeform`（自由核心位 / 2~3 主口 / 盆地 / 岩野 / 微丘，裸图路径 548±15% 带内），
+  48..63 保留 G2 模板兜底；默认种子 20261003 仍字节冻结（16 指纹 + 剧本指纹 `0x7dea2b02`
+  零漂移）。波次读取面新增 `Scenario.wave_cell`（双主口历史口径 / 三主口按表序轮转）与
+  `basin_cell`；自由指纹分支 `_fingerprint_freeform`（样本 20261004 = `0xf5f49e0c`）；
+  存档不升 schema（`sc_fp` 拒绝旧变幅档）；`run_index` 跨会话持久化（`settings.cfg` 的
+  `runs`，探针/selfcheck 门控）。单测 104→106（64 种子 sweep 重写 + 7 条自由图负对照 +
+  `freeform-snapshot` 快照）；三只窗口探针的旧图/旧机耦合断言改数据驱动/墙钟口径
+  （asset / audio / input）。全 21 闸 + `check_shots` 29/0 + lint + build 绿
+  （证据 `logs/gates-20261019-worldgen/`）；决策记录 = 方案 §11.27。
+  **拍 2（视觉联动：岩脊/山体/动机池随自由布局）待做**；TapTap 常规 app 流水线以此为前置。
 
 ---
 

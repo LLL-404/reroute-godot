@@ -270,19 +270,26 @@ func tick() -> void:
 	judge()
 
 
-## 波次导演：到点的波次表条目发射；暗门开后定时渗怪
+## 波次导演：到点的波次表条目发射；暗门开后定时渗怪。
+## 出怪点解析走 sc.wave_cell（自由路径三主口按表序轮转；旧路径逐位同历史）。
 func run_waves() -> void:
-	for w in sc.waves:
+	for ei in sc.waves.size():
+		var w: Array = sc.waves[ei]
 		if w[0] == tick_count:
-			emit_wave(w[1], w[2], w[3])
+			emit_wave_at(sc.wave_cell(ei), w[2], w[3])
 	if route_opened and sc.trickle_every > 0 and tick_count % sc.trickle_every == 0:
-		emit_wave(3, Sim.E_SWARM, 2) # 盆地出怪口（1 基 = 3）
+		emit_wave_at(sc.basin_cell(), Sim.E_SWARM, 2) # 盆地出怪口（spawns 末位）
 
 
-## 发射一波敌人（螺旋找空格 + 速度抖动）
+## 发射一波敌人（1 基出怪口下标旧签名，测试兼容；内部走 emit_wave_at）
 func emit_wave(spawn_idx: int, kind: int, count: int) -> void:
-	var sx: int = sc.spawns[spawn_idx - 1].x
-	var sy: int = sc.spawns[spawn_idx - 1].y
+	emit_wave_at(sc.spawns[spawn_idx - 1], kind, count)
+
+
+## 发射一波敌人（指定出怪格；螺旋找空格 + 速度抖动）
+func emit_wave_at(pos: Vector2i, kind: int, count: int) -> void:
+	var sx := pos.x
+	var sy := pos.y
 	for _i in count:
 		var cell := _find_spawn_cell(sx, sy)
 		if cell.x < 0:

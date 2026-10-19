@@ -39,7 +39,9 @@ func _initialize() -> void:
 	var cellD := _find_clickable(view, world, 8, 6, 36, 26, false, used)
 	check(cellD.x >= 0, "塔格")
 	used.append(cellD)
-	var cellE := _find_clickable(view, world, 8, 6, 36, 26, false, used)
+	var cellE := _find_clickable_h(view, world, 8, 6, 36, 26, used) # 第 12 段反向改高对需要「可挖低端」h > H_MIN
+	if cellE.x < 0:
+		cellE = _find_clickable(view, world, 8, 6, 36, 26, false, used) # 退路：该段自会判失败
 	check(cellE.x >= 0, "英雄目标格")
 	used.append(cellE)
 	var ore_cell := _find_ore(view, world)
@@ -192,12 +194,14 @@ func _initialize() -> void:
 	var p2: Vector3 = cam.global_position
 	check(p2.x > p1.x + 0.15, "D 右移（x %.2f→%.2f）" % [p1.x, p2.x])
 
+	# 旋转按 dt 累积（CAM_ROT_SPEED=1.5rad/s）：帧计时在 2000+fps 机器上 10 帧只走数毫秒，
+	# 断言必须按墙钟按住（400ms ≈ 0.6rad，对阈值 0.02 有约 20 倍余量）。
 	var bz0: float = cam.global_transform.basis.z.x
-	await _hold_key(KEY_Q, 10)
+	await _hold_key_ms(KEY_Q, 400)
 	var bz1: float = cam.global_transform.basis.z.x
 	check(bz1 > bz0 + 0.02, "Q 左旋（bz.x %.3f→%.3f）" % [bz0, bz1])
 
-	await _hold_key(KEY_E, 10)
+	await _hold_key_ms(KEY_E, 400)
 	var bz2: float = cam.global_transform.basis.z.x
 	check(bz2 < bz1 - 0.02, "E 右旋（bz.x %.3f→%.3f）" % [bz1, bz2])
 
@@ -368,6 +372,22 @@ func _hold_key(code: Key, frames: int) -> void:
 	await process_frame
 
 
+## 按住某键 ms 毫秒再松开（墙钟口径：旋转按 dt 累积，帧计时在高帧率机器上会漂移到毫秒级）。
+func _hold_key_ms(code: Key, ms: int) -> void:
+	var down := InputEventKey.new()
+	down.keycode = code
+	down.pressed = true
+	get_root().push_input(down)
+	var t0 := Time.get_ticks_msec()
+	while Time.get_ticks_msec() - t0 < ms:
+		await process_frame
+	var up := InputEventKey.new()
+	up.keycode = code
+	up.pressed = false
+	get_root().push_input(up)
+	await process_frame
+
+
 ## 右键拖拽：按下 → 移动 delta → 松开（与真实鼠标路径一致）。
 func _rmb_drag(from: Vector2, delta: Vector2) -> void:
 	var down := InputEventMouseButton.new()
@@ -413,6 +433,19 @@ func _find_clickable(view, world, x0: int, y0: int, x1: int, y1: int, _unused: b
 	for y in range(y0, y1 + 1):
 		for x in range(x0, x1 + 1):
 			if exclude.has(Vector2i(x, y)):
+				continue
+			if _clickable(view, world, x, y):
+				return Vector2i(x, y)
+	return Vector2i(-1, -1)
+
+
+## 窗口内找「可点击且 h > H_MIN」的格（反向改高对的挖低端；自由路径地图无固定台地可用）。
+func _find_clickable_h(view, world, x0: int, y0: int, x1: int, y1: int, exclude: Array) -> Vector2i:
+	for y in range(y0, y1 + 1):
+		for x in range(x0, x1 + 1):
+			if exclude.has(Vector2i(x, y)):
+				continue
+			if world.grid.get_h(x, y) <= Sim.H_MIN:
 				continue
 			if _clickable(view, world, x, y):
 				return Vector2i(x, y)

@@ -40,6 +40,8 @@ var rmb_last := Vector2.ZERO # 右键拖拽上一帧位置（用位置差算位�
 var hud_regions_provider: Callable
 var _last_back_ms := 0 # Android 返回键双入口（通知 / ui_cancel 动作）去抖时间戳
 var _intro = null # 开屏动画层（game/intro.gd；仅冷启动非探针路径创建，播完自毁）
+var _settings: Dictionary = {} # 玩家设置缓存（含 runs 跨会话局数；save_cfg 回写）
+var _is_probe_run := false # 探针/自检运行：不读不写跨会话局数（保探针确定性与种子口径）
 
 
 ## 初始化：建 HUD/壳、开新局、显示标题屏；自检模式触发 export 验收
@@ -47,7 +49,11 @@ func _ready() -> void:
 	view = $View
 	_setup_hud()
 	_setup_shell()
-	UserSettings.apply_all(UserSettings.load_cfg()) # 启动即应用玩家设置（音量 bus / 全屏）
+	_is_probe_run = _detect_probe_run()
+	_settings = UserSettings.load_cfg()
+	UserSettings.apply_all(_settings) # 启动即应用玩家设置（音量 bus / 全屏）
+	if not _is_probe_run:
+		run_index = maxi(0, int(_settings.get("runs", 0))) # 跨会话续接已玩局数（标题预烘焙不算）
 	new_game()
 	hud.set_visible_hud(false)
 	shell.open_title() # 启动即标题：标题屏压着静态战场（母版口径，paused 初值 true）
@@ -82,6 +88,17 @@ func _play_intro() -> void:
 ## 导出包自证触发检测（C8）：`--headless --selfcheck`（引擎参数后或 ++ 后均可）。
 func _is_selfcheck() -> bool:
 	return OS.get_cmdline_args().has("--selfcheck") or OS.get_cmdline_user_args().has("--selfcheck")
+
+
+## 探针/自检运行检测（与 _intro_enabled 同口径）：selfcheck / headless / -s res://tests/*
+## 三类不读不写跨会话局数（保探针输出与首局种子确定性）。
+func _detect_probe_run() -> bool:
+	if _is_selfcheck() or DisplayServer.get_name() == "headless":
+		return true
+	var ml = Engine.get_main_loop()
+	if ml == null or ml.get_script() == null:
+		return false
+	return String(ml.get_script().resource_path).begins_with("res://tests/")
 
 
 ## 跑自检并以其返回码退出（R8；headless 导出包验收用）。
@@ -142,6 +159,15 @@ func start_match() -> void:
 	hud.set_visible_hud(true)
 	view.bgm(true)
 	shell.close_all()
+	_persist_runs()
+
+
+## 跨会话局数落盘（进入对局才记：标题屏预烘焙的那局不算「玩过」；探针/自检跳过）。
+func _persist_runs() -> void:
+	if _is_probe_run or _settings.is_empty():
+		return
+	_settings["runs"] = run_index
+	UserSettings.save_cfg(_settings)
 
 
 ## 暂停（仅进行中且未暂停时有效；HUD 按钮 / Esc / 安卓返回共用）
@@ -287,12 +313,14 @@ func _visual_anchor() -> Dictionary:
 	var gates: Array = []
 	for s in sc.spawns:
 		gates.append(float(s.x) - 31.5 + 0.5 * float(s.y & 1)) # 格 x → 世界 x（六边 odd-r：奇行 +0.5）
-	return {
-		"ridge_y": sc.ridge_y + 1,
+	var a := {
 		"basin_y": float(sc.basin_rect.position.y) + float(sc.basin_rect.size.y - 1) * 0.5,
 		"core": sc.core,
 		"gate_x": gates,
 	}
+	if sc.ridge_y >= 0:
+		a["ridge_y"] = sc.ridge_y + 1 # 自由路径无单一脊线（-1）→ 岩脊地标回落预设坐标
+	return a
 
 
 ## 开新局：局号 +1 → 新玩法地图 + 蓝图视觉 + 世界重置（标题/重开共用）
