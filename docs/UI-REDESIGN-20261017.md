@@ -182,3 +182,21 @@ L3 变体名只用常量、且禁与内置类同名（MenuButton→UiMenuButton�
 
 **调参速查补充**：HUD 钮常态/点亮配色 = `hud_button_states()`（改一处、hud 与 shell 同步）；
 字色三态沿 v2.1 运行时实况（hover 不走亮金）。
+
+---
+
+## 9. v2.4 指挥坞 + 三屏修缮（2026-10-20 实装）
+
+决策记录 = 方案 §11.33。维护口径：
+
+1. **指挥坞行** = Button（`text=""`）+ `row_name` / `row_cost` 两个子 Label；配色统一由
+   `_paint_rows()` / `_update_affordability()` 驱动（选中 `on_gold` / 常态 `muted` /
+   供给不足 `danger`）。禁再向单钮挂样式盒 override。
+2. **坞几何**：`BTN_H/COL_W/DOCK_PAD/CAP_H/CAP_GAP/GROUP_GAP` → `DOCK_W/DOCK_H` 成组推导；
+   行尺寸与子标签位置在 `_layout()` 随 `S` 重算（窗口缩放不再只挪位置）。
+3. **提示条**：`HINT_LIFE`（400 tick = 20s）与 `dismiss_hint()` 共用 `_hint_hidden` 单状态；
+   `hit_regions()` 仅在提示可见时返回该区（隐藏后点击交还战场）。
+4. **滚动渐隐**：一律 `UiStyle.fade_tex`（screens/hud 禁直接构造 `Gradient`/`Color`，
+   lint L1/L2 会咬）。
+5. **存档删除列**：删除钮与同宽 pad 互斥显隐（62px），读档/存档/空槽栅格恒定；
+   save 模式「隐藏删除钮」的探针口径保留。

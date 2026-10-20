@@ -74,6 +74,29 @@ const EDGE_MIN_DH := 0.001
 # 玩家填/挖层（get_h≠0）与可行走地面一律不并，保证建造边缘和单位贴地零变化。
 const PLATE_MERGE_DH := 0.16
 const PLATE_STEP := 0.30
+# 程序化岩块散布（2026-10-20 B2）：场内 SOLID 岩顶（台缘优先）与边框围墙顶撒低模碎岩——
+# 打散拼板缝/锯齿顶。纯视觉、确定性哈希、单网格合并；RockProps 挂 HexField 子节点，
+# 不改 sim/拾取，也不动 probe_scene/input 的 field_root 子节点结构。
+const ROCK_PROP_SALT := 771
+const ROCK_MOUTH_PAD := 0.6 # 出怪口沿周向额外留白（m）：在 RIM_MOUTH_W 豁口宽度上再让一圈
+# 出怪口保留半径（m，1 格 = 1 世界单位）：边框岩脊在此半径内不铺，保证豁口不被碎石堵住。
+# 引用点 _gate_pts 存世界坐标（main._visual_anchor 已做 odd-r 换算）。
+const ROCK_GATE_KEEP := 1.4
+const ROCK_ICO_T := 1.618034
+const ROCK_ICO_V := [
+	Vector3(-1.0, ROCK_ICO_T, 0.0), Vector3(1.0, ROCK_ICO_T, 0.0),
+	Vector3(-1.0, -ROCK_ICO_T, 0.0), Vector3(1.0, -ROCK_ICO_T, 0.0),
+	Vector3(0.0, -1.0, ROCK_ICO_T), Vector3(0.0, 1.0, ROCK_ICO_T),
+	Vector3(0.0, -1.0, -ROCK_ICO_T), Vector3(0.0, 1.0, -ROCK_ICO_T),
+	Vector3(ROCK_ICO_T, 0.0, -1.0), Vector3(ROCK_ICO_T, 0.0, 1.0),
+	Vector3(-ROCK_ICO_T, 0.0, -1.0), Vector3(-ROCK_ICO_T, 0.0, 1.0),
+]
+const ROCK_ICO_F := [
+	Vector3i(0, 11, 5), Vector3i(0, 5, 1), Vector3i(0, 1, 7), Vector3i(0, 7, 10), Vector3i(0, 10, 11),
+	Vector3i(1, 5, 9), Vector3i(5, 11, 4), Vector3i(11, 10, 2), Vector3i(10, 7, 6), Vector3i(7, 1, 8),
+	Vector3i(3, 9, 4), Vector3i(3, 4, 2), Vector3i(3, 2, 6), Vector3i(3, 6, 8), Vector3i(3, 8, 9),
+	Vector3i(4, 9, 5), Vector3i(2, 4, 11), Vector3i(6, 2, 10), Vector3i(8, 6, 7), Vector3i(9, 8, 1),
+]
 
 var host: Node3D
 var core: ViewCoreScript
@@ -108,6 +131,8 @@ var _colors := PackedColorArray()
 var _indices := PackedInt32Array()
 var _ground: MeshInstance3D = null
 var _hex: MeshInstance3D = null # 场内六棱板网格（顶面扇形 + 棱墙；随 _cell_top 重建）
+var _rock_props: MeshInstance3D = null # 程序化岩块合并网格（HexField 子节点；随地形重建）
+var _rock_var_cache: Array = [] # 岩块变体 12 顶点缓存（几何与配色无关；配色在发射期上）
 var _ground_mat: ShaderMaterial = null
 var _col_lo := Color()
 var _col_mid := Color()
@@ -388,6 +413,165 @@ func _merge_plate_tops() -> void:
 				_cell_top[m] = q
 
 
+## 岩块变体（惰性缓存）：二十面体 12 顶点径向抖动 + 压扁/拉宽（半径约 0.5m 的碎岩基形）。
+func _rock_variant(vi: int) -> PackedVector3Array:
+	while _rock_var_cache.size() <= vi:
+		var idx := _rock_var_cache.size()
+		var vs := PackedVector3Array()
+		for i in 12:
+			var v: Vector3 = ROCK_ICO_V[i]
+			var r := 0.80 + 0.40 * Blueprint.ihash(idx * 17 + i, i * 29 + 7, 4811)
+			var sx := 0.90 + 0.45 * Blueprint.ihash(i * 3 + 1, idx * 31 + 2, 9973)
+			var sy := 0.55 + 0.40 * Blueprint.ihash(i * 5 + 4, idx * 37 + 6, 2027)
+			vs.append(Vector3(v.x * r * sx, v.y * r * sy, v.z * r * sx) * 0.2629)
+		_rock_var_cache.append(vs)
+	return _rock_var_cache[vi]
+
+
+## 发射一块岩：12 顶点变换（放大/压扁 + 绕 Y 旋转 + 抬升埋底）→ 20 面展平法线 + 逐面明度抖动。
+## 顶点色 a=1（走地形 shader 的岩纹理三平面），rgb = 当前 palette 岩石色 × 面明度。
+func _emit_rock(verts: PackedVector3Array, nrms: PackedVector3Array, cols: PackedColorArray, tri: PackedInt32Array, pos: Vector3, yaw: float, s: float, hs: float, vi: int, pid: int) -> void:
+	var base := _rock_variant(vi)
+	var cy := cos(yaw)
+	var sy := sin(yaw)
+	var tv := PackedVector3Array()
+	for v in base:
+		var lx := v.x * s
+		var ly := v.y * s * hs + s * hs * 0.30 # 抬升：底部埋入顶面（不悬浮）
+		var lz := v.z * s
+		tv.append(Vector3(pos.x + lx * cy - lz * sy, pos.y + ly, pos.z + lx * sy + lz * cy))
+	for fi in ROCK_ICO_F.size():
+		var f: Vector3i = ROCK_ICO_F[fi]
+		var va: Vector3 = tv[f.x]
+		var vb: Vector3 = tv[f.y]
+		var vc: Vector3 = tv[f.z]
+		var nn := (vb - va).cross(vc - va)
+		if nn.length_squared() < 1e-10:
+			continue
+		nn = nn.normalized()
+		var k := 0.86 + 0.18 * Blueprint.ihash(pid * 131 + fi, pid * 17 + fi * 7, ROCK_PROP_SALT + 30)
+		k *= 0.94 + 0.06 * (nn.y * 0.5 + 0.5) # 朝上面稍亮（低模岩石的轻明暗，不替代光照）
+		var c := Color(minf(_col_rock.r * k, 1.0), minf(_col_rock.g * k, 1.0), minf(_col_rock.b * k, 1.0), 1.0)
+		var st := verts.size()
+		verts.append(va)
+		verts.append(vb)
+		verts.append(vc)
+		nrms.append(nn)
+		nrms.append(nn)
+		nrms.append(nn)
+		cols.append(c)
+		cols.append(c)
+		cols.append(c)
+		tri.append(st)
+		tri.append(st + 1)
+		tri.append(st + 2)
+
+
+## 重建岩块散布（随地形重建）：场内 SOLID 岩顶台缘优先、密度低；边框围墙顶成带分布，
+## 出怪口保留半径内不撒。全部走 Blueprint.ihash，同状态重建逐位一致。
+func _rebuild_rock_props() -> void:
+	if _hex == null or grid == null or _cell_top.size() != core.CELL_N * core.CELL_N:
+		return
+	if _rock_props == null:
+		_rock_props = MeshInstance3D.new()
+		_rock_props.name = "RockProps"
+		_rock_props.material_override = _ground_mat
+		_hex.add_child(_rock_props)
+	var n := core.CELL_N
+	var verts := PackedVector3Array()
+	var nrms := PackedVector3Array()
+	var cols := PackedColorArray()
+	var tri := PackedInt32Array()
+	var pid := 0
+	for y in n:
+		for x in n:
+			if grid.at(x, y) != Grid.SOLID:
+				continue
+			var i := y * n + x
+			var t: float = _cell_top[i]
+			var w := core.cell_to_world(x, y)
+			if x == 0 or y == 0 or x == n - 1 or y == n - 1:
+				# —— 边框围墙顶：成带岩脊，打散锯齿（出怪口豁口保留）——
+				if Blueprint.ihash(x * 5 + 1, y * 5 + 3, ROCK_PROP_SALT) < 0.22:
+					continue
+				var gate := false
+				for gp in _gate_pts:
+					var dx: float = w.x - gp.x
+					var dz: float = w.z - gp.y
+					if dx * dx + dz * dz < ROCK_GATE_KEEP * ROCK_GATE_KEEP:
+						gate = true
+						break
+				if gate:
+					continue
+				var s := 0.46 + 0.34 * Blueprint.ihash(x * 7 + 2, y * 7 + 5, ROCK_PROP_SALT + 1)
+				var hs := 0.60 + 0.30 * Blueprint.ihash(x * 11 + 4, y * 11 + 6, ROCK_PROP_SALT + 2)
+				var yaw := TAU * Blueprint.ihash(x * 13 + 8, y * 13 + 9, ROCK_PROP_SALT + 3)
+				var ox := (Blueprint.ihash(x * 17 + 3, y * 17 + 4, ROCK_PROP_SALT + 4) - 0.5) * 0.22
+				var oz := (Blueprint.ihash(x * 19 + 6, y * 19 + 7, ROCK_PROP_SALT + 5) - 0.5) * 0.26
+				var vi := int(Blueprint.ihash(x * 23 + 9, y * 23 + 10, ROCK_PROP_SALT + 6) * 4.0)
+				_emit_rock(verts, nrms, cols, tri, Vector3(w.x + ox, t - 0.06, w.z + oz), yaw, s, hs, vi, pid)
+				pid += 1
+				if Blueprint.ihash(x * 29 + 11, y * 29 + 12, ROCK_PROP_SALT + 7) < 0.30:
+					var s2 := s * (0.55 + 0.25 * Blueprint.ihash(x * 31 + 13, y * 31 + 14, ROCK_PROP_SALT + 8))
+					var yaw2 := yaw + 1.1 + Blueprint.ihash(x * 37 + 15, y * 37 + 16, ROCK_PROP_SALT + 9)
+					var d2 := TAU * Blueprint.ihash(x * 43 + 19, y * 43 + 20, ROCK_PROP_SALT + 11)
+					var o2 := 0.18 + 0.10 * Blueprint.ihash(x * 41 + 17, y * 41 + 18, ROCK_PROP_SALT + 10)
+					var vi2 := int(Blueprint.ihash(x * 47 + 21, y * 47 + 22, ROCK_PROP_SALT + 12) * 4.0)
+					_emit_rock(verts, nrms, cols, tri, Vector3(w.x + ox + cos(d2) * o2, t - 0.08, w.z + oz + sin(d2) * o2), yaw2, s2, hs * 0.9, vi2, pid)
+					pid += 1
+			else:
+				# —— 场内岩顶：台缘（邻格非 SOLID 或台阶差 >5cm）优先，靠边放；块内稀疏点缀 ——
+				var edge := false
+				var ex := 0.0
+				var ez := 0.0
+				for k in 6:
+					var nx := Grid.nx(x, y, k)
+					var ny := Grid.ny(x, y, k)
+					if nx < 0 or ny < 0 or nx >= n or ny >= n:
+						continue
+					var i2 := ny * n + nx
+					if grid.at(nx, ny) != Grid.SOLID or absf(_cell_top[i2] - t) > 0.05:
+						edge = true
+						var w2 := core.cell_to_world(nx, ny)
+						ex += w2.x - w.x
+						ez += w2.z - w.z
+				if Blueprint.ihash(x * 3 + 1, y * 3 + 2, ROCK_PROP_SALT + 20) >= (0.55 if edge else 0.26):
+					continue
+				var s := (0.30 + 0.24 * Blueprint.ihash(x * 7 + 1, y * 7 + 2, ROCK_PROP_SALT + 21)) * (1.15 if edge else 0.9)
+				var hs := 0.55 + 0.35 * Blueprint.ihash(x * 11 + 3, y * 11 + 4, ROCK_PROP_SALT + 22)
+				var yaw := TAU * Blueprint.ihash(x * 13 + 5, y * 13 + 6, ROCK_PROP_SALT + 23)
+				var px := 0.0
+				var pz := 0.0
+				if edge and absf(ex) + absf(ez) > 0.001:
+					var l := sqrt(ex * ex + ez * ez)
+					px = ex / l * 0.17
+					pz = ez / l * 0.17
+				else:
+					px = (Blueprint.ihash(x * 17 + 7, y * 17 + 8, ROCK_PROP_SALT + 24) - 0.5) * 0.30
+					pz = (Blueprint.ihash(x * 19 + 9, y * 19 + 10, ROCK_PROP_SALT + 25) - 0.5) * 0.36
+				var vi := int(Blueprint.ihash(x * 23 + 11, y * 23 + 12, ROCK_PROP_SALT + 26) * 4.0)
+				_emit_rock(verts, nrms, cols, tri, Vector3(w.x + px, t - 0.05, w.z + pz), yaw, s, hs, vi, pid)
+				pid += 1
+				if Blueprint.ihash(x * 29 + 13, y * 29 + 14, ROCK_PROP_SALT + 27) < 0.30:
+					var s2 := s * (0.55 + 0.25 * Blueprint.ihash(x * 31 + 15, y * 31 + 16, ROCK_PROP_SALT + 28))
+					var yaw2 := yaw + 1.4 + Blueprint.ihash(x * 37 + 17, y * 37 + 18, ROCK_PROP_SALT + 29)
+					var d2 := TAU * Blueprint.ihash(x * 43 + 21, y * 43 + 22, ROCK_PROP_SALT + 13)
+					var o2 := 0.16 + 0.10 * Blueprint.ihash(x * 41 + 19, y * 41 + 20, ROCK_PROP_SALT + 14)
+					var vi2 := int(Blueprint.ihash(x * 47 + 23, y * 47 + 24, ROCK_PROP_SALT + 15) * 4.0)
+					_emit_rock(verts, nrms, cols, tri, Vector3(w.x + px + cos(d2) * o2, t - 0.07, w.z + pz + sin(d2) * o2), yaw2, s2, hs * 0.9, vi2, pid)
+					pid += 1
+	var mesh := ArrayMesh.new()
+	if verts.size() > 0:
+		var arrays: Array = []
+		arrays.resize(Mesh.ARRAY_MAX)
+		arrays[Mesh.ARRAY_VERTEX] = verts
+		arrays[Mesh.ARRAY_NORMAL] = nrms
+		arrays[Mesh.ARRAY_COLOR] = cols
+		arrays[Mesh.ARRAY_INDEX] = tri
+		mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+	_rock_props.mesh = mesh
+
+
 ## 重建六棱板网格：逐格顶面（中心 + 6 角扇形；坡度法线/顶点色）+ 落差边剖面
 ## （edge_kind_at/edge_profile：圆唇 + 斜壁/边坡/石阶 + 微扰，只朝低邻侧画、面朝邻居；
 ## 界外棱双面 + 底埋入场外地面）。挖/填/落墙后复跑。
@@ -530,6 +714,7 @@ func _rebuild_hex() -> void:
 		_hex.material_override = _ground_mat
 		field_root.add_child(_hex)
 	_hex.mesh = mesh
+	_rebuild_rock_props()
 
 
 ## 落差边分级（模拟高度差 = 可爬性真值；界外/实心恒崖壁）。

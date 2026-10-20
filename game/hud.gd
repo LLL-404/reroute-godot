@@ -1,6 +1,7 @@
 extends Control
 
 const UiStyle = preload("res://game/ui_style.gd")
+const UiIcon = preload("res://game/ui_icon.gd")
 const UserSettings = preload("res://game/user_settings.gd")
 
 # HUD（移植 reroute/scripts/hud.lua）：顶栏（核心血条/波次倒计时/供给/热层钮/暂停钮）
@@ -15,17 +16,26 @@ var S := 1.0
 var safe := Vector4.ZERO
 var _safe_override := Vector4(-1.0, -1.0, -1.0, -1.0)
 
-# 几何常量（与母版一致）：hud 布局与 main 点击排除共用这一份
-const BTN_H := 42.0
-const BTN_GAP := 7.0
-const COL_W := 128.0
+# 几何常量：hud 布局与 main 点击排除共用这一份（v2.5 图标指挥盘：3 行 2/3/3 格）
+const CELL_W := 72.0      # 格宽
+const CELL_H := 68.0      # 格高（图标 22 + 名称 10 + 成本 9）
+const CELL_GAP := 8.0     # 同行格距
+const ROW_GAP := 10.0     # 行距
+const DOCK_PAD := 10.0    # 盘内边距
+const DOCK_COLS := 3
+const DOCK_W := CELL_W * DOCK_COLS + CELL_GAP * (DOCK_COLS - 1) + DOCK_PAD * 2 # 252
+const DOCK_H := CELL_H * 3 + ROW_GAP * 2 + DOCK_PAD * 2 # 244
+const DOCK_ROWS := [["wall", "tower"], ["dig", "fill", "lower"], ["skill", "remove", "hero"]]
 const EDGE := 16.0
 const TOP_H := 56.0
 const TOP_STRIP_H := 64.0 # 点击排除条高（56 + 留白）
 const HINT_TEXT := "放墙改道 · 怪绕得越远死时赏金越高——修运河，别只堵路"
-const CORNER_N := 7
-const CORNER_W := EDGE + COL_W + EDGE # 160
-const CORNER_H := EDGE + CORNER_N * BTN_H + (CORNER_N - 1) * BTN_GAP + BTN_GAP + BTN_H + EDGE # 417
+const HINT_LIFE := 400 # 提示条驻留 tick（20s）后淡出
+const FS_NAME := 11.0    # 盘内名称字号（×S；_layout 每帧重设，平板窗口同比例）
+const FS_COST := 9.5     # 盘内成本字号
+const FS_TOP := 12.0     # 顶栏小标字号
+const CORNER_W := EDGE + DOCK_W # 268
+const CORNER_H := EDGE + DOCK_H # 260
 const FLOAT_N := 10 # 浮字池
 const FLOAT_LIFE := 18 # 0.9s（tick）
 const FLOAT_RISE := 1.4 # 每 tick 上浮像素
@@ -51,6 +61,15 @@ var heat_btn: Button
 var pause_btn: Button
 var mode_buttons: Dictionary = {}
 var skill_btn: Button
+var dock: Panel
+var dock_caps: Array = []
+var dock_rows: Array = [] # 3 行控件（2/3/3），_layout 逐格定位
+var row_cost: Dictionary = {} # key → 格内成本/冷却 Label（底部居中）
+var row_name: Dictionary = {} # key → 格内名称 Label（底部居中）
+var row_icon: Dictionary = {} # key → 图标 Control
+var supply_caption: Label
+var core_icon: Control
+var supply_icon: Control
 var banner_root: Control
 var banner_card: PanelContainer
 var banner_title: Label
@@ -59,6 +78,7 @@ var hint_panel: PanelContainer
 var hint_label: Label
 var floats: Array = []
 var _toplevel: Array = []
+var _hint_hidden := false
 
 # 状态缓存（口径同母版）
 var _tick := 0
@@ -89,13 +109,13 @@ func build(cb: Dictionary) -> void:
 	CORE_HP = int(Sim.BUILDINGS[Sim.B_CORE - 1]["hp"])
 	WAVE_NAMES = { Sim.E_SWARM: "虫群", Sim.E_BEHEMOTH: "蛮兽" }
 	MODE_LABELS = [
-		{ "key": "wall", "label": "墙 ×" + str(int(Sim.BUILDINGS[Sim.B_WALL - 1]["cost"])) },
-		{ "key": "tower", "label": "塔 ×" + str(int(Sim.BUILDINGS[Sim.B_TOWER - 1]["cost"])) },
-		{ "key": "dig", "label": "挖矿" },
-		{ "key": "fill", "label": "填高 ×" + str(Sim.FILL_COST) },
-		{ "key": "lower", "label": "挖低 ×" + str(Sim.LOWER_COST) },
-		{ "key": "remove", "label": "拆" },
-		{ "key": "hero", "label": "英雄" },
+		{ "key": "wall", "label": "墙", "cost": int(Sim.BUILDINGS[Sim.B_WALL - 1]["cost"]) },
+		{ "key": "tower", "label": "塔", "cost": int(Sim.BUILDINGS[Sim.B_TOWER - 1]["cost"]) },
+		{ "key": "dig", "label": "挖矿", "cost": 0 },
+		{ "key": "fill", "label": "填高", "cost": int(Sim.FILL_COST) },
+		{ "key": "lower", "label": "挖低", "cost": int(Sim.LOWER_COST) },
+		{ "key": "remove", "label": "拆", "cost": 0 },
+		{ "key": "hero", "label": "英雄", "cost": 0 },
 	]
 
 	# 字体主题（Godot 默认字体无 CJK 字形，必须装中文字体）。
@@ -106,8 +126,7 @@ func build(cb: Dictionary) -> void:
 
 	_build_top_bar()
 	_build_hint()
-	_build_mode_col()
-	_build_skill_btn()
+	_build_dock()
 	_build_banner()
 	_build_floats()
 	set_mode(mode)
@@ -148,16 +167,23 @@ func _build_top_bar() -> void:
 	add_child(top_bar)
 	_toplevel.append(top_bar)
 
-	var sep1 := _make_label("核心", 12.0 * S, DARK["muted"])
+	core_icon = UiIcon.new()
+	top_bar.add_child(core_icon)
+	core_icon.setup("shield", DARK["gold"])
+	supply_icon = UiIcon.new()
+	top_bar.add_child(supply_icon)
+	supply_icon.setup("coin", DARK["supply"])
+
+	var sep1 := _make_label("核心", 11.0 * S, DARK["muted"])
 	sep1.name = "lbl_core"
 	top_bar.add_child(sep1)
-	var sep2 := _make_label("波次", 12.0 * S, DARK["muted"])
+	var sep2 := _make_label("波次", 11.0 * S, DARK["muted"])
 	sep2.name = "lbl_wave"
 	top_bar.add_child(sep2)
 
 	hp_bar = ProgressBar.new()
-	hp_bar.custom_minimum_size = Vector2(210.0 * S, 13.0 * S)
-	hp_bar.size = Vector2(210.0 * S, 13.0 * S)
+	hp_bar.custom_minimum_size = Vector2(180.0 * S, 10.0 * S)
+	hp_bar.size = Vector2(180.0 * S, 10.0 * S)
 	hp_bar.max_value = float(CORE_HP)
 	hp_bar.value = float(CORE_HP)
 	hp_bar.show_percentage = false
@@ -178,7 +204,7 @@ func _build_top_bar() -> void:
 		hp_bar.add_child(tick)
 	top_bar.add_child(hp_bar)
 
-	hp_text = _make_label("%d/%d" % [CORE_HP, CORE_HP], 11.0 * S, DARK["text"])
+	hp_text = _make_label("%d/%d" % [CORE_HP, CORE_HP], 12.0 * S, DARK["text"])
 	top_bar.add_child(hp_text)
 
 	var divider := ColorRect.new()
@@ -189,15 +215,17 @@ func _build_top_bar() -> void:
 	divider.name = "divider"
 	top_bar.add_child(divider)
 
-	wave_text = _make_label("准备中", 11.0 * S, DARK["text"])
+	wave_text = _make_label("准备中", 12.0 * S, DARK["text"])
 	top_bar.add_child(wave_text)
 
-	supply_text = _make_label("供给 %d" % Sim.START_SUPPLY, 15.0 * S, DARK["supply"], true)
+	supply_caption = _make_label("供给", 10.0 * S, DARK["muted"])
+	top_bar.add_child(supply_caption)
+	supply_text = _make_label(str(Sim.START_SUPPLY), 17.0 * S, DARK["supply"], true)
 	top_bar.add_child(supply_text)
 
 	heat_btn = Button.new()
 	heat_btn.text = "热层"
-	_style_button(heat_btn, 56.0 * S, 30.0 * S, 11.0 * S)
+	_style_button(heat_btn, 60.0 * S, 30.0 * S, 11.0 * S)
 	heat_btn.pressed.connect(func() -> void:
 		if callbacks.has("on_heat"):
 			callbacks["on_heat"].call())
@@ -205,7 +233,7 @@ func _build_top_bar() -> void:
 
 	pause_btn = Button.new()
 	pause_btn.text = "暂停"
-	_style_button(pause_btn, 56.0 * S, 30.0 * S, 11.0 * S)
+	_style_button(pause_btn, 60.0 * S, 30.0 * S, 11.0 * S)
 	pause_btn.pressed.connect(func() -> void:
 		if callbacks.has("on_pause"):
 			callbacks["on_pause"].call())
@@ -218,43 +246,95 @@ func _build_hint() -> void:
 	hint_panel.mouse_filter = Control.MOUSE_FILTER_STOP
 	hint_panel.add_theme_stylebox_override("panel", _flat(DARK["card"], DARK["gold_lo"], 2, 1))
 	var margin := MarginContainer.new()
-	margin.add_theme_constant_override("margin_left", int(8 * S))
-	margin.add_theme_constant_override("margin_right", int(8 * S))
-	margin.add_theme_constant_override("margin_top", int(8 * S))
-	margin.add_theme_constant_override("margin_bottom", int(8 * S))
-	hint_label = _make_label(HINT_TEXT, 9.0 * S, DARK["muted"])
-	margin.add_child(hint_label)
+	margin.add_theme_constant_override("margin_left", int(9 * S))
+	margin.add_theme_constant_override("margin_right", int(11 * S))
+	margin.add_theme_constant_override("margin_top", int(5 * S))
+	margin.add_theme_constant_override("margin_bottom", int(5 * S))
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", int(8 * S))
+	var tag := _make_label("TIP", 9.0 * S, DARK["gold"])
+	tag.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_child(tag)
+	var sep := ColorRect.new()
+	sep.color = DARK["gold_lo"]
+	sep.custom_minimum_size = Vector2(1, 10)
+	sep.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	sep.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_child(sep)
+	hint_label = _make_label(HINT_TEXT, 10.0 * S, DARK["muted"])
+	row.add_child(hint_label)
+	margin.add_child(row)
 	hint_panel.add_child(margin)
 	add_child(hint_panel)
 	_toplevel.append(hint_panel)
 
 
-## 构建右下操作模式列（墙/塔/挖矿/填高/挖低/拆/英雄 共 7 钮）
-func _build_mode_col() -> void:
+## 构建右下指挥盘（v2.5）：3 行 2/3/3 格（建造 / 地形 / 指令），格内 = 图标 + 名称 + 成本。
+## Button 文本清空，图标/名称/成本均为子节点（随按钮三态由 _paint_rows 统一换色）。
+func _build_dock() -> void:
+	dock = Panel.new()
+	dock.name = "dock"
+	dock.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	dock.add_theme_stylebox_override("panel", _flat(DARK["bar"], DARK["gold_lo"], 3, 1))
+	UiStyle.corner_dress(dock, DARK["gold_lo"]) # 四角铜线托角（游戏面板感）
+	add_child(dock)
+	_toplevel.append(dock)
+
 	mode_buttons = {}
-	for m in MODE_LABELS:
-		var btn := Button.new()
-		btn.text = str(m["label"])
-		_style_button(btn, COL_W * S, BTN_H * S, 11.0 * S)
-		var key: String = m["key"]
-		btn.pressed.connect(func() -> void:
-			if callbacks.has("on_mode"):
-				callbacks["on_mode"].call(key))
-		add_child(btn)
-		mode_buttons[key] = btn
-		_toplevel.append(btn)
-
-
-## 构建技能钮（震荡波；冷却期禁用并显示剩余秒）
-func _build_skill_btn() -> void:
-	skill_btn = Button.new()
-	skill_btn.text = "震荡波"
-	_style_button(skill_btn, COL_W * S, BTN_H * S, 11.0 * S)
-	skill_btn.pressed.connect(func() -> void:
-		if callbacks.has("on_skill"):
-			callbacks["on_skill"].call())
-	add_child(skill_btn)
-	_toplevel.append(skill_btn)
+	dock_rows = []
+	row_name = {}
+	row_cost = {}
+	row_icon = {}
+	var specs := {
+		"wall": { "label": "墙", "cost": int(Sim.BUILDINGS[Sim.B_WALL - 1]["cost"]), "icon": "wall" },
+		"tower": { "label": "塔", "cost": int(Sim.BUILDINGS[Sim.B_TOWER - 1]["cost"]), "icon": "tower" },
+		"dig": { "label": "挖矿", "cost": 0, "icon": "ore" },
+		"fill": { "label": "填高", "cost": int(Sim.FILL_COST), "icon": "fill" },
+		"lower": { "label": "挖低", "cost": int(Sim.LOWER_COST), "icon": "lower" },
+		"skill": { "label": "震荡波", "cost": 0, "icon": "skill" },
+		"remove": { "label": "拆", "cost": 0, "icon": "remove" },
+		"hero": { "label": "英雄", "cost": 0, "icon": "hero" },
+	}
+	for keys in DOCK_ROWS:
+		var row: Array = []
+		for key in keys:
+			var spec: Dictionary = specs[key]
+			var btn := Button.new()
+			btn.text = ""
+			_style_button(btn, CELL_W * S, CELL_H * S, 10.0 * S)
+			if key == "skill":
+				btn.pressed.connect(func() -> void:
+					if callbacks.has("on_skill"):
+						callbacks["on_skill"].call())
+				skill_btn = btn
+			else:
+				btn.pressed.connect(func() -> void:
+					if callbacks.has("on_mode"):
+						callbacks["on_mode"].call(key))
+				mode_buttons[key] = btn
+			add_child(btn)
+			_toplevel.append(btn)
+			btn.set_meta("cost", int(spec["cost"]))
+			btn.set_meta("icon", str(spec["icon"]))
+			var ic := UiIcon.new()
+			btn.add_child(ic)
+			ic.setup(str(spec["icon"]), DARK["text"])
+			row_icon[key] = ic
+			var name_l := _make_label(str(spec["label"]), 10.0 * S, DARK["text"])
+			name_l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			btn.add_child(name_l)
+			row_name[key] = name_l
+			var cost_l := _make_label("", 9.0 * S, DARK["muted"])
+			cost_l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			btn.add_child(cost_l)
+			row_cost[key] = cost_l
+			if int(spec["cost"]) > 0:
+				cost_l.text = str(int(spec["cost"]))
+			elif key == "skill":
+				cost_l.text = "就绪"
+			row.append(btn)
+		dock_rows.append(row)
+	_paint_rows()
 
 
 ## 构建波次/暗门横幅（卡片 + 左金条强调 + 标题/副标题两行）
@@ -271,14 +351,14 @@ func _build_banner() -> void:
 	sb_ban.border_width_left = 4 # 左侧 4px 金条强调（v2.1 组件规格）
 	banner_card.add_theme_stylebox_override("panel", sb_ban)
 	var margin := MarginContainer.new()
-	margin.add_theme_constant_override("margin_left", int(14 * S))
+	margin.add_theme_constant_override("margin_left", int(12 * S))
 	margin.add_theme_constant_override("margin_right", int(14 * S))
-	margin.add_theme_constant_override("margin_top", int(12 * S))
-	margin.add_theme_constant_override("margin_bottom", int(12 * S))
+	margin.add_theme_constant_override("margin_top", int(7 * S))
+	margin.add_theme_constant_override("margin_bottom", int(7 * S))
 	var col := VBoxContainer.new()
-	col.add_theme_constant_override("separation", int(4 * S))
-	banner_title = _make_label("", 20.0 * S, DARK["gold_hi"], true)
-	banner_sub = _make_label("", 11.0 * S, DARK["muted"])
+	col.add_theme_constant_override("separation", int(2 * S))
+	banner_title = _make_label("", 16.0 * S, DARK["gold_hi"], true)
+	banner_sub = _make_label("", 10.0 * S, DARK["muted"])
 	col.add_child(banner_title)
 	col.add_child(banner_sub)
 	margin.add_child(col)
@@ -347,51 +427,88 @@ func _layout() -> void:
 	# 顶栏
 	top_bar.position = Vector2(x0, y0)
 	top_bar.size = Vector2(x1 - x0, TOP_H * S)
+	# v2.5：字号随 S 重算（窗口缩放/平板尺寸下格与字同步，不再出现「大格子小字」）
+	for key in row_name:
+		row_name[key].add_theme_font_size_override("font_size", int(FS_NAME * S))
+		row_cost[key].add_theme_font_size_override("font_size", int(FS_COST * S))
 	var row_h := TOP_H * S
 	var gap := 18.0 * S
 	var x := x0 + 20.0 * S
+	core_icon.size = Vector2(14.0 * S, 14.0 * S)
+	core_icon.position = Vector2(x, (row_h - 14.0 * S) / 2.0)
+	x += 20.0 * S
+	hp_bar.custom_minimum_size = Vector2(180.0 * S, 10.0 * S)
+	hp_bar.size = Vector2(180.0 * S, 10.0 * S)
 	var lbl_core: Label = top_bar.get_node("lbl_core")
 	var lbl_wave: Label = top_bar.get_node("lbl_wave")
 	var divider: ColorRect = top_bar.get_node("divider")
+	lbl_core.add_theme_font_size_override("font_size", int(FS_TOP * S))
+	lbl_wave.add_theme_font_size_override("font_size", int(FS_TOP * S))
+	hp_text.add_theme_font_size_override("font_size", int(12.5 * S))
+	wave_text.add_theme_font_size_override("font_size", int(12.0 * S))
+	supply_caption.add_theme_font_size_override("font_size", int(10.5 * S))
+	supply_text.add_theme_font_size_override("font_size", int(18.0 * S))
+	heat_btn.add_theme_font_size_override("font_size", int(11.5 * S))
+	pause_btn.add_theme_font_size_override("font_size", int(11.5 * S))
+	hint_label.add_theme_font_size_override("font_size", int(10.5 * S))
+	banner_title.add_theme_font_size_override("font_size", int(16.0 * S))
+	banner_sub.add_theme_font_size_override("font_size", int(10.5 * S))
 	for c in [lbl_core, hp_bar, hp_text, divider, lbl_wave, wave_text]:
 		var ctl: Control = c
 		ctl.reset_size()
 		ctl.position = Vector2(x, (row_h - ctl.size.y) / 2.0)
 		x += ctl.size.x + gap
-	# 供给 + 两钮右对齐（右起：暂停钮、热层钮、供给）
+	# 右簇：供给（小标 + 铜钱图标 + 大数值）+ 热层/暂停
 	var right := x1 - 20.0 * S
-	pause_btn.reset_size()
+	pause_btn.custom_minimum_size = Vector2(60.0 * S, 30.0 * S)
+	pause_btn.size = Vector2(60.0 * S, 30.0 * S)
 	pause_btn.position = Vector2(right - pause_btn.size.x, (row_h - pause_btn.size.y) / 2.0)
 	right -= pause_btn.size.x + 8.0 * S
-	heat_btn.reset_size()
+	heat_btn.custom_minimum_size = Vector2(60.0 * S, 30.0 * S)
+	heat_btn.size = Vector2(60.0 * S, 30.0 * S)
 	heat_btn.position = Vector2(right - heat_btn.size.x, (row_h - heat_btn.size.y) / 2.0)
 	right -= heat_btn.size.x + gap
 	supply_text.reset_size()
 	supply_text.position = Vector2(right - supply_text.size.x, (row_h - supply_text.size.y) / 2.0)
+	right -= supply_text.size.x + 5.0 * S
+	supply_icon.size = Vector2(13.0 * S, 13.0 * S)
+	supply_icon.position = Vector2(right - 13.0 * S, (row_h - 13.0 * S) / 2.0)
+	right -= 13.0 * S + 5.0 * S
+	supply_caption.reset_size()
+	supply_caption.position = Vector2(right - supply_caption.size.x, (row_h - supply_caption.size.y) / 2.0)
 
-	# 提示徽章（左上，top 64*S 锚定）
+	# 提示徽章（左上，top 64*S 锚定；超时淡出后隐藏）
 	hint_panel.reset_size()
 	hint_panel.position = Vector2(x0 + 16.0 * S, y0 + 64.0 * S)
 
-	# 模式列（右下角，从下往上排）
-	var col_w := COL_W * S
-	var btn_h := BTN_H * S
-	var btn_gap := BTN_GAP * S
-	var bx := x1 - (EDGE + COL_W) * S
-	for i in MODE_LABELS.size():
-		var key: String = MODE_LABELS[i]["key"]
-		var btn: Button = mode_buttons[key]
-		var by := y1 - (EDGE + CORNER_N * (BTN_H + BTN_GAP) - BTN_GAP) * S + i * (btn_h + btn_gap)
-		btn.position = Vector2(bx, by)
+	# 指挥盘（右下角）：3 行 2/3/3 格，逐格定位图标/名称/成本
+	dock.position = Vector2(x1 - (EDGE + DOCK_W) * S, y1 - (EDGE + DOCK_H) * S)
+	dock.size = Vector2(DOCK_W * S, DOCK_H * S)
+	var content_w := DOCK_W - DOCK_PAD * 2.0
+	for r in dock_rows.size():
+		var row: Array = dock_rows[r]
+		var row_w := row.size() * CELL_W + (row.size() - 1) * CELL_GAP
+		var rx := dock.position.x + (DOCK_PAD + (content_w - row_w) * 0.5) * S
+		var ry := dock.position.y + (DOCK_PAD + r * (CELL_H + ROW_GAP)) * S
+		for i in row.size():
+			var b: Button = row[i]
+			b.custom_minimum_size = Vector2(CELL_W * S, CELL_H * S)
+			b.size = b.custom_minimum_size
+			b.position = Vector2(rx + i * (CELL_W + CELL_GAP) * S, ry)
+			var key := str(DOCK_ROWS[r][i])
+			var ic: Control = row_icon[key]
+			ic.size = Vector2(24.0 * S, 24.0 * S)
+			ic.position = Vector2((CELL_W * S - ic.size.x) * 0.5, 7.0 * S)
+			var nl: Label = row_name[key]
+			nl.reset_size()
+			nl.position = Vector2((CELL_W * S - nl.size.x) * 0.5, 32.0 * S)
+			var cl: Label = row_cost[key]
+			cl.reset_size()
+			cl.position = Vector2((CELL_W * S - cl.size.x) * 0.5, 47.0 * S)
 
-	# 技能钮（模式列上方：底边距底 = EDGE + CORNER_N*(BTN_H+BTN_GAP)，按钮高 42）
-	var skill_y := y1 - (EDGE + CORNER_N * (BTN_H + BTN_GAP) + BTN_H) * S
-	skill_btn.position = Vector2(bx, skill_y)
-
-	# 横幅（顶部居中）
+	# 横幅（顶部居中，v2.4 瘦身）
 	banner_card.reset_size()
-	var by2 := y0 + 110.0 * S
-	banner_card.position = Vector2((x0 + x1 - banner_card.size.x) / 2.0, by2)
+	banner_card.position = Vector2((x0 + x1 - banner_card.size.x) / 2.0, y0 + 96.0 * S)
 
 
 # ---------------- 命中区（main 点击排除的唯一来源） ----------------
@@ -408,10 +525,9 @@ func hit_regions() -> Array:
 		Rect2(x0, y0, x1 - x0, floorf(TOP_STRIP_H * S)),
 		Rect2(x1 - floorf(CORNER_W * S), y1 - floorf(CORNER_H * S), floorf(CORNER_W * S), floorf(CORNER_H * S)),
 	]
-	# 提示徽章宽度按字数估算（CJK 全角 ≈ 字号），略宽无害
-	var chars := HINT_TEXT.length()
-	var hw := floorf((16.0 + 8.0 + chars * 9.0 + 8.0) * S)
-	regions.append(Rect2(x0, y0 + floorf(64.0 * S), hw, floorf(36.0 * S)))
+	# 提示徽章（可见时才占点击排除区；超时淡出后自动让位给战场）
+	if hint_panel != null and hint_panel.visible:
+		regions.append(Rect2(hint_panel.position, hint_panel.size))
 	return regions
 
 
@@ -434,13 +550,67 @@ func set_visible_hud(vis: bool) -> void:
 			el2.visible = false
 
 
-## 切换操作模式：点亮对应钮（HUD 变体切换；不再改写共享样式盒/meta）
+## 切换操作模式：点亮对应钮（HUD 变体切换；行内名称/成本同步换色）
 func set_mode(m: String) -> void:
 	mode = m
 	for key in mode_buttons:
 		var btn: Button = mode_buttons[key]
 		var on: bool = key == m
 		btn.theme_type_variation = UiStyle.BTN_HUD_ACTIVE_VAR if on else UiStyle.BTN_HUD_VAR
+	_paint_rows()
+
+
+## 行配色：选中 = 金底深字；常态 = 字色 text + 成本 muted（供给不足时由 update 改红）。
+func _paint_rows() -> void:
+	for key in mode_buttons:
+		var on: bool = key == mode
+		var nl: Label = row_name[key]
+		var cl: Label = row_cost[key]
+		nl.add_theme_color_override("font_color", DARK["on_gold"] if on else DARK["text"])
+		if cl.text != "":
+			cl.add_theme_color_override("font_color", DARK["on_gold"] if on else DARK["muted"])
+		row_icon[key].setup(str(mode_buttons[key].get_meta("icon")), DARK["on_gold"] if on else DARK["text"])
+
+
+## 成本可负担性：供给不足 → 红字；可负担 → 随行态（点亮深字 / 常态 muted）。
+func _update_affordability(supply: int) -> void:
+	for key in mode_buttons:
+		var cost := int(mode_buttons[key].get_meta("cost"))
+		if cost <= 0:
+			continue
+		var cl: Label = row_cost[key]
+		var on: bool = key == mode
+		if supply < cost:
+			cl.add_theme_color_override("font_color", DARK["danger"])
+		else:
+			cl.add_theme_color_override("font_color", DARK["on_gold"] if on else DARK["muted"])
+
+
+## 技能行配色：冷却禁用 → 名/图标 muted；就绪 → text + 金色「就绪」。
+func _paint_skill() -> void:
+	var ready := not skill_btn.disabled
+	row_name["skill"].add_theme_color_override("font_color", DARK["text"] if ready else DARK["muted"])
+	row_cost["skill"].add_theme_color_override("font_color", DARK["supply"] if ready else DARK["muted"])
+	row_icon["skill"].setup("skill", DARK["text"] if ready else DARK["muted"])
+
+
+## 教学提示条：驻留 HINT_LIFE tick（20s）后淡出，只触发一次；reset() 恢复。
+func _update_hint(tick: int) -> void:
+	if _hint_hidden or hint_panel == null or tick < HINT_LIFE:
+		return
+	_hint_hidden = true
+	var tw := create_tween()
+	tw.tween_property(hint_panel, "modulate:a", 0.0, 0.5)
+	tw.tween_callback(func() -> void:
+		hint_panel.visible = false)
+
+
+## 手动收起教学提示（打开存档/设置等模态页时调用；与 20s 自动淡出同一状态，不再复现）。
+func dismiss_hint() -> void:
+	if _hint_hidden or hint_panel == null:
+		return
+	_hint_hidden = true
+	hint_panel.visible = false
 
 
 ## 热层钮点亮态（TAB / 按钮两种入口共用）。
@@ -459,6 +629,8 @@ func float_bounty(sx: float, sy: float, text: String) -> void:
 			var el: Label = f["el"]
 			el.text = text
 			el.visible = true
+			# 立即落位（不等下一 tick 的 _update_floats）：贴顶栏的击杀点不闪现到 HUD 条上
+			el.position = Vector2(sx - 14.0, maxf(sy - 18.0, TOP_STRIP_H + 4.0))
 			return
 
 
@@ -473,7 +645,9 @@ func _update_floats(tick: int) -> void:
 				el.visible = false
 			else:
 				var a := 1.0 - float(age) / float(FLOAT_LIFE)
-				el.position = Vector2(float(f["sx"]) - 14.0, float(f["sy"]) - 18.0 - float(age) * FLOAT_RISE)
+				# v2.4：浮字不得压到顶栏（击杀点投影到屏幕边缘时会飘进 HUD 条）
+				var fy: float = maxf(float(f["sy"]) - 18.0 - float(age) * FLOAT_RISE, TOP_STRIP_H + 4.0)
+				el.position = Vector2(float(f["sx"]) - 14.0, fy)
 				el.add_theme_color_override("font_color", Color(DARK["gold_hi"].r, DARK["gold_hi"].g, DARK["gold_hi"].b, a))
 
 
@@ -578,8 +752,10 @@ func update(world: World) -> void:
 		_supply = world.supply
 		_supply_tick = world.tick_count
 	var flash := (world.tick_count - _supply_tick) < 5
-	supply_text.text = "供给 %d" % world.supply
+	supply_text.text = str(world.supply)
 	supply_text.add_theme_color_override("font_color", DARK["text"] if flash else DARK["supply"])
+	_update_affordability(world.supply)
+	_update_hint(world.tick_count)
 
 	_update_floats(world.tick_count)
 
@@ -606,12 +782,9 @@ func update(world: World) -> void:
 	var shown := (ceili(float(cd) / 20.0) if cd > 0 else 0)
 	if shown != _skill_shown:
 		_skill_shown = shown
-		if cd > 0:
-			skill_btn.disabled = true
-			skill_btn.text = "冷却 %ds" % shown
-		else:
-			skill_btn.disabled = false
-			skill_btn.text = "震荡波"
+		skill_btn.disabled = cd > 0
+		row_cost["skill"].text = ("%ds" % shown) if cd > 0 else "就绪"
+		_paint_skill()
 
 
 ## 重置所有状态缓存（新局/回标题时调用）
@@ -632,6 +805,10 @@ func reset() -> void:
 	_reset_caches()
 	if _toplevel.size() > 0 and banner_root != null:
 		banner_root.visible = false
+	if hint_panel != null:
+		hint_panel.visible = true
+		hint_panel.modulate.a = 1.0
+	_hint_hidden = false
 	for f in floats:
 		f["active"] = false
 		var el: Label = f["el"]

@@ -45,6 +45,8 @@ const TITLE_VEIL_BOTTOM := Color8(10, 9, 6, 240)
 # —— 发射器 a：type variations 名（screens 面：按钮/卡片/标题条/滑杆只写名字接入主题） ——
 const BTN_PRIMARY_VAR := "PrimaryButton"   # 主钮：金底深字 + 底缘 3px 暗金压边
 const BTN_MENU_VAR := "UiMenuButton"       # 次钮/菜单钮（避内置 MenuButton 类：4.7.2 变体名禁撞内置类）
+const BTN_ROW_VAR := "UiMenuRow"           # 标题菜单文字行（透明底 + 1px 下划线，非按钮盒）
+const BTN_ROW_PRIMARY_VAR := "UiMenuRowPrimary" # 标题菜单主行（金字 + 左侧金条）
 const BTN_HUD_VAR := "HudButton"           # HUD 模式钮常态：深底金细边（字 text）
 const BTN_HUD_ACTIVE_VAR := "HudButtonActive" # HUD 模式钮点亮态：金底深字
 const CARD_VAR := "DarkCard"               # 菜单卡片面板
@@ -89,6 +91,8 @@ static func build_theme(C: Dictionary, S: float) -> Theme:
 		[BTN_MENU_VAR, button_states(C, false)],
 		[BTN_HUD_VAR, hud_button_states(C, false)],
 		[BTN_HUD_ACTIVE_VAR, hud_button_states(C, true)],
+		[BTN_ROW_VAR, menu_row_states(C, S, false)],
+		[BTN_ROW_PRIMARY_VAR, menu_row_states(C, S, true)],
 	]
 	for pair in sets:
 		var varname: String = pair[0]
@@ -130,6 +134,34 @@ static func hud_button_states(C: Dictionary, active: bool) -> Dictionary:
 		st["font_pressed_color"] = C["on_gold"]
 	else:
 		st["font_hover_color"] = C["text"]
+	return st
+
+
+## 标题菜单文字行两态（v2.5）：透明底 + 1px 下划线；hover 暗金底 + 亮金下划线。
+## 主行 = 金字（左金条由 screens 子节点画）；左内容距 46S 给「01」序号位。
+static func menu_row_states(C: Dictionary, S: float, primary: bool) -> Dictionary:
+	var st := {}
+	for k in ["normal", "hover", "pressed", "disabled"]:
+		var bg: Color = NO_BORDER
+		var edge: Color = RULE
+		if k == "hover":
+			bg = C["btn_hover"]
+			edge = C["active_border"]
+		elif k == "pressed":
+			bg = C["btn_pressed"]
+			edge = C["gold_lo"]
+		var sb := flat(bg, NO_BORDER, 0, 0)
+		sb.border_width_bottom = 1
+		sb.border_color = edge
+		sb.content_margin_left = 46.0 * S
+		sb.content_margin_right = 12.0 * S
+		sb.content_margin_top = 0.0
+		sb.content_margin_bottom = 0.0
+		st[k] = sb
+	st["font_color"] = C["gold_hi"] if primary else C["text"]
+	st["font_hover_color"] = C["gold_hi"]
+	st["font_pressed_color"] = st["font_color"]
+	st["font_disabled_color"] = C["muted"]
 	return st
 
 
@@ -242,6 +274,20 @@ static func title_veil_tex() -> GradientTexture2D:
 		t.height = 256
 		_veil = t
 	return _veil
+
+
+## 滚动区底缘渐隐用：上全透明 → 下实色（bottom 自带 alpha 时按其 alpha 收尾）。
+static func fade_tex(bottom: Color, height: int = 64) -> GradientTexture2D:
+	var g := Gradient.new()
+	g.set_color(0, Color(bottom.r, bottom.g, bottom.b, 0.0))
+	g.set_color(1, bottom)
+	var t := GradientTexture2D.new()
+	t.gradient = g
+	t.fill_from = Vector2(0, 0)
+	t.fill_to = Vector2(0, 1)
+	t.width = 8
+	t.height = height
+	return t
 
 
 # —— A4/A5 覆盖层纹理（确定性：固定种子；懒生成缓存） ——

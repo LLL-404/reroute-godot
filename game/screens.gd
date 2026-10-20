@@ -10,6 +10,8 @@ extends CanvasLayer
 
 const SaveIO = preload("res://game/save_io.gd")
 const UserSettings = preload("res://game/user_settings.gd")
+# 隐私政策完整说明（独立托管页；合规要求玩家随时可查，Android/PC 均走系统浏览器）
+const PRIVACY_URL := "https://lll-404.github.io/reroute-privacy/privacy.html"
 const UiStyle = preload("res://game/ui_style.gd")
 # 标题衬线字（Noto Serif SC Bold 子集 13.8KB，31 字形；许可与加工见 CREDITS.md §3.3）。
 # 子集只含屏标题用字（改道暂停读档存档设置防线守住…），正文/按钮仍走主题默认 Noto Sans SC。
@@ -316,6 +318,23 @@ func _rule() -> ColorRect:
 	return r
 
 
+## 滚动区底缘渐隐（v2.4）：上透明、下卡底，提示「还有内容」；不吃指针。
+func _scroll_fade() -> TextureRect:
+	var tex := UiStyle.fade_tex(C["card"])
+	var fade := TextureRect.new()
+	fade.texture = tex
+	fade.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	fade.stretch_mode = TextureRect.STRETCH_SCALE
+	fade.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	fade.anchor_left = 0.0
+	fade.anchor_right = 1.0
+	fade.anchor_top = 1.0
+	fade.anchor_bottom = 1.0
+	fade.offset_top = -26.0 * S
+	fade.offset_bottom = 0.0
+	return fade
+
+
 ## 按钮快捷构造：主题变体（发射器 a）+ A1 光边；pad_left ≥0 时复制样式盒加左距
 func _button(text: String, primary: bool, w: float, h: float, fs: float, fn: Callable, pad_left: float = -1.0) -> Button:
 	var b := Button.new()
@@ -337,6 +356,43 @@ func _button(text: String, primary: bool, w: float, h: float, fs: float, fn: Cal
 	return b
 
 
+## 标题菜单文字行（v2.5）：序号 + 名称 + 1px 下划线；主行常亮左金条，其余 hover 才亮。
+## 不再是「一排盒子」：行即菜单（文明 6 口径），选中感靠字色/金条/底线三层。
+func _menu_row(idx: int, text: String, primary: bool, w: float, fn: Callable) -> Button:
+	var h := (54.0 if primary else 48.0) * S
+	var b := Button.new()
+	b.text = text
+	b.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	b.custom_minimum_size = Vector2(w, h)
+	b.size = Vector2(w, h)
+	b.focus_mode = Control.FOCUS_NONE
+	b.add_theme_font_size_override("font_size", int((16.0 if primary else 13.5) * S))
+	b.theme_type_variation = UiStyle.BTN_ROW_PRIMARY_VAR if primary else UiStyle.BTN_ROW_VAR
+	b.pressed.connect(fn)
+	var num := _label("%02d" % idx, 10.0 * S, C["gold_hi"] if primary else C["muted"])
+	num.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	b.add_child(num)
+	num.reset_size()
+	num.position = Vector2(20.0 * S, (h - num.size.y) / 2.0)
+	var bar := ColorRect.new()
+	bar.color = C["gold_hi"] if primary else C["gold"]
+	bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	bar.position = Vector2.ZERO
+	bar.size = Vector2(2.0 * S, h)
+	bar.visible = primary
+	b.add_child(bar)
+	b.mouse_entered.connect(func() -> void: bar.visible = true)
+	b.mouse_exited.connect(func() -> void: bar.visible = primary)
+	return b
+
+
+func _gap(h: float) -> Control:
+	var c := Control.new()
+	c.custom_minimum_size = Vector2(0, h)
+	c.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	return c
+
+
 ## 页面底板：全屏吃指针 + 幕色 + 氛围层（A5 暗角 + A4 噪粒）
 func _page_base(veil: Color) -> Control:
 	var page := Control.new()
@@ -356,21 +412,20 @@ func _style_slider(s: HSlider) -> void:
 	s.theme_type_variation = UiStyle.SLIDER_VAR
 
 
-## 选项行（设置页所有 chips 共用）：88 宽标签（同滑杆行口径）+ 一排互斥钮（选中态由
-## _refresh_chips 切主题变体；按钮本身走 _button 工厂，无逐钮 override）。
-## 尺寸 58×38 ≥ 触屏矩阵下限（probe_touch 口径），命名 btn_<key>_<值>。
+## 选项行（设置页所有 chips 共用）：96 宽标签 + 一排互斥钮（选中态由 _refresh_chips
+## 切主题变体；按钮本身走 _button 工厂，无逐钮 override）。60×40 ≥ 触屏矩阵下限。
 func _option_row(key: String, label: String, opts: Array) -> HBoxContainer:
 	var row := HBoxContainer.new()
 	row.name = "row_" + key
 	row.alignment = BoxContainer.ALIGNMENT_BEGIN
-	row.add_theme_constant_override("separation", int(6 * S))
-	var lbl := _label(label, 12.0 * S, C["muted"])
-	lbl.custom_minimum_size = Vector2(88.0 * S, 0)
+	row.add_theme_constant_override("separation", int(8 * S))
+	var lbl := _label(label, 12.5 * S, C["muted"])
+	lbl.custom_minimum_size = Vector2(96.0 * S, 0)
 	row.add_child(lbl)
 	var map: Dictionary = {}
 	for o in opts:
 		var v := int(o[0])
-		var b := _button(str(o[1]), false, 58.0 * S, 38.0 * S, 11.0 * S, _on_video_chip.bind(key, v))
+		var b := _button(str(o[1]), false, 60.0 * S, 40.0 * S, 11.5 * S, _on_video_chip.bind(key, v))
 		b.name = "btn_%s_%d" % [key, v]
 		row.add_child(b)
 		map[v] = b
@@ -378,13 +433,23 @@ func _option_row(key: String, label: String, opts: Array) -> HBoxContainer:
 	return row
 
 
-## 设置页分组标题（暗金小字 + 细线）。
-func _group_header(text: String) -> VBoxContainer:
-	var v := VBoxContainer.new()
-	v.add_theme_constant_override("separation", int(4 * S))
-	v.add_child(_label(text, 11.0 * S, C["gold"]))
-	v.add_child(_rule())
-	return v
+## 设置页分组标题（v2.5）：左金标 + 组名 + 右侧通栏细线（Civ 式分组，非居中标签）。
+func _group_header(text: String) -> HBoxContainer:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", int(9 * S))
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var tick := ColorRect.new()
+	tick.color = C["gold"]
+	tick.custom_minimum_size = Vector2(3.0 * S, 12.0 * S)
+	tick.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	tick.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_child(tick)
+	row.add_child(_label(text, 12.0 * S, C["gold"]))
+	var line := _rule()
+	line.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	line.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	row.add_child(line)
+	return row
 
 
 ## 设置页滑杆行：88 宽标签 + 滑杆 + 读数（命名 sld_<key> / lbl_<key>_val，探针按名取）。
@@ -393,21 +458,21 @@ func _slider_row(key: String, label: String, vmin: int, vmax: int, fn: Callable)
 	row.name = "row_" + key
 	row.alignment = BoxContainer.ALIGNMENT_BEGIN
 	row.add_theme_constant_override("separation", int(10 * S))
-	var lbl := _label(label, 12.0 * S, C["muted"])
-	lbl.custom_minimum_size = Vector2(88.0 * S, 0)
+	var lbl := _label(label, 12.5 * S, C["muted"])
+	lbl.custom_minimum_size = Vector2(96.0 * S, 0)
 	row.add_child(lbl)
 	var sld := HSlider.new()
 	sld.name = "sld_" + key
 	sld.min_value = vmin
 	sld.max_value = vmax
 	sld.step = 1
-	sld.custom_minimum_size = Vector2(180.0 * S, 24.0 * S)
+	sld.custom_minimum_size = Vector2(240.0 * S, 26.0 * S)
 	sld.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	_style_slider(sld)
 	row.add_child(sld)
-	var val := _label(str(vmax), 12.0 * S, C["gold_hi"])
+	var val := _label(str(vmax), 12.5 * S, C["gold_hi"])
 	val.name = "lbl_%s_val" % key
-	val.custom_minimum_size = Vector2(38.0 * S, 0)
+	val.custom_minimum_size = Vector2(40.0 * S, 0)
 	row.add_child(val)
 	sld.value_changed.connect(fn)
 	return row
@@ -433,71 +498,79 @@ func _build_title() -> Control:
 	page.add_child(veil)
 	UiStyle.overlay_fx(page) # A5+A4
 
-	# 左对齐菜单列（x=18% 宽度 240，文明 6 主菜单口径）
+	# 左列：金条 + 衬线标题 + 菜单文字行（v2.5：去盒化，序号/下划线/左金条）
 	var col := VBoxContainer.new()
-	col.add_theme_constant_override("separation", int(12 * S))
+	col.add_theme_constant_override("separation", 0)
 	col.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	col.anchor_left = 0.18
 	col.anchor_right = 0.18
 	col.anchor_top = 0.0
 	col.anchor_bottom = 1.0
 	col.offset_left = 0
-	col.offset_right = int(240.0 * S)
-	col.offset_top = int(110.0 * S)
+	col.offset_right = int(300.0 * S)
+	col.offset_top = int(96.0 * S)
 	col.offset_bottom = int(-64.0 * S)
 	page.add_child(col)
 
-	var title_row := _serif_title("改道", 54.0 * S, C["gold_hi"], 26.0)
+	var head := HBoxContainer.new()
+	head.add_theme_constant_override("separation", int(14.0 * S))
+	head.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var accent := ColorRect.new()
+	accent.color = C["gold"]
+	accent.custom_minimum_size = Vector2(3.0 * S, 0)
+	accent.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	head.add_child(accent)
+	var hcol := VBoxContainer.new()
+	hcol.add_theme_constant_override("separation", int(7.0 * S))
+	hcol.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var title_row := _serif_title("改道", 62.0 * S, C["gold_hi"], 26.0)
 	title_row.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
-	col.add_child(title_row)
-	var tagline := _label("放墙改道 · 修运河，别只堵路", 12.0 * S, C["muted"])
-	tagline.size_flags_horizontal = Control.SIZE_FILL
-	col.add_child(tagline)
+	hcol.add_child(title_row)
+	hcol.add_child(_label("放墙改道 · 修运河，别只堵路", 13.0 * S, C["muted"]))
+	head.add_child(hcol)
+	col.add_child(head)
+	col.add_child(_gap(18.0 * S))
 	col.add_child(_rule())
+	col.add_child(_gap(12.0 * S))
 
-	var btn_start := _button("开始对局", true, 240.0 * S, 48.0 * S, 15.0 * S, func() -> void:
-		cb["start_match"].call(), 14.0 * S)
+	var btn_start := _menu_row(1, "开始对局", true, 300.0 * S, func() -> void:
+		cb["start_match"].call())
 	btn_start.name = "btn_start"
-	btn_start.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	col.add_child(btn_start)
 
-	var btn_continue := _button("读档存档", false, 240.0 * S, 42.0 * S, 12.0 * S, func() -> void:
-		open_slots("load", "title"), 14.0 * S)
+	var btn_continue := _menu_row(2, "读档存档", false, 300.0 * S, func() -> void:
+		open_slots("load", "title"))
 	btn_continue.name = "btn_continue"
-	btn_continue.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	col.add_child(btn_continue)
 
-	var btn_settings := _button("设置", false, 240.0 * S, 42.0 * S, 12.0 * S, func() -> void:
-		open_settings("title"), 14.0 * S)
+	var btn_settings := _menu_row(3, "设置", false, 300.0 * S, func() -> void:
+		open_settings("title"))
 	btn_settings.name = "btn_settings"
-	btn_settings.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	col.add_child(btn_settings)
 
-	var btn_tips := _button("玩法说明", false, 240.0 * S, 42.0 * S, 12.0 * S, func() -> void:
-		tips_panel.visible = not tips_panel.visible, 14.0 * S)
+	var btn_tips := _menu_row(4, "玩法说明", false, 300.0 * S, func() -> void:
+		tips_panel.visible = not tips_panel.visible)
 	btn_tips.name = "btn_tips"
-	btn_tips.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	col.add_child(btn_tips)
 
-	var btn_quit := _button("退出游戏", false, 240.0 * S, 42.0 * S, 12.0 * S, func() -> void:
-		open_quit_confirm(), 14.0 * S)
+	var btn_quit := _menu_row(5, "退出游戏", false, 300.0 * S, func() -> void:
+		open_quit_confirm())
 	btn_quit.name = "btn_quit"
-	btn_quit.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	col.add_child(btn_quit)
 
 	# 玩法说明浮层（菜单列右侧；默认隐藏，切换不影响列布局）
 	tips_panel = PanelContainer.new()
 	tips_panel.name = "panel_tips"
-	tips_panel.custom_minimum_size = Vector2(340.0 * S, 0)
+	tips_panel.custom_minimum_size = Vector2(360.0 * S, 0)
 	tips_panel.visible = false
 	tips_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	tips_panel.theme_type_variation = UiStyle.CARD_VAR
 	UiStyle.corner_dress(tips_panel, C["gold_lo"]) # C 饰线
 	var margin := MarginContainer.new()
 	for side in ["left", "right", "top", "bottom"]:
-		margin.add_theme_constant_override("margin_" + side, int(16 * S))
+		margin.add_theme_constant_override("margin_" + side, int(18 * S))
 	var tips_col := VBoxContainer.new()
-	tips_col.add_theme_constant_override("separation", int(7 * S))
+	tips_col.add_theme_constant_override("separation", int(9 * S))
 	for line in [
 		"守住核心，撑到终局哨响即胜利",
 		"放墙改道：怪绕得越远，死时赏金越高",
@@ -505,24 +578,24 @@ func _build_title() -> Control:
 		"蛮兽皮糙，先清虫群，别让它贴脸",
 		"英雄的震荡波是保命技，冷却长别空放",
 	]:
-		tips_col.add_child(_label(line, 10.0 * S, C["muted"]))
+		tips_col.add_child(_label(line, 11.0 * S, C["muted"]))
 	margin.add_child(tips_col)
 	tips_panel.add_child(margin)
 	page.add_child(tips_panel)
 	tips_panel.reset_size()
 	var vw := get_viewport().get_visible_rect().size.x
-	tips_panel.position = Vector2(vw * 0.18 + 264.0 * S, 110.0 * S)
+	tips_panel.position = Vector2(vw * 0.18 + 324.0 * S, 96.0 * S)
 
 	# 版本 / 赛事行（左下角）
-	var jam := _label("GameJam 2026 · 聚光灯主题「涌现」", 9.0 * S, C["muted"])
+	var jam := _label("GameJam 2026 · 聚光灯主题「涌现」", 10.0 * S, C["muted"])
 	jam.anchor_left = 0.0
 	jam.anchor_right = 0.0
 	jam.anchor_top = 1.0
 	jam.anchor_bottom = 1.0
-	jam.offset_left = int(20.0 * S)
-	jam.offset_right = int(340.0 * S)
-	jam.offset_top = int(-30.0 * S)
-	jam.offset_bottom = int(-14.0 * S)
+	jam.offset_left = int(24.0 * S)
+	jam.offset_right = int(380.0 * S)
+	jam.offset_top = int(-34.0 * S)
+	jam.offset_bottom = int(-16.0 * S)
 	jam.vertical_alignment = VERTICAL_ALIGNMENT_BOTTOM
 	jam.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	jam.size_flags_horizontal = Control.SIZE_FILL
@@ -539,35 +612,35 @@ func _build_pause() -> Control:
 	center.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	page.add_child(center)
 	var pcard := PanelContainer.new()
-	pcard.custom_minimum_size = Vector2(320.0 * S, 0)
+	pcard.custom_minimum_size = Vector2(340.0 * S, 0)
 	pcard.theme_type_variation = UiStyle.CARD_VAR
 	UiStyle.corner_dress(pcard, C["gold_lo"]) # C 饰线
 	center.add_child(pcard)
 	var margin := MarginContainer.new()
 	for side in ["left", "right", "top", "bottom"]:
-		margin.add_theme_constant_override("margin_" + side, int(26 * S))
+		margin.add_theme_constant_override("margin_" + side, int(28 * S))
 	var col := VBoxContainer.new()
-	col.add_theme_constant_override("separation", int(11 * S))
+	col.add_theme_constant_override("separation", int(12 * S))
 	col.alignment = BoxContainer.ALIGNMENT_CENTER
-	col.add_child(_title_bar(_label("暂停", 22.0 * S, C["gold_hi"], true)))
+	col.add_child(_title_bar(_label("暂停", 24.0 * S, C["gold_hi"], true), 44.0))
 	col.add_child(_rule())
-	var btn_resume := _button("继续", true, 240.0 * S, 44.0 * S, 14.0 * S, func() -> void:
+	var btn_resume := _button("继续", true, 260.0 * S, 46.0 * S, 14.0 * S, func() -> void:
 		cb["resume"].call())
 	btn_resume.name = "btn_resume"
 	col.add_child(btn_resume)
-	var btn_save := _button("保存进度", false, 240.0 * S, 42.0 * S, 12.0 * S, func() -> void:
+	var btn_save := _button("保存进度", false, 260.0 * S, 44.0 * S, 12.5 * S, func() -> void:
 		open_slots("save", "pause"))
 	btn_save.name = "btn_save"
 	col.add_child(btn_save)
-	var btn_settings := _button("设置", false, 240.0 * S, 42.0 * S, 12.0 * S, func() -> void:
+	var btn_settings := _button("设置", false, 260.0 * S, 44.0 * S, 12.5 * S, func() -> void:
 		open_settings("pause"))
 	btn_settings.name = "btn_settings_pause"
 	col.add_child(btn_settings)
-	var btn_restart := _button("重开本局", false, 240.0 * S, 42.0 * S, 12.0 * S, func() -> void:
+	var btn_restart := _button("重开本局", false, 260.0 * S, 44.0 * S, 12.5 * S, func() -> void:
 		cb["restart"].call())
 	btn_restart.name = "btn_restart"
 	col.add_child(btn_restart)
-	var btn_title := _button("回标题", false, 240.0 * S, 42.0 * S, 12.0 * S, func() -> void:
+	var btn_title := _button("回标题", false, 260.0 * S, 44.0 * S, 12.5 * S, func() -> void:
 		cb["to_title"].call())
 	btn_title.name = "btn_to_title"
 	col.add_child(btn_title)
@@ -585,29 +658,29 @@ func _build_gameover() -> Control:
 	center.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	page.add_child(center)
 	var pcard := PanelContainer.new()
-	pcard.custom_minimum_size = Vector2(400.0 * S, 0)
+	pcard.custom_minimum_size = Vector2(440.0 * S, 0)
 	pcard.theme_type_variation = UiStyle.CARD_VAR
 	UiStyle.corner_dress(pcard, C["gold_lo"]) # C 饰线
 	center.add_child(pcard)
 	var margin := MarginContainer.new()
 	for side in ["left", "right", "top", "bottom"]:
-		margin.add_theme_constant_override("margin_" + side, int(26 * S))
+		margin.add_theme_constant_override("margin_" + side, int(30 * S))
 	var col := VBoxContainer.new()
-	col.add_theme_constant_override("separation", int(14 * S))
+	col.add_theme_constant_override("separation", int(16 * S))
 	col.alignment = BoxContainer.ALIGNMENT_CENTER
 	# 胜负标题：文本/颜色由 open_gameover 注入（探针断言 色=hp|danger）；衬线字形已进子集
-	go_title = _label("", 34.0 * S, C["danger"], true, true)
+	go_title = _label("", 36.0 * S, C["danger"], true, true)
 	col.add_child(go_title)
-	go_body = _label("", 13.0 * S, C["text"])
+	go_body = _label("", 13.5 * S, C["text"])
 	go_body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	go_body.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	go_body.custom_minimum_size = Vector2(400.0 * S - 52.0 * S, 0)
+	go_body.custom_minimum_size = Vector2(380.0 * S, 0)
 	col.add_child(go_body)
-	var btn_again := _button("再来一局", true, 220.0 * S, 44.0 * S, 14.0 * S, func() -> void:
+	var btn_again := _button("再来一局", true, 240.0 * S, 46.0 * S, 14.0 * S, func() -> void:
 		cb["restart"].call())
 	btn_again.name = "btn_again"
 	col.add_child(btn_again)
-	var btn_title2 := _button("回标题", false, 220.0 * S, 42.0 * S, 12.0 * S, func() -> void:
+	var btn_title2 := _button("回标题", false, 240.0 * S, 44.0 * S, 12.5 * S, func() -> void:
 		cb["to_title"].call())
 	btn_title2.name = "btn_to_title2"
 	col.add_child(btn_title2)
@@ -625,37 +698,44 @@ func _build_slots() -> Control:
 	center.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	page.add_child(center)
 	var pcard := PanelContainer.new()
-	pcard.custom_minimum_size = Vector2(440.0 * S, 0)
+	pcard.custom_minimum_size = Vector2(520.0 * S, 0)
 	pcard.theme_type_variation = UiStyle.CARD_VAR
 	UiStyle.corner_dress(pcard, C["gold_lo"]) # C 饰线
 	center.add_child(pcard)
 	var margin := MarginContainer.new()
 	for side in ["left", "right", "top", "bottom"]:
-		margin.add_theme_constant_override("margin_" + side, int(24 * S))
+		margin.add_theme_constant_override("margin_" + side, int(26 * S))
 	var col := VBoxContainer.new()
 	col.add_theme_constant_override("separation", int(10 * S))
 	col.alignment = BoxContainer.ALIGNMENT_CENTER
 	# 动态标题（读档/存档）：open_slots 改 text，衬线字体常驻
-	var head := _label("读档", 22.0 * S, C["gold_hi"], true)
+	var head := _label("读档", 24.0 * S, C["gold_hi"], true)
 	head.name = "label_slot_head"
-	col.add_child(_title_bar(head))
+	col.add_child(_title_bar(head, 44.0))
 	col.add_child(_rule())
 	for i in range(1, SaveIO.SLOT_N + 1):
 		var row := HBoxContainer.new()
 		row.alignment = BoxContainer.ALIGNMENT_CENTER
 		row.add_theme_constant_override("separation", int(8 * S))
-		var b := _button("槽 %d · 空" % i, false, 300.0 * S, 36.0 * S, 11.0 * S, _on_slot_pressed.bind(i), 12.0 * S)
+		var b := _button("槽 %d · 空" % i, false, 380.0 * S, 52.0 * S, 12.5 * S, _on_slot_pressed.bind(i), 16.0 * S)
 		b.name = "btn_slot%d" % i
 		b.alignment = HORIZONTAL_ALIGNMENT_LEFT
 		row.add_child(b)
-		var del := _button("删除", false, 62.0 * S, 36.0 * S, 10.0 * S, _on_slot_delete.bind(i))
+		# 删除钮位（v2.4）：同宽占位块与删除钮互斥显示，隐藏时栅格不塌（槽条横向对齐恒定）
+		var del := _button("删除", false, 64.0 * S, 52.0 * S, 10.0 * S, _on_slot_delete.bind(i))
 		del.name = "btn_slot_del%d" % i
 		row.add_child(del)
+		var pad := Control.new()
+		pad.name = "pad_slot_del%d" % i
+		pad.custom_minimum_size = Vector2(64.0 * S, 52.0 * S)
+		pad.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		pad.visible = false
+		row.add_child(pad)
 		col.add_child(row)
-	var status := _label("", 10.0 * S, C["muted"])
+	var status := _label("", 11.0 * S, C["muted"])
 	status.name = "label_slot_status"
 	col.add_child(status)
-	var btn_back := _button("返回", false, 220.0 * S, 40.0 * S, 12.0 * S, func() -> void:
+	var btn_back := _button("返回", false, 240.0 * S, 44.0 * S, 12.5 * S, func() -> void:
 		_show(slots_from))
 	btn_back.name = "btn_slots_back"
 	col.add_child(btn_back)
@@ -673,31 +753,39 @@ func _build_settings() -> Control:
 	center.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	page.add_child(center)
 	var pcard := PanelContainer.new()
-	pcard.custom_minimum_size = Vector2(480.0 * S, 0)
+	pcard.custom_minimum_size = Vector2(540.0 * S, 0)
 	pcard.theme_type_variation = UiStyle.CARD_VAR
 	UiStyle.corner_dress(pcard, C["gold_lo"]) # C 饰线
 	center.add_child(pcard)
 	var margin := MarginContainer.new()
 	for side in ["left", "right", "top", "bottom"]:
-		margin.add_theme_constant_override("margin_" + side, int(20 * S))
+		margin.add_theme_constant_override("margin_" + side, int(24 * S))
 	var col := VBoxContainer.new()
 	col.add_theme_constant_override("separation", int(10 * S))
 	col.alignment = BoxContainer.ALIGNMENT_CENTER
-	col.add_child(_title_bar(_label("设置", 22.0 * S, C["gold_hi"], true)))
+	col.add_child(_title_bar(_label("设置", 24.0 * S, C["gold_hi"], true), 44.0))
 	col.add_child(_rule())
 
-	# 滚动体：设置项多于单屏（720p 卡片高约 600），纵向滚动；横向禁滚（行宽按卡片定）
+	# 滚动体（v2.4）：外层 Control 承载「底缘渐隐」，行被裁切时给出可滚动暗示；
+	# 滚动区与底部「返回」用 1px 金线分隔，避免旧版内容像被按钮压住。
+	var scroll_wrap := Control.new()
+	scroll_wrap.name = "settings_scroll_wrap"
+	scroll_wrap.custom_minimum_size = Vector2(0, minf(get_viewport().get_visible_rect().size.y * 0.66, 640.0 * S))
+	scroll_wrap.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll_wrap.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var scroll := ScrollContainer.new()
 	scroll.name = "settings_scroll"
-	scroll.custom_minimum_size = Vector2(0, minf(get_viewport().get_visible_rect().size.y * 0.62, 620.0 * S))
+	scroll.set_anchors_preset(Control.PRESET_FULL_RECT)
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	UiStyle.scrollbar(scroll, C, S)
 	var body := VBoxContainer.new()
 	body.name = "settings_body"
 	body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	body.add_theme_constant_override("separation", int(8 * S))
+	body.add_theme_constant_override("separation", int(12 * S))
 	scroll.add_child(body)
-	col.add_child(scroll)
+	scroll_wrap.add_child(scroll)
+	scroll_wrap.add_child(_scroll_fade())
+	col.add_child(scroll_wrap)
 
 	var android := OS.get_name() == "Android"
 	# —— 音频 ——
@@ -737,9 +825,25 @@ func _build_settings() -> Control:
 	body.add_child(_slider_row("ui_pct", "UI 缩放", 80, 130, _on_ui_changed))
 	body.add_child(_slider_row("bright_pct", "画面亮度", 70, 130, _on_bright_changed))
 
-	var btn_back := _button("返回", false, 220.0 * S, 40.0 * S, 12.0 * S, func() -> void:
+	# —— 关于 ——（隐私政策入口：合规要求玩家随时可查；Android/PC 均走系统浏览器）
+	body.add_child(_group_header("关于"))
+	var prow := HBoxContainer.new()
+	prow.name = "row_privacy"
+	prow.add_theme_constant_override("separation", int(8 * S))
+	var plbl := _label("隐私政策", 12.5 * S, C["muted"])
+	plbl.custom_minimum_size = Vector2(96.0 * S, 0)
+	prow.add_child(plbl)
+	var btn_privacy := _button("查看完整说明", false, 132.0 * S, 40.0 * S, 11.5 * S, func() -> void:
+		OS.shell_open(PRIVACY_URL))
+	btn_privacy.name = "btn_privacy_policy"
+	prow.add_child(btn_privacy)
+	body.add_child(prow)
+
+	var btn_back := _button("返回", false, 240.0 * S, 44.0 * S, 12.5 * S, func() -> void:
 		_show(settings_from))
 	btn_back.name = "btn_settings_back"
+	col.add_child(_gap(4.0 * S))
+	col.add_child(_rule())
 	col.add_child(btn_back)
 	margin.add_child(col)
 	pcard.add_child(margin)
@@ -765,6 +869,9 @@ func _refresh_slots() -> void:
 		row.disabled = empty if slots_mode == "load" else false
 		var del: Button = page.find_child("btn_slot_del%d" % slot, true, false)
 		del.visible = slots_mode == "load" and not empty
+		var pad: Control = page.find_child("pad_slot_del%d" % slot, true, false)
+		if pad != null:
+			pad.visible = not del.visible
 
 
 ## 槽位行文本：空 / 无效原因 / 波次 + 时长 + 存档时间
@@ -964,6 +1071,9 @@ func _show(name: String) -> void:
 	if _ui_dirty:
 		_rebuild_pages()
 		_ensure(name)
+	# v2.4：进入存档/设置等模态页时收起教学提示（HUD 仍在暂停页背景可见）
+	if hud != null and (name == "slots" or name == "settings"):
+		hud.dismiss_hint()
 	for k in pages:
 		pages[k].visible = (k == name)
 	current = name
