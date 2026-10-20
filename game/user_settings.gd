@@ -61,6 +61,7 @@ static func default_cfg() -> Dictionary:
 		"ui_pct": 100,
 		"bright_pct": 100,
 		"runs": 0,
+		"privacy_agreed": false,
 	}
 
 
@@ -106,6 +107,7 @@ static func load_cfg() -> Dictionary:
 		cfg["ui_pct"] = clampi(int(cf.get_value("video", "ui_pct", cfg["ui_pct"])), 80, 130)
 		cfg["bright_pct"] = clampi(int(cf.get_value("video", "bright_pct", cfg["bright_pct"])), 70, 130)
 		cfg["runs"] = maxi(0, int(cf.get_value("progress", "runs", cfg["runs"])))
+		cfg["privacy_agreed"] = bool(cf.get_value("privacy", "agreed", cfg["privacy_agreed"]))
 	return cfg
 
 
@@ -113,8 +115,10 @@ static func load_cfg() -> Dictionary:
 static func save_cfg(cfg: Dictionary) -> void:
 	var cf := ConfigFile.new()
 	var prev_runs := 0
+	var prev_agreed := false
 	if cf.load(CFG_PATH) == OK:
 		prev_runs = maxi(0, int(cf.get_value("progress", "runs", 0)))
+		prev_agreed = bool(cf.get_value("privacy", "agreed", false))
 	var def := default_cfg() # 平台默认（安卓中画质/85% 渲染；PC 高画质/100%）
 	cf.set_value("audio", "music", clampi(int(cfg.get("music", VOL_MAX)), VOL_MIN, VOL_MAX))
 	cf.set_value("audio", "sfx", clampi(int(cfg.get("sfx", VOL_MAX)), VOL_MIN, VOL_MAX))
@@ -133,6 +137,7 @@ static func save_cfg(cfg: Dictionary) -> void:
 	cf.set_value("video", "ui_pct", clampi(int(cfg.get("ui_pct", def["ui_pct"])), 80, 130))
 	cf.set_value("video", "bright_pct", clampi(int(cfg.get("bright_pct", def["bright_pct"])), 70, 130))
 	cf.set_value("progress", "runs", maxi(0, int(cfg.get("runs", prev_runs))))
+	cf.set_value("privacy", "agreed", bool(cfg.get("privacy_agreed", prev_agreed)))
 	cf.save(CFG_PATH)
 
 
