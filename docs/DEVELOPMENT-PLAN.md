@@ -2417,6 +2417,200 @@ asset 63/0、model 6/0、orient 1/0、save 74/0、touch 39/0、intro 36/0）；`
 TAA/DOF/亮度、UI 缩放重建、默认档像素零差）验证后删除。`shots/settings.png` 重出。
 证据 `logs/gates-20261019-settings3/`。
 
+### 11.30 UI v2.3「独立化」：色板归位 + HUD 变体化 + 拾取探针重标定（2026-10-20）
+
+**动机**：v2.2 后 UI 子系统仍有两处「半独立」——色板真源在 `hud.gd`（壳层 screens 反向依赖
+hud 取色）；HUD 10 钮仍走 override + `sb_normal` meta 的发射器 b（改样式要双写）。本轮收编，
+并顺带清掉两颗雷：变体名撞内置类（每次启动喷 ERROR）、`probe_input` 机器相关假红。
+
+**改动**：
+- 色板：`DARK`（21 key）迁入 `game/ui_style.gd` 唯一真源；`hud.DARK` 保留
+  `const DARK := UiStyle.DARK` 兼容别名（探针/历史引用按 key 取色零改）；`screens.gd` 改
+  `C = UiStyle.DARK`（壳层不再依赖 hud 取色）。`hud.build_stats` 仍在 hud（数据格式化，非样式）。
+- HUD 变体：`ui_style` 新增 `hud_button_states(C, active)` → `HudButton`/`HudButtonActive`
+  两组变体（字色三态口径沿 v2.1 运行时实况：同色 text/on_gold，悬停不走亮金）；
+  `hud._style_button` 只设尺寸/字号 + `theme_type_variation` + A1 光边；
+  `set_mode`/`set_heat_vis` 改一行变体切换；**`sb_normal` meta 机制与逐钮四态 override 退役**
+  （探针改读 `get_theme_stylebox("normal")` effective 解析）。
+- 变体名避让内置类：`BTN_MENU_VAR` 值 `"MenuButton"` → `"UiMenuButton"`——4.7.2 禁止
+  `set_type_variation` 用内置类名（每次 build_theme 喷
+  `A type associated with a built-in class cannot be marked as a variation…`；样式因同名 type
+  条目仍生效，属隐性雷）。
+- `probe_input` §14.5 重标定（旧口径「任意位姿下 (24,24) 回拾」不稳）：
+  - 根因：W/D 按帧、Q/E 按墙钟、拖拽按像素 → §14 后相机位姿随帧率漂移；且 `pick_cell` 是
+    2 迭代高度面收敛（非真射线），相邻格高差大时会**合法**收敛到邻格（实测 (24,24) 顶高
+    1.34、回拾 (23,23)；§11.29 已有「首跑抖动、复跑过」记录）。
+  - 新口径：钉扎 focus=格心 / yaw=0 / zoom=1；扫「自身与 6 邻高度差 ≤0.10」的平坦格群
+    （= 2 迭代精确收敛域，扫区 22..41 全量 **199/199** 实证），取 6 个不同行格断言点击回环。
+  - 附带排雷：钉扎需 ~14 帧，若继续推进 tick（TICK_DT=1/20）对局会在 §15 前走到 gameover
+    （`_camera_free()` 拦滚轮 → §15 假红，已实测复现）；§14 尾 `main.set_process(false)`
+    冻结主循环（相机/滚轮均不经 _process，§15 断言不受影响）。
+- `selfcheck` 31→33：+2 条 HUD 变体断言；顺带校正 `covers` 25→27（拍 2 视觉联动后实测值，
+  HEAD 断言未同步，属既有红，非冻结项）。
+- 文档：UI-REDESIGN §8 + 锁定表行更新；AGENTS 台账。
+
+**回归**（全 22 闸 + 附加，证据 `logs/gates-20261020-v23/`）：unit 107/0、golden 2/0、
+scene 25/0、blueprint 21/0、sim 5/0、grid 40/0、flow 53/0、scenario 77/0（fp 0x7dea2b02 未漂）、
+world 20/0；sync 1845/0、input **65/0**（58→65：旧 1 条回拾断言 → 平坦格群检查 + 6 格回环 +
+计数检查；连跑两次稳定）、hud 73/0、ui_flow 39/0、touch 71/0、save 77/0、smoke 34/0、shots 8/0、
+audio 56/0、asset 63/0、model 6/0、orient 1/0、intro 36/0；selfcheck **33/0**（`--selfcheck`）、
+check_shots **39/0**、check_ui_lint PASS。受击截图全量重出（顺带刷新 gameover/slots 等早于
+v2.2 的存量陈旧件；目验 gameover/hud/slots 通过）。
+
+**遗留**：页流不加 facade（`main → screens` 具名方法集已是唯一调用面，加壳徒增）；`.tscn`
+场景化留赛后。
+
+### 11.31 TapTap 常规 app 提审执行 + 活动投稿材料（2026-10-19 ~ 10-20）
+
+**app 载体**：新建常规 app **986470**（开发者 434158），版本 **V-20261019**
+（`revision/audit_id = 1106016`）。旧 app `958251` 保持未发布不动（spark-only，见 §11.22）。
+
+**包体（已上传并绑定）**：Android `reroute-release.apk`（312,119,839B，包体 id `1066768`，主包）
++ Windows `reroute-windows.zip`（183,669,125B，包体 id `20242`，`branch=1`，入口 `game.exe`）。
+
+**合规（按群公告硬要求）**：
+- Android：`apk_anti_addiction_status=not-integrated` + `apk_sandbox_authorized=true`（TapPlay 接入）；
+  「游戏包体 → 免安装」显示**已授权**。
+- APK 隐私资质：资质认证 →「隐私政策与隐私检测」→ 配置方式选
+  **「免安装，使用平台托管」**（= TapPlay + 通用隐私协议，无需自填链接）→ 提交审核，
+  状态由「待上传」变「审核中」。
+- Windows：`pc_game_anti_addiction_status=1`（未接入防沉迷，使用 Tap 通用防沉迷系统）。
+
+**平台与分发**：`MOBILE` + `PC_OFFICIAL`；`region_flag_android=region_flag_pc=4`（开放试玩）。
+
+**商店资料**：图标（替换默认）、`banner_4`（含「改道」标题）、5 张截图、Windows logo/横版封面/
+竖版封面/游戏库壁纸、简介/推荐语/开发者的话、双端更新日志、Windows 最低配置。
+
+**审核**：`precheck-app-review` 0 阻塞 0 警告（`preaudit_passed=true`，`release_schedule=immediate`）
+→ 提审 `audit_id 1106016`，`status=reviewing`（10-20 01:40 复核仍未变）。
+入口：`https://developer.taptap.cn/v3/434158/app/986470/store/update`。
+
+**投稿材料（活动页 `https://www.taptap.cn/poster/NIKiDS1YShdA`）**：
+- 实机视频：`export/reroute-gameplay-demo.mp4`（39.77s / 1280×720 / 60fps，核心存活 HP 268；
+  videoId `5990199`）。
+- 讲解视频：`export/reroute-explainer-70s.mp4`（70.57s / 1280×720 / 30fps；edge-tts
+  `zh-CN-YunxiNeural` 旁白 + 烧录字幕 + 实机/截图；构建脚本
+  `%TEMP%\opencode\build_explainer.py` + `rebuild_subs.py`，产物在 `%TEMP%\opencode\vidwork\`）。
+- 活动页当前显示「当前投稿状态：未投稿」，需商店审核通过后点「前往投稿」完成。
+
+**开发者日志（≥5 篇，已达成）**：① 10-15 → ② 10-16 → ③ 10-17（`860546275211218896`）
+→ ④ 10-19（`861382976393448456`）→ ⑤ 10-20（`861415324296154627`，版块「综合讨论」）。
+规则原文（活动海报）：「开发期内累计在 TapTap 发布 5 篇及以上开发者日志……非灌水内容」。
+事故记录：10-20 凌晨误将 04 重发一帖（`861401811414680462`，灌水区），已用帖子
+「更多 → 删除」清理（现 404），04 原帖未受影响。
+
+**风险与遗留**：① 审核时长不可控，活动投稿必须等过审（官方口径「审核通过才算有效投稿」）；
+② 提审包为 10-18 版，世界生成 2.0（§11.27）未含，留作上线后更新；
+③ 试玩量（≥50，去水）在 **10-25 ~ 12-3** 全民试玩/评审期内统计，非提审前置。
+
+**10-20 凌晨复核（重要修正）**：
+- 隐私资质首次提交被**驳回**——「隐私政策链接请勿为 TapTap 站内页面，请更换为独立网页链接」；
+  「免安装，使用平台托管」生成的是 `https://www.taptap.cn/app/986470/common-privacy`（站内页）。
+  已建独立托管页：仓库 `LLL-404/reroute-privacy`（GitHub Pages，公开）→
+  **`https://lll-404.github.io/reroute-privacy/privacy.html`**；资质页改选**「自行配置」**填入该链接，
+  已重新提交 → **审核中**。
+- 上架资质（与版本审核相互独立）共 5 项，当前 **1/5**，状态「不满足上架条件」：
+  - `AI接入声明` 待上传：开关「是否接入了生成式AI」→ ON 后需上传「AI 合成声明证明截图」
+    （仅当游戏内提供 AI 生成合成服务时适用；本作仅在开发期使用 AI 资产，需判断口径）。
+  - `游戏适龄分级` 待上传：8+/12+/16+ 单选。
+  - `隐私政策与隐私检测` 审核中（见上）。
+  - `防沉迷合规` 待上传：需「2021.9.1 防沉迷新规接入证明」录屏（MP4 ≤2min ≤100MB）
+    + 「中宣部网络游戏防沉迷实名认证系统」截图（JPG/PNG ≤5MB）；本作走 TapTap 平台托管，
+    录屏需真机 + 未成年账号演示。
+- 版本页「必填完成度 **20/21**，差 1 项」= **游戏包体** 组：Windows 配置的
+  「最低配置 / 推荐配置 → 操作系统」两处为空（显示「请选择 Windows 系统版本」）；
+  包体绑定本身正常（`list-packages`：main=1066768、windows=20242，revision 1106016）。
+- 版本状态仍 **审核中**（audit 1106016），发布设置「过审后立即发布」。
+
+**10-20 凌晨复核（二）：找到真正投稿入口（此前判断有误）**
+- 官方规则原文写的是：作品须在 10-21 12:00 前上传，并在 **「开发者中心 - 平台活动」** 中完成投稿。
+  即投稿入口 **不在** `www.taptap.cn/poster/...`（那只是活动落地页），而在
+  `https://developer.taptap.cn/v3/434158/activity-center`（左侧「运营 → 平台活动」）。
+- 「我的活动」表格中该活动行：**投稿截止 2026-10-21 12:00**，当前 `未选择游戏 / 未投稿`
+  → 点「投稿」进入 `…/activity-center/13/sign-up`：左侧勾选游戏（厂商下有两个同名「改道」，
+  需选 **986470**），右侧「填写资料」弹表单。
+- 投稿问卷仅 **5 个文字字段**（无视频/图片上传；视频五图走商店页）：
+  1. `你的 QQ 号` *（队长 QQ）
+  2. `再次确认是否为学生团队` *（是/否）
+  3. `如为学生团队请上传在线文档链接，不是请填无` *
+  4. `素材声明在线文档链接（包含 AI 美术和第三方素材）` *
+  5. `开发日志 TapTap 站内链接` *（**5 篇用逗号隔开**，是瓜分「全程参与奖」与参评
+     「最佳社区运营」的必备条件）
+  底部：`保存草稿并返回` / `提交投稿`；页内提示「修改并重新提交后需要再次审核」。
+- 报名记录（`get-records?...&scene=1`，id 13851，报名于 09-23）已存在，含：
+  手机 `15864488375` / **QQ `2350178663`** / 邮箱 `15864488375@163.com` /
+  学校「枣庄学院」/ `是否使用 TapTap 制造 = 是` / `是否为学生团队 = 否`
+  （10-20 复核二次精确核对码位：U+5426=否；系原文「= 是」为笔误）。
+  → 投稿第 1 栏可直接用 `2350178663`。
+- 已补独立「素材使用声明」在线文档（GitHub Pages）：
+  **`https://lll-404.github.io/reroute-privacy/assets-declaration.html`**（已 200 可访问），
+  内容 = `cashline/docs/AI-ASSETS-public.md`（已核对与 Godot 工程实测一致：
+  14 glb / 30 mp3 / 4 张 CC0 纹理 / 字体 2）。→ 用于第 4 栏。
+- 5 篇开发日志站内链接（第 5 栏用）：
+  ① `https://www.taptap.cn/moment/859900396141808195`
+  ② `https://www.taptap.cn/moment/860212304162064981`
+  ③ `https://www.taptap.cn/moment/860546275211218896`
+  ④ `https://www.taptap.cn/moment/861382976393448456`
+  ⑤ `https://www.taptap.cn/moment/861415324296154627`
+- 仍未决：第 2/3 栏（学生团队口径）需用户拍板；商店「游戏介绍」按活动规则**必须**声明
+  「本游戏内含有使用 AI 生成的游戏资产」，改动商店页是否触发重新审核待定。
+
+**10-20 凌晨（三）：活动投稿已提交（首投被急驳，属预期）** ← 本节为 10-20 03:30 补记
+- 已按上述入口完成 **投稿提交**：记录 id **19287**（app 986470），5 项齐（QQ 2350178663 /
+  学生团队=否（按报名原值）/ 学生文档=无 / 素材声明链接 / 5 篇日志，逗号分隔）；
+  提交后**即时驳回**，理由「游戏尚未审核发布或已下架，请完成审核并开放试玩」。
+  唯一阻断 = 商店版本 V-20261019 仍在审核中。重投入口：活动中心该行「编辑投稿」
+  （或 `…/activity-center/13/sign-up`，表单已存 5/5，点「提交」即重投）。
+- 素材声明（第 4 栏）实际提交 = gist
+  `https://gist.github.com/LLL-404/4e58096ec730f2a8dd95289aa99a5106`；已补
+  「**〇、AI 素材占比（速览）**」章节（规则要求「使用比例 + 具体内容」）；
+  同步更新 GitHub Pages `assets-declaration.html`（reroute-privacy commit `403f446`），
+  并新发 **TapTap 站内动态备份** `https://www.taptap.cn/moment/861445870371995916`
+  （大陆可达性更稳；如换链接 → 编辑投稿替换字段后重提）。docx/纯文本同源更新（cashline/docs）。
+- **自动监控 + 自动重投已配置并运行**：`reroute-godot/logs/submit-20261020/tools/auto_resubmit.py`
+  —— 每 5 分钟查 `list-app-versions`；一旦 `reviewing` → 上线，自动无头打开投稿页点「提交」，
+  日志 `logs/submit-20261020/auto/auto_resubmit.log`，截图 `activity/05-auto-resubmit.png`；
+  含「记录已无驳回则跳过」防重护栏；过 10-21 11:30 自动退出。全部证据见
+  `logs/submit-20261020/README.md`。
+- 后续（过审后按序）：
+  ① 重投确认通过（记录变为审核中/通过）；
+  ② 商店资料写回：**状态机 1/3/4/5 全锁**（官方 skill 文档已核实），已上线后须先
+  `create-draft` → `save-changes`（简介补「本游戏内含有使用 AI 生成的游戏资产（…）」
+  ——规则硬性，否则放弃所有评奖；+ trailer 5991203 / gameplay_demo_video 5991204）
+  → `submit-app-review`（immediate）；payload `%TEMP%\opencode\save_videos.json`。
+  若活动记录因 app 回审核中被刷新为未通过 → 立即 `withdraw-app-review` 回退。
+- 全程参与奖（海报原文核实）四项条件：① 按时有效投稿（通过平台审核）② 完整展示核心玩法
+  ③ ≥5 篇日志（**已达成**）④ **10-25~12-03 试玩评审期有效试玩 ≥50 人**（评审期指标，
+  截止前无需完成，需提前准备社区推广）。海报正文未对投稿视频设硬性要求（视频为商店素材加分项）。
+
+---
+
+### 11.32 双端发布包重出（v2.3，2026-10-20 08:04~08:16）
+
+**口径**：沿 §11.26（Windows zip 192 条目 = `game.exe` + `game.pck` + `运行说明.txt` +
+`data_RerouteGodot_windows_x86_64/`（189 文件），不含 `.idsig`；Android 双 ABI + ETC2）。
+本轮为 UI v2.3 + 世界生成拍 2 视觉联动后首次全量重出。
+
+| 产物 | 字节 | SHA-256 |
+|---|---|---|
+| `export/game.exe` | 109,551,432 | `0539d11b…85bc`（签名后与 v2.2/10-18 包逐字节同哈希，第四次实证 exe=内容无关模板件） |
+| `export/game.pck` | 109,831,652 | `88158f75…db96` |
+| `export/reroute-windows.zip` | 183,719,469 | `f7854e80…5c59` |
+| `export/reroute-release.apk` | 312,152,675 | `07860536…fcc6` |
+
+**验证**：
+
+- exe 复签 `SIGNED=Valid`（CN=Reroute 自签；本机 SAC 拦截未签名 exe，见 §11.12）。
+- 包内自证：`export/game.exe --selfcheck`（exe+pck 同目录）→ **33/0 PASS**（含 v2.3 新增
+  2 条 HUD 变体断言）；10-18 旧包日志中的 `MenuButton` 变体 ERROR 已消失。
+- zip：192 条目、`testzip None`；APK：`apksigner verify` v2/v3=true、CN=Reroute、
+  整包 `testzip None`（722 条目，`assets/assets.sparsepck`）。
+- 证据：`logs/gates-20261020-v23/export-{win,apk}.out`、`export-selfcheck.{out,err}`。
+- **注记（APK 导出退出码）**：导出本身完成（日志 `[ DONE ] export` + `Signed` + 校验），
+  但 Godot 进程在 MCP 插件关闭后未自行退出 → 人工终止，包装层记 `exit=-1`；产物完整性由
+  apksigner 验签 + 全条目 CRC 复核（不作为失败判据）。
+- `export/` 不入 git（含他会话视频素材），包体仅本机交付。
+
 ---
 
 ## 12. AI 任务卡模板（派活时照抄）

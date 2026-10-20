@@ -109,7 +109,7 @@
 | 锁死物 | 锁死者 |
 |---|---|
 | `BTN_H=42 / COL_W=128 / CORNER_*`、`hit_regions()` 语义 | `probe_hud` 布局、`probe_touch` 22 钮 ≥36px、main 点击排除 |
-| `set_mode` 机制：normal stylebox bg == `DARK[active]/[btn]` + `sb_normal` meta | `probe_hud._check_btn_color` |
+| `set_mode` 机制：normal stylebox bg == `DARK[active]/[btn]`（v2.3 起 = `HudButtonActive`/`HudButton` 变体；探针读 effective stylebox） | `probe_hud._check_btn_color` |
 | `FLOAT_LIFE=18` / 浮字 α 算式 | `probe_hud` |
 | 控件名全集（`btn_slot%d`、`btn_confirm_ok`…） | `probe_ui_flow` / `probe_touch` / `probe_save` / `main` |
 | `hud.safe` 四元组与 `_layout()` 重算 S | `probe_hud`（D5-4） |
@@ -152,16 +152,33 @@ Minimalist + Static assets）⇒ A 档六件套 + C 饰线全量，B 档（颜�
 **氛围层挂点**：五覆盖页 + 确认弹窗（`_page_base`/title/confirm）；**game 页禁挂**
 （check_shots 像素契约不受任何影响）。
 
-**架构（双发射器）**：
+**架构（双发射器；v2.3 起发射器 b 退役 → §8）**：
 - 发射器 a：`UiStyle.build_theme(C,S)` → 运行时 Theme + type variations
-  （PrimaryButton/MenuButton/DarkCard/TitleBar/GoldSlider），按 S 缓存、hud/shell 共享
-  同一实例；控件接入 = `theme_type_variation` 一行。
+  （PrimaryButton/MenuButton→v2.3 改名 UiMenuButton/DarkCard/TitleBar/GoldSlider），按 S 缓存、
+  hud/shell 共享同一实例；控件接入 = `theme_type_variation` 一行。
 - 发射器 b：按钮 override + `sb_normal` meta（HUD 探针面 10 钮专用——probe 只读 meta
-  对象 bg_color，与渲染通道解耦；两路由同参数派生永一致）。
-- 赛后遗留：探针面翻转 variation + .tscn 场景化（§11.23 治理面）。
+  对象 bg_color，与渲染通道解耦；两路由同参数派生永一致）。**已随 v2.3 退役**（见 §8）。
+- 赛后遗留：探针面翻转 variation（v2.3 已完成，见 §8）；余 .tscn 场景化（§11.23 治理面）。
 
 **维护三规约（lint 强制）**：L1 裸 Color 只在 DARK 定义区；L2 样式/纹理构造只走工厂；
-L3 变体名只用常量。`python tools/check_ui_lint.py` + selfcheck 31/0（含 8 条工厂一致性）。
+L3 变体名只用常量、且禁与内置类同名（MenuButton→UiMenuButton，§8）。`python tools/check_ui_lint.py` + selfcheck 33/0（含 8 条工厂一致性 + 2 条 HUD 变体，v2.3 后）。
 
 **调参速查**：噪粒度 GRAIN_ALPHA（糊字降 0.03）·暗角 VIGNETTE_ALPHA ·饰线臂 TICK_ARM ·
 金字 GLOW_GOLD ·投影 SHADOW_BTN/Build 卡片 shadow（build_theme 内）·veil 三档常量。
+
+## 8. v2.3 独立化：色板归位 + HUD 变体化（2026-10-20 实装）
+
+具体决策记录 = 方案 §11.30。三条口径（对维护者）：
+
+1. **色板真源**：`DARK` 在 `UiStyle`（唯一真源）。`hud.DARK` 是
+   `const DARK := UiStyle.DARK` 兼容别名——旧引用/探针按 key 取色零改；`screens.gd` 壳层
+   已改取 `UiStyle.DARK`，**新增取色一律 UiStyle**。`hud.build_stats` 仍在 hud（数据格式化）。
+2. **HUD 钮走变体（override 退役）**：`hud_button_states(C, active)` → `HudButton` /
+   `HudButtonActive` 两组变体（build_theme 统一发射，hud 与 shell 共享同一 Theme 实例）；
+   `set_mode` / `set_heat_vis` = 一行 `theme_type_variation` 切换。探针断言读
+   `get_theme_stylebox("normal")`（effective 解析，与渲染通道同源）。
+3. **变体名规约**：变体名**禁与 Godot 内置类同名**——4.7.2 起 `set_type_variation` 会
+   报 ERROR（样式虽因同名 type 条目仍生效，属隐性雷）；`BTN_MENU_VAR` 已改 `"UiMenuButton"`。
+
+**调参速查补充**：HUD 钮常态/点亮配色 = `hud_button_states()`（改一处、hud 与 shell 同步）；
+字色三态沿 v2.1 运行时实况（hover 不走亮金）。

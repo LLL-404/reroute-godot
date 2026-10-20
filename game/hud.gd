@@ -31,32 +31,9 @@ const FLOAT_LIFE := 18 # 0.9s（tick）
 const FLOAT_RISE := 1.4 # 每 tick 上浮像素
 const BANNER_LIFE := 40 # 横幅驻留 2s（tick）
 
-# 帝王金黑色板（v2.1 改版，docs/UI-REDESIGN-20261017.md §2）：
-# 旧暗蓝板（Style.dark 迁移）换文明 6 式暖金调；key 全保留（探针按 key 动态取值），
-# 新增 gold 系 token 供壳层（screens.gd）与本地样式共用。
-var DARK := {
-	"bar": Color8(18, 16, 9, 224),
-	"card": Color8(20, 15, 8, 232),
-	"text": Color8(242, 232, 216, 255),
-	"muted": Color8(176, 164, 132, 255),
-	"hp": Color8(64, 200, 176, 255),
-	"supply": Color8(200, 168, 108, 255),
-	"danger": Color8(228, 92, 72, 255),
-	"border": Color8(150, 120, 76, 255),
-	"active": Color8(200, 168, 108, 255),
-	"active_border": Color8(224, 198, 140, 255),
-	"btn": Color8(24, 18, 10, 220),
-	"btn_hover": Color8(36, 27, 16, 236),
-	"btn_pressed": Color8(15, 11, 6, 250),
-	"gold": Color8(200, 168, 108, 255),
-	"gold_hi": Color8(224, 198, 140, 255),
-	"gold_lo": Color8(96, 76, 44, 255),
-	"edge_hi": Color8(236, 208, 150, 120),
-	"shadow": Color8(0, 0, 0, 150),
-	"track": Color8(10, 8, 5, 220),
-	"warn": Color8(180, 96, 44, 255),
-	"on_gold": Color8(43, 32, 16, 255),
-}
+# 帝王金黑色板（v2.1 改版 → v2.3 归位 ui_style.gd）：本处保留 **兼容别名**，
+# 探针与历史引用按 hud.DARK[key] 取色零改动；真源 = UiStyle.DARK（样式系统唯一口）。
+const DARK := UiStyle.DARK
 
 var callbacks: Dictionary = {}
 var mode := "wall"
@@ -145,22 +122,13 @@ func _flat(bg: Color, border: Color, radius: int, border_w: int = 1) -> StyleBox
 	return UiStyle.flat(bg, border, radius, border_w) # 委托样式工厂（唯一真源 ui_style.gd）
 
 
-## 按钮成套样式：尺寸/字体四态色 + 样式盒 override（发射器 b）+ A1 顶缘光边
+## 按钮成套样式：尺寸/字体 + HUD 变体接入（发射器 a，v2.3 起不再逐钮 override/meta）+ A1 光边
 func _style_button(b: Button, w: float, h: float, fs: float) -> void:
 	b.custom_minimum_size = Vector2(w, h)
 	b.size = Vector2(w, h)
 	b.focus_mode = Control.FOCUS_NONE
 	b.add_theme_font_size_override("font_size", int(fs))
-	var st := UiStyle.button_states(DARK, false) # 四态+字色全由工厂派生
-	b.add_theme_color_override("font_color", st["font_color"])
-	b.add_theme_color_override("font_hover_color", st["font_hover_color"])
-	b.add_theme_color_override("font_pressed_color", st["font_pressed_color"])
-	b.add_theme_color_override("font_disabled_color", st["font_disabled_color"])
-	b.add_theme_stylebox_override("normal", st["normal"])
-	b.add_theme_stylebox_override("hover", st["hover"])
-	b.add_theme_stylebox_override("pressed", st["pressed"])
-	b.add_theme_stylebox_override("disabled", st["disabled"])
-	b.set_meta("sb_normal", st["normal"])
+	b.theme_type_variation = UiStyle.BTN_HUD_VAR
 	UiStyle.edge_dress(b, DARK["edge_hi"], UiStyle.RULE) # A1 光边
 
 
@@ -466,30 +434,18 @@ func set_visible_hud(vis: bool) -> void:
 			el2.visible = false
 
 
-## 切换操作模式：点亮对应钮（金色 active 底），其余复位常态
+## 切换操作模式：点亮对应钮（HUD 变体切换；不再改写共享样式盒/meta）
 func set_mode(m: String) -> void:
 	mode = m
 	for key in mode_buttons:
 		var btn: Button = mode_buttons[key]
 		var on: bool = key == m
-		var sb: StyleBoxFlat = btn.get_meta("sb_normal")
-		sb.bg_color = DARK["active"] if on else DARK["btn"]
-		sb.border_color = DARK["active_border"] if on else DARK["border"]
-		var fc: Color = DARK["on_gold"] if on else DARK["text"]
-		btn.add_theme_color_override("font_color", fc)
-		btn.add_theme_color_override("font_hover_color", fc)
-		btn.add_theme_color_override("font_pressed_color", fc)
+		btn.theme_type_variation = UiStyle.BTN_HUD_ACTIVE_VAR if on else UiStyle.BTN_HUD_VAR
 
 
 ## 热层钮点亮态（TAB / 按钮两种入口共用）。
 func set_heat_vis(on: bool) -> void:
-	var sb: StyleBoxFlat = heat_btn.get_meta("sb_normal")
-	sb.bg_color = DARK["active"] if on else DARK["btn"]
-	sb.border_color = DARK["active_border"] if on else DARK["border"]
-	var fc: Color = DARK["on_gold"] if on else DARK["text"]
-	heat_btn.add_theme_color_override("font_color", fc)
-	heat_btn.add_theme_color_override("font_hover_color", fc)
-	heat_btn.add_theme_color_override("font_pressed_color", fc)
+	heat_btn.theme_type_variation = UiStyle.BTN_HUD_ACTIVE_VAR if on else UiStyle.BTN_HUD_VAR
 
 
 ## 击杀赏金浮字（view 在击杀时调）：池轮转，update 里按 tick 上浮淡出。

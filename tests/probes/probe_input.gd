@@ -175,7 +175,7 @@ func _initialize() -> void:
 	check(view.heat_enabled() and main.heat_on, "重开前热层开启")
 	main.restart_game()
 	check(not view.heat_enabled() and not main.heat_on, "重开后热层关闭")
-	var heat_style: StyleBoxFlat = main.hud.heat_btn.get_meta("sb_normal")
+	var heat_style: StyleBoxFlat = main.hud.heat_btn.get_theme_stylebox("normal") # v2.3 effective
 	check(heat_style.bg_color == main.hud.DARK["btn"], "重开后 HUD 热层钮熄灭")
 
 	# ---- 14. 相机操控（WASD 平移 / QE 旋转 / 右键拖拽；纯表现层）----
@@ -237,10 +237,45 @@ func _initialize() -> void:
 	cmp_int(world.supply, sup_cam, "相机操控不影响供给")
 	cmp_int(world.buildings.size(), buildings_cam, "相机操控不影响建筑数")
 
-	var sp24 := _sp_of(view, Vector2i(24, 24))
-	if sp24.x >= 0.0 and sp24.x < vp_size.x and sp24.y >= 0.0 and sp24.y < vp_size.y:
-		var back24: Vector2i = view.pick_cell(sp24.x, sp24.y)
-		check(back24 == Vector2i(24, 24), "新视角下拾取回环 %s" % str(back24))
+	# ---- 14.5 拾取回环（钉扎位姿 + 平坦格；2026-10-20 重标定）----
+	# 旧口径「任意位姿下 (24,24) 回拾」不稳：W 按帧/QE 按墙钟/拖拽按像素 → 位姿随帧率漂移；
+	# 且 2 迭代拾取在相邻格高差大时合法收敛到邻格（实测 (24,24) 顶高 1.34、回拾 (23,23)）。
+	# 新口径：钉扎 focus=格心、yaw=0、zoom=1；扫「自身与 6 邻高度差 ≤0.10」的平坦格
+	# （= 2 迭代算法精确收敛域，全图 199/199 实测）；取 6 个不同行格做点击回环。
+	# 同时冻结主循环：钉扎需 ~14 帧，若继续跑 tick（TICK_DT=1/20），快速机器上对局会在 §15 前
+	# 推进到 gameover（page='gameover' → 滚轮被 _camera_free() 拦截 → §15 假红，实测复现）；
+	# 相机/输入路径不经 _process，冻结不影响 §15 滚轮断言。
+	main.set_process(false)
+	var flat_cells: Array = []
+	for yy in range(22, 42):
+		for xx in range(22, 42):
+			var g0: float = view.ground_y(xx, yy)
+			var mx := 0.0
+			for k in 6:
+				mx = maxf(mx, absf(view.ground_y(Grid.nx(xx, yy, k), Grid.ny(xx, yy, k)) - g0))
+			if mx <= 0.10:
+				flat_cells.append(Vector2i(xx, yy))
+	check(flat_cells.size() >= 20, "存在平坦格群（%d 格）" % flat_cells.size())
+	var rows_used: Array = []
+	var pin_n := 0
+	for fc in flat_cells:
+		if pin_n >= 6:
+			break
+		if rows_used.has(fc.y):
+			continue
+		rows_used.append(fc.y)
+		view.core.focus = Vector3(view.cell_to_world(fc.x, fc.y).x, 0.0, view.cell_to_world(fc.x, fc.y).z)
+		view.core.yaw = 0.0
+		view.core._zoom = 1.0
+		view.core._apply_cam()
+		await _frames(2)
+		var spf := _sp_of(view, fc)
+		if spf.x < 0.0 or spf.x >= vp_size.x or spf.y < 0.0 or spf.y >= vp_size.y:
+			continue
+		var backf: Vector2i = view.pick_cell(spf.x, spf.y)
+		check(backf == fc, "钉扎位姿平坦格回拾 %s→%s" % [str(fc), str(backf)])
+		pin_n += 1
+	check(pin_n >= 6, "至少 6 格完成回拾（实际 %d）" % pin_n)
 
 	# ---- 15. 滚轮缩放（拉近/还原/限位 0.6–1.8；暂停与 HUD 区冻结）----
 	var yz0: float = cam.global_position.y

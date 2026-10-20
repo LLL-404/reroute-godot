@@ -246,7 +246,7 @@ func _initialize() -> void:
 
 func _check_btn_color(hud, key: String, active: bool, label: String) -> void:
 	var btn: Button = hud.mode_buttons[key]
-	var sb: StyleBoxFlat = btn.get_meta("sb_normal")
+	var sb: StyleBoxFlat = btn.get_theme_stylebox("normal") # v2.3：读 effective 样式盒（变体解析）
 	var want: Color = hud.DARK["active"] if active else hud.DARK["btn"]
 	check(sb.bg_color.is_equal_approx(want), label)
 

@@ -1,10 +1,36 @@
 extends RefCounted
 # UI 样式工厂（v2.2 起）：全部 Control 样式的唯一构造入口。
-# - 参数表：按钮四态 / 标题条 / 饰线 / veil 档位全集中在此调参（今后质感 pass 只改本文件）。
-# - 调色板仍归 hud.DARK（探针引用面），工厂只持「结构常量」：veil 档位、标题条底、主钮按下金档。
-# - 规约：hud.gd / screens.gd 禁止裸 Color8 构造样式（tools/check_ui_lint.py 守规，白名单=DARK 定义区）。
-# - 两个发射器：a=运行时 Theme + type variations（screens 面）；b=逐钮 override/meta（hud 探针面）。
-#   两路由同一份参数派生，永远一致；探针退役时删发射器 b，样式定义零重写。
+# - 参数表：色板 / 按钮四态 / 标题条 / 饰线 / veil 档位全集中在此调参（质感 pass 只改本文件）。
+# - v2.3 起色板归位本文件（DARK 唯一真源）；`hud.DARK` 为兼容别名（探针/旧引用按 key 取色零影响）。
+# - 规约：hud.gd / screens.gd 禁止裸 Color8 构造样式（tools/check_ui_lint.py 守规）。
+# - 发射器 a：运行时 Theme + type variations（screens 面 + HUD 模式钮，v2.3 全量收编）；
+#   逐钮 override/meta 机制已退役。
+
+## 帝王金黑色板（v2.1 改版，docs/UI-REDESIGN-20261017.md §2；v2.3 迁入本文件 = 样式系统唯一真源）：
+## 旧暗蓝板（Style.dark 迁移）换文明 6 式暖金调；key 全保留（探针按 key 动态取值）。
+const DARK := {
+	"bar": Color8(18, 16, 9, 224),
+	"card": Color8(20, 15, 8, 232),
+	"text": Color8(242, 232, 216, 255),
+	"muted": Color8(176, 164, 132, 255),
+	"hp": Color8(64, 200, 176, 255),
+	"supply": Color8(200, 168, 108, 255),
+	"danger": Color8(228, 92, 72, 255),
+	"border": Color8(150, 120, 76, 255),
+	"active": Color8(200, 168, 108, 255),
+	"active_border": Color8(224, 198, 140, 255),
+	"btn": Color8(24, 18, 10, 220),
+	"btn_hover": Color8(36, 27, 16, 236),
+	"btn_pressed": Color8(15, 11, 6, 250),
+	"gold": Color8(200, 168, 108, 255),
+	"gold_hi": Color8(224, 198, 140, 255),
+	"gold_lo": Color8(96, 76, 44, 255),
+	"edge_hi": Color8(236, 208, 150, 120),
+	"shadow": Color8(0, 0, 0, 150),
+	"track": Color8(10, 8, 5, 220),
+	"warn": Color8(180, 96, 44, 255),
+	"on_gold": Color8(43, 32, 16, 255),
+}
 
 const GOLD_PRESSED := Color8(168, 138, 84, 255) # 主钮按下档：帝王金暗一阶
 const TITLE_BAR_BG := Color8(10, 8, 5, 160)     # 卡内衬线标题条底
@@ -18,7 +44,9 @@ const TITLE_VEIL_BOTTOM := Color8(10, 9, 6, 240)
 
 # —— 发射器 a：type variations 名（screens 面：按钮/卡片/标题条/滑杆只写名字接入主题） ——
 const BTN_PRIMARY_VAR := "PrimaryButton"   # 主钮：金底深字 + 底缘 3px 暗金压边
-const BTN_MENU_VAR := "MenuButton"         # 次钮/菜单钮：深底金细边 + hover 亮金字
+const BTN_MENU_VAR := "UiMenuButton"       # 次钮/菜单钮（避内置 MenuButton 类：4.7.2 变体名禁撞内置类）
+const BTN_HUD_VAR := "HudButton"           # HUD 模式钮常态：深底金细边（字 text）
+const BTN_HUD_ACTIVE_VAR := "HudButtonActive" # HUD 模式钮点亮态：金底深字
 const CARD_VAR := "DarkCard"               # 菜单卡片面板
 const TITLEBAR_VAR := "TitleBar"           # 卡内衬线标题条
 const SLIDER_VAR := "GoldSlider"           # HSlider 三件套（暗槽/亮金已过段）
@@ -55,10 +83,16 @@ static func build_theme(C: Dictionary, S: float) -> Theme:
 		_font = load(FONT_PATH)
 	t.default_font = _font
 	t.default_font_size = int(11 * S)
-	# 按钮：主/次两组变体（样式盒 + 全部字色由 button_states 派生，与 hud 探针面同参数）
-	for pair in [[BTN_PRIMARY_VAR, true], [BTN_MENU_VAR, false]]:
+	# 按钮：主/次 + HUD 常态/点亮 四组变体（样式盒 + 全部字色由状态函数派生，参数唯一源）
+	var sets: Array = [
+		[BTN_PRIMARY_VAR, button_states(C, true)],
+		[BTN_MENU_VAR, button_states(C, false)],
+		[BTN_HUD_VAR, hud_button_states(C, false)],
+		[BTN_HUD_ACTIVE_VAR, hud_button_states(C, true)],
+	]
+	for pair in sets:
 		var varname: String = pair[0]
-		var st := button_states(C, pair[1])
+		var st: Dictionary = pair[1]
 		t.set_type_variation(varname, "Button")
 		for k in ["normal", "hover", "pressed", "disabled"]:
 			t.set_stylebox(k, varname, st[k])
@@ -85,6 +119,20 @@ static func build_theme(C: Dictionary, S: float) -> Theme:
 
 
 
+## HUD 模式钮两组变体状态（v2.3：退役 override+meta，改 variation 切换）。
+## 字色口径沿 v2.1 运行时实况：三态同色（text / on_gold）——hover 不走亮金（与菜单钮不同）。
+static func hud_button_states(C: Dictionary, active: bool) -> Dictionary:
+	var st := button_states(C, false)
+	if active:
+		st["normal"] = flat(C["active"], C["active_border"], 2)
+		st["font_color"] = C["on_gold"]
+		st["font_hover_color"] = C["on_gold"]
+		st["font_pressed_color"] = C["on_gold"]
+	else:
+		st["font_hover_color"] = C["text"]
+	return st
+
+
 ## 基础 StyleBoxFlat：纯色 + 边框 + 圆角（沿用 v2.1 口径）。
 static func flat(bg: Color, border: Color, radius: int, border_w: int = 1) -> StyleBoxFlat:
 	var sb := StyleBoxFlat.new()
@@ -95,8 +143,8 @@ static func flat(bg: Color, border: Color, radius: int, border_w: int = 1) -> St
 	return sb
 
 
-## 按钮四态样式盒 + 字色（hud 探针面与 screens 菜单面共用同一参数）：
-## primary=金底深字 + 底缘 3px 暗金压边；secondary/普通=深底金细边 + hover 亮金字。
+## 按钮四态样式盒 + 字色（四组按钮变体同源：primary=金底深字 + 底缘 3px 暗金压边；
+## secondary/菜单=深底金细边 + hover 亮金字）。
 ## 返回 {"normal","hover","pressed","disabled","font_color","font_hover_color","font_pressed_color","font_disabled_color"}。
 static func button_states(C: Dictionary, primary: bool) -> Dictionary:
 	var st := {}

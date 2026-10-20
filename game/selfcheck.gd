@@ -153,7 +153,7 @@ func run(main) -> int:
 	_cmpi(int(st["field"]), 4096, "地面网格 field=4096")
 	_cmpi(int(st["plain"]), 39820, "场外旷野 plain=39820（六边化：场内面片跳过，原 39312 已废止）")
 	_chk(st["cam"] == true, "相机就绪")
-	_cmpi(int(st["covers"]), 25, "覆盖层 covers=25")
+	_cmpi(int(st["covers"]), 27, "覆盖层 covers=27（世界生成拍 2 联动：+2 视觉覆盖）")
 	var gsolid := 0
 	var g0 = main.world.grid
 	for i in g0.cells.size():
@@ -196,6 +196,11 @@ func run(main) -> int:
 	_chk(ui_theme.get_stylebox("normal", UiStyle.BTN_MENU_VAR) != null, "变体 MenuButton 已装")
 	_chk(ui_theme.get_stylebox("slider", UiStyle.SLIDER_VAR) != null, "变体 GoldSlider 已装")
 	_chk(UiStyle.grain_tex() != null and UiStyle.vignette_tex() != null, "A4/A5 氛围层纹理已生成")
+	# v2.3：HUD 模式钮改 variation（meta 机制退役）——点亮态 active 钮解析到金底变体
+	var mb: Button = main.hud.mode_buttons[main.hud.mode]
+	_chk(mb.theme_type_variation == UiStyle.BTN_HUD_ACTIVE_VAR, "HUD 当前模式钮 = 点亮变体")
+	var mbs: StyleBoxFlat = mb.get_theme_stylebox("normal")
+	_chk(mbs != null and mbs.bg_color.is_equal_approx(ui_c["active"]), "HUD 点亮 effective stylebox = DARK.active")
 
 	print("[SELFCHECK] checks=", checks, " bad=", bad)
 	for i in mini(fail_list.size(), 12):

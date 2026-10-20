@@ -46,7 +46,7 @@ var _confirm_cb := Callable()
 func init(callbacks: Dictionary, hud_ref) -> void:
 	cb = callbacks
 	hud = hud_ref
-	C = hud.DARK
+	C = UiStyle.DARK # v2.3：色板真源归 UiStyle（壳层不再依赖 hud 取色）
 	_recalc_s()
 	layer = 20 # 壳在 HUD（layer 10）之上
 	host = Control.new()

@@ -306,6 +306,34 @@ python tools/check_shots.py    # 截图像素校验
 - 截图覆盖扩展（2026-10-20）**已完成**：`probe_shots` 6→8 图（+`shots/game_tablet.png`
   1600×1200 4:3 平板 + `shots/game_16x10.png` 1280×800 16:10），`check_shots` 29→39；
   平板构图/HUD 目验通过；证据 `logs/gates-20261020-tablet/`。
+- TapTap 常规 app 提审执行（2026-10-19 ~ 10-20）**已完成，待审核通过**：新 app **986470** /
+  版本 V-20261019 / audit **1106016**（`status=reviewing`）；Android = TapPlay（`apk_sandbox_authorized`）
+  + 隐私资质「免安装，使用平台托管」（通用隐私协议，已提交审核中）；Windows = 未接入防沉迷（Tap 通用）；
+  平台 MOBILE+PC_OFFICIAL、双端开放试玩。投稿材料已产出：实机 39.77s（videoId 5990199）、
+  讲解视频 70.57s `export/reroute-explainer-70s.mp4`。开发者日志 5 篇达成
+  （①10-15 ②10-16 ③10-17 ④10-19 `861382976393448456` ⑤10-20 `861415324296154627`）。
+  **10-20 03:30 进展：活动投稿已提交（记录 id 19287，app 986470，5 项齐）→ 即时驳回，
+  理由「游戏尚未审核发布」= 唯一阻断（商店仍 `reviewing`）。已配置后台自动重投
+  `logs/submit-20261020/tools/auto_resubmit.py`（过审上线后自动提交活动投稿，日志
+  `logs/submit-20261020/auto/auto_resubmit.log`）；素材声明补「AI 素材占比」章节并加
+  TapTap 站内备份动态 `861445870371995916`。过审后还须 create-draft 写回商店简介 AI 声明句
+  + 两个视频（详见方案 §11.31「10-20 凌晨（三）」）。**
+  详见方案 §11.31。
+- UI v2.3「独立化」（2026-10-20）**已完成**：`DARK` 色板真源迁 `ui_style.gd`（`hud.DARK`
+  留 `const DARK := UiStyle.DARK` 兼容别名，`screens` 改取 `UiStyle`）；HUD 10 钮发射器 b
+  （override + `sb_normal` meta）退役，改 `HudButton`/`HudButtonActive` 变体
+  （`set_mode`/`set_heat_vis` 一行切换；探针读 effective stylebox）；变体名避让内置类
+  `MenuButton`→`UiMenuButton`（4.7.2 起同名变体 `set_type_variation` 喷 ERROR 的隐性雷）。
+  `probe_input` §14.5 重标定：旧「任意位姿 (24,24) 回拾」机器相关假红（位姿随帧率漂移 +
+  2 迭代拾取在高差边缘合法收敛邻格）→ 钉扎位姿 + 平坦格（高差 ≤0.10，扫区 199/199）6 格
+  回环；§14 尾冻结主循环防对局在 §15 前走到 gameover 拦滚轮（TICK_DT=1/20，实测复现）。
+  selfcheck 31→33（+2 HUD 变体断言；顺带校正 covers 25→27 既有红）。全 22 闸 + check_shots
+  39/0 + lint 绿（input 65/0 稳定）；受击截图全量重出（含 gameover/slots 等 v2.2 前陈旧件）。
+  证据 `logs/gates-20261020-v23/`；决策记录 = 方案 §11.30 + UI-REDESIGN §8。
+  **双端包已重出（10-20 08:16）**：exe 复签 Valid（`0539d11b…85bc`，与 10-18 包逐字节同哈希）
+  / pck `88158f75…db96` 109,831,652B / zip `f7854e80…5c59` 183,719,469B（192 条目）/
+  APK `07860536…fcc6` 312,152,675B（apksigner v2/v3 true）；包内 selfcheck 33/0；
+  口径与证据 = 方案 §11.32。
 
 ---
 
