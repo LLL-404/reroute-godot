@@ -17,9 +17,12 @@ Engineering 保真度极高：模拟核心是**确定性**的，有 16 指纹黄
 | `tests/` | 单测 106 例 + **21 个验收探针**（`tests/probes/`，公共夹具 `probe_kit.gd`，D5-2 2026-10-15；`probe_intro` 2026-10-17） |
 | `tools/` | Python 工具：`check_shots.py` / `convert_all.py` / `umd2_to_gltf.py` / `verify_glb.py` |
 | `assets/` | `audio/sfx`(30 mp3) / `fonts`(Noto Sans SC) / `models`(glb) / `icon`(图标五件套) |
-| `docs/` | 开发方案（权威）、审计报告、`devlogs/` |
+| `docs/` | 开发方案（权威）、审计报告、`devlogs/`、`refs/`（外部参考技能，见下） |
 | `shots/` | 验收截图产物 + `store/` 详情页提审素材（AI 五图 + 实机图副本；已 `exclude_filter` 排除出包） |
 | `logs/` | 闸的 stdout/exit 证据 |
+
+> 游戏开发参考技能库：`docs/refs/game-dev-skills/`（19 个第三方技能原文，塔防/寻路/波次/经济/导出等；
+> **不自动加载**，带 `.gdignore`）。涉及对应系统时先查其 `SKILL.md`；有用结论并入本仓文档或现有技能，不整包安装。
 
 ## 二、分层纪律（**单向，不许反向**）
 
@@ -306,19 +309,24 @@ python tools/check_shots.py    # 截图像素校验
 - 截图覆盖扩展（2026-10-20）**已完成**：`probe_shots` 6→8 图（+`shots/game_tablet.png`
   1600×1200 4:3 平板 + `shots/game_16x10.png` 1280×800 16:10），`check_shots` 29→39；
   平板构图/HUD 目验通过；证据 `logs/gates-20261020-tablet/`。
-- TapTap 常规 app 提审执行（2026-10-19 ~ 10-20）**已完成，待审核通过**：新 app **986470** /
-  版本 V-20261019 / audit **1106016**（`status=reviewing`）；Android = TapPlay（`apk_sandbox_authorized`）
-  + 隐私资质「免安装，使用平台托管」（通用隐私协议，已提交审核中）；Windows = 未接入防沉迷（Tap 通用）；
-  平台 MOBILE+PC_OFFICIAL、双端开放试玩。投稿材料已产出：实机 39.77s（videoId 5990199）、
-  讲解视频 70.57s `export/reroute-explainer-70s.mp4`。开发者日志 5 篇达成
+- TapTap 常规 app 提审（2026-10-19 ~ 10-21）**✅ 已上线 + 活动投稿已通过**：新 app **986470** /
+  版本 V-20261019 / audit **1106016** → `status=online`（10-21 00:14 `published`）；
+  活动投稿记录 **19287** 状态 **「已通过」**（投稿截止 10-21 12:00，提前 11 小时完成）。
+  Android = TapPlay（`apk_sandbox_authorized`）+ 隐私资质「自行配置」独立页
+  `https://lll-404.github.io/reroute-privacy/privacy.html`；Windows = 未接入防沉迷（Tap 通用）；
+  平台 MOBILE+PC_OFFICIAL、双端开放试玩。开发者日志 5 篇达成
   （①10-15 ②10-16 ③10-17 ④10-19 `861382976393448456` ⑤10-20 `861415324296154627`）。
-  **10-20 03:30 进展：活动投稿已提交（记录 id 19287，app 986470，5 项齐）→ 即时驳回，
-  理由「游戏尚未审核发布」= 唯一阻断（商店仍 `reviewing`）。已配置后台自动重投
-  `logs/submit-20261020/tools/auto_resubmit.py`（过审上线后自动提交活动投稿，日志
-  `logs/submit-20261020/auto/auto_resubmit.log`）；素材声明补「AI 素材占比」章节并加
-  TapTap 站内备份动态 `861445870371995916`。过审后还须 create-draft 写回商店简介 AI 声明句
-  + 两个视频（详见方案 §11.31「10-20 凌晨（三）」）。**
-  详见方案 §11.31。
+  **关键转折**：10-20 11:26 曾因「安装包隐私合规检测未通过」被驳（APK 与 Windows 包**同判**，
+  消息中心无报告）→ 补 `game/privacy_gate.gd` 首启隐私门（未同意不建 HUD/不开局/不写盘，
+  探针 `probe_privacy` 9/0）后过审。**`DUMP` 权限与 `profileable` 两条技术猜测均被证伪**
+  （前者是 AXML string pool 残留、非真声明；后者 Godot 官方模板自带）。
+  ⚠️ **后台操作一律用 Firefox profile `wb-ff-taptap4`**（`wb-ff-taptap5` 登录态已失效，
+  曾导致自动重投被重定向到登录页而中止）。
+  详见方案 §11.34。
+- 包体绑定坑（2026-10-20）**已解**：Windows 包体库卡片分「游戏本体包」（可绑）与
+  **「默认包」（不可绑，选中态都没有）**；唯一可行路径 = 从「包体库」对话框内的
+  「上传新包体」上传 + **手填版本号三个框**（antd 受控组件，JS 改 value 无效，须用
+  Playwright `fill()`），保存后自动绑定。APK 侧用 `select-package` 即可。详见方案 §11.34。
 - UI v2.3「独立化」（2026-10-20）**已完成**：`DARK` 色板真源迁 `ui_style.gd`（`hud.DARK`
   留 `const DARK := UiStyle.DARK` 兼容别名，`screens` 改取 `UiStyle`）；HUD 10 钮发射器 b
   （override + `sb_normal` meta）退役，改 `HudButton`/`HudButtonActive` 变体
@@ -334,6 +342,12 @@ python tools/check_shots.py    # 截图像素校验
   / pck `88158f75…db96` 109,831,652B / zip `f7854e80…5c59` 183,719,469B（192 条目）/
   APK `07860536…fcc6` 312,152,675B（apksigner v2/v3 true）；包内 selfcheck 33/0；
   口径与证据 = 方案 §11.32。
+- UI v2.4「指挥坞 + 三屏修缮」（2026-10-20）**已完成**：HUD 右下 8 钮改分组指挥坞
+  （建造/地形/指令；名称左 + 成本右，供给不足成本转红；技能剩余秒内联）；顶栏供给拆
+  小标 + 大数值；提示条 20s 自动淡出 / 进菜单即收，`hit_regions` 随之让位；波次横幅瘦身。
+  设置页滚动区底缘渐隐 + 返回分隔线（`UiStyle.fade_tex`）；存档删除列 62px 占位对齐；
+  标题菜单列 240→264。全 22 闸 + `check_shots` 39/0 + lint 绿（hud 73→82）；证据
+  `logs/gates-20261020-v24/`；决策记录 = 方案 §11.33。包仍为 §11.32 的 v2.3 内容。
 
 ---
 

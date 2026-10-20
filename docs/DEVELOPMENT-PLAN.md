@@ -2613,6 +2613,173 @@ v2.2 的存量陈旧件；目验 gameover/hud/slots 通过）。
 
 ---
 
+### 11.33 UI v2.4「指挥坞 + 三屏修缮」（2026-10-20）
+
+**缘起**：v2.3 只完成样式独立化，实机仍呈「调试按钮列 + 菜单裁切」；本轮按
+「HUD → 标题/设置/存档」顺序做一轮可用性与层次改造，不改模拟/指纹。
+
+**HUD（game/hud.gd）**：
+
+- 右下 8 钮改**指挥坞**：分组标题（建造 / 地形 / 指令）+ 暗底细边面板 + 顶部 2px 光边
+  （A1 `edge_dress`）；行内 = 名称左对齐 + 成本右对齐（`row_name`/`row_cost` 子 Label，
+  Button 文本清空，避免逐钮样式盒 override）；成本供给不足转 `danger` 红，点亮行成本转
+  `on_gold`；技能行右侧显示剩余秒（`20s`），就绪留空。
+- 几何：`BTN_H` 42→38、`COL_W` 128→176、坞 200×426（12 内边距 / 17 标题行 / 1 行距 /
+  7 组距），点击排除 `CORNER_W/H` 216×442；缩放时行尺寸与子标签随 `_layout()` 重算。
+- 顶栏：核心血条 200×12、正文 11/12；供给拆「供给」10 小标 + 17 大数值（`supply_text`
+  现在只存数值，探针同步）；热层/暂停 60×30。
+- 教学提示条：10px 瘦身；`HINT_LIFE=400` tick（20s）后 0.5s 淡出并隐藏（只触发一次），
+  进入存档/设置模态页调用 `dismiss_hint()`；`hit_regions()` 只在可见时追加提示区（隐藏后
+  该区域交还战场）。
+- 波次横幅：16/10 字号、内边距 7、下移至 y+96，不再压住场地中心。
+
+**三屏（game/screens.gd）**：
+
+- 设置：滚动区外套 Control（视口 68%）+ `UiStyle.fade_tex` 底缘渐隐（可滚动暗示）；
+  滚动区与「返回」之间加 1px 金线，返回不再像压在内容上。
+- 存档：删除钮位固定 62px（删除钮与同宽占位块互斥显隐），空槽/读档/存档三种状态槽条
+  左缘恒定对齐；save 模式仍隐藏删除钮（探针口径不变）。
+- 标题：菜单列 240→264、标题 54→56，页脚/标语位置随列宽外移 24。
+- `UiStyle.fade_tex(bottom, height)` 新增（L1/L2 lint 合规：色 token 与 Gradient 构造仍只在
+  `ui_style.gd`）。
+
+**回归（logs/gates-20261020-v24/）**：全 22 闸绿 —— unit 107/0、golden 2/0、scene 25/0、
+blueprint 21/0、sim 5/0、grid 40/0、flow 53/0、scenario 77/0（fp `0x7dea2b02`）、world 20/0、
+sync 1845/0、input 65/0、**hud 82/0**（+9：坞面板 / 成本可负担性 / 提示淡出 / 浮字钳顶 / 区域新口径）、
+ui_flow 39/0、save 77/0、touch 71/0、smoke 34/0、shots 8/0、audio 56/0、asset 63/0、
+model 6/0、orient 1/0、intro 36/0；selfcheck 33/0；check_shots 39/0；lint PASS。
+探针截图全量重出（hud / game 六尺寸 / heat / ghost / title / settings / slots / gameover 等）。
+
+**未打包**：四件包仍为 §11.32 的 v2.3 内容；若需交付 v2.4，按 §11.26 口径重出四件。
+（→ **已打包，见 §11.34**。）
+
+---
+
+### 11.34 隐私政策首启门 + 过审上线 + 活动投稿通过（2026-10-20 14:17 ~ 10-21 00:43）
+
+#### 缘起：隐私合规检测的真实根因
+
+10-20 11:26 版本 V-20261019 审核驳回，理由「**安装包隐私合规检测未通过**」，
+消息中心**无报告**（通知原文仅写「如未收到报告可通过工单咨询」）。
+
+排查过程（**两条错误猜测，留档避免重犯**）：
+
+| 猜测 | 证伪方式 | 结论 |
+|---|---|---|
+| APK 声明了 `android.permission.DUMP` | `aapt2 dump xmltree` 显示**无任何 `uses-permission` 节点**（零权限）。此前用 Python 按 UTF-16 解码二进制 AXML 再正则匹配，命中的只是 **string pool 残留字符串**，不是真声明 | ✗ 假线索 |
+| `<profileable shell=true>` 是风险项 | 解包 Godot 官方 `4.7.2.stable.mono/android_release.apk`，**模板同样带 profileable** | ✗ 模板自带，非本项目引入 |
+
+**决定性证据**：直调 `GET /api/app/v1/pc-game/list-packages` 发现 **Windows 包体 20242 的
+`reject_reason` 与 APK 的 `status_reason` 一字不差**。Windows 包只有 exe+pck+txt，
+同样被判不过 ⇒ **不是包体技术问题，是游戏内容/行为层问题**。
+
+⇒ 正解：**游戏首启没有隐私政策弹窗与同意流程**（国内隐私合规检测头号必查项，Godot 默认不提供）。
+
+#### 实现：`game/privacy_gate.gd`
+
+- CanvasLayer `layer=40`（高于开屏 30 / 壳 20 / HUD 10）；全屏暗底 + 居中卡片
+  （宽度 `clamp(视口宽×0.86, 320, 560)`），金色标题「隐私政策」
+- 正文四段：**收集信息**（不收集、不上传，设置/存档仅本机）/ **第三方服务**（无统计/广告/登录/支付 SDK）/
+  **权限说明**（不需要通讯录、位置、相机、麦克风、存储读写）/ **你的权利**（设置页可随时查，卸载即删）
+- 三按钮：`btn_privacy_link`（`OS.shell_open` 跳独立网页）/ `btn_privacy_agree`（金色主钮）/
+  `btn_privacy_decline`（不同意，退出）
+- 信号 `agreed` / `declined`；**拒绝 Android 返回键关闭**（必须显式二选一）
+- 完整政策：`https://lll-404.github.io/reroute-privacy/privacy.html`（GitHub Pages，独立页非站内页）
+
+**`main.gd` 接线（关键合规口径）**：
+
+```
+_ready():
+  view = $View
+  _is_probe_run = _detect_probe_run()
+  _settings = UserSettings.load_cfg()
+  if not _is_probe_run and not _settings.privacy_agreed:
+      UserSettings.apply_video(_settings)   # 先摆正窗口，否则小窗把卡片压到最小宽
+      _show_privacy_gate(); return          # ← 不建 HUD/壳、不开局、不播开屏、不写盘
+  _boot()                                   # 原 _ready 主体
+```
+
+- 同意 → `privacy_agreed=true` 落盘 → `_boot()`；不同意 → `get_tree().quit(0)`
+- 探针 / selfcheck / headless 一律跳过，**保 22 闸与 selfcheck 口径不变**
+
+**`user_settings.gd`**：`privacy_agreed` 三处（`default_cfg` / `load_cfg` / `save_cfg`）。
+⚠️ `save_cfg` 会重写整个 ConfigFile，**必须像 `runs` 一样从旧档读 `prev_agreed` 兜底**，
+否则设置页一保存就把同意状态冲成 false。
+
+**`screens.gd`**：设置页末尾加「关于」分组 + 「隐私政策 / 查看完整说明」按钮（`btn_privacy_policy`），
+常量 `PRIVACY_URL` 置顶。
+
+#### 验收
+
+| 项 | 结果 |
+|---|---|
+| 新探针 `tests/probes/probe_privacy.gd` | **`[PRIVACY] checks=9 bad=0 PASS`**（三按钮 + 标题正文 + 同意/拒绝两条信号链路） |
+| 既有 selfcheck | **`checks=33 bad=0 PASS`**（未破坏） |
+| 画面 | 窗口模式实拍确认渲染正常（`%TEMP%\opencode\privacy_shot.png`） |
+| 端到端 | **10-21 00:14 版本 `online`/已上线** ⇒ 隐私检测通过 |
+
+#### 顺手修的编译阻塞缺陷
+
+`game/view_terrain.gd:498` 引用 **`ROCK_GATE_KEEP` 但从未定义**（并行会话未提交的半成品），
+导致 `view.gd` 整体编译失败、`entities/terrain` 全 nil、selfcheck 崩在 header。
+补 `const ROCK_GATE_KEEP := 1.4`（出怪口保留半径，米；`_gate_pts` 存世界坐标，1 格 = 1 米）。
+
+#### 双端包重出（含隐私门，口径同 §11.26）
+
+| 产物 | 字节 | 校验 |
+|---|---|---|
+| `export/reroute-release.apk` | 312,181,643 | `apksigner` → `CN=Reroute`，SHA-256 `06fb8144…4F0E3F`（与线上一致） |
+| `export/game.exe` | 109,550,080 | `tools/sign_windows_exe.ps1` 复签 → `SIGNED=Valid` |
+| `export/game.pck` | 109,859,040 | — |
+| `export/reroute-windows.zip` | 181,524,583 | 192 条目（exe + pck + 运行说明.txt + data 189） |
+
+⚠️ **签名机制（踩过一次，必记）**：`export_presets.cfg` 的 `keystore/*` **六字段全空**，
+签名靠**环境变量注入** `GODOT_ANDROID_KEYSTORE_RELEASE_PATH` / `_USER` / `_PASSWORD`
+（keystore `D:/G/game/keystores/reroute-release.keystore`，alias `reroute`；
+密码台账 `signing.env` 同目录，仓外）。**不设环境变量直接 `--export-release` 会用 debug keystore
+签成 `CN=Android Debug`**，与线上包签名不一致 → 必被拒。单次导出 ~10 分钟，勿按短超时判失败。
+
+#### 包体绑定：Windows「默认包」不可绑（本次最大坑）
+
+包体库卡片有两种标签，**只有前者能绑**：
+
+| 标签 | 能否绑定 |
+|---|---|
+| **游戏本体包** | 能 |
+| **默认包** | **不能**——卡片连选中态都没有，「确认选择」是灰的 |
+
+试过且**全部失败**：CLI `select-package`（branch 0/1 都报「不在可选列表」）、
+UI 卡片坐标点 / JS 派发 / 文字点击、`clear-package` 清空槽位后重绑。
+
+**管用路径（已验证）**：从「包体库」对话框内的**「上传新包体」**上传
+（不是页面上的「上传包体」），且**必须手填「版本设置」三个框**——库内入口不自动带版本号，
+不填则保存恒灰（提示「请先完善包体配置」）。⚠️ antd 是受控组件，**JS 改 `input.value`
++ 派发 input/change 无效**，必须用 Playwright `fill()`。填完保存，包体**自动绑到 windows 槽位**。
+
+APK 侧则直接用 `select-package`（`{"slot":"main","package":{"id":"<新apk>","type":"apk"}}`）即可。
+
+**最终绑定**：`main` = **1067414**（新 APK）/ `windows` = **21249**（新 zip 1.3.0）。
+
+#### 过审与投稿
+
+- `submit-app-review`（`release_schedule=immediate`）→ `review_submission accepted`
+  → 状态 `reviewing` → **10-21 00:14 `online`/已上线**
+- 活动投稿（记录 19287）重投：**自动脚本失败** —— `auto_resubmit.py` 用的
+  `PROFILE = wb-ff-taptap5` **登录态已过期**，被重定向到手机号登录页（页面仅 73 字符），
+  读不到「已填 5/5」而中止。**换 `wb-ff-taptap4`（developer 域登录态有效）手动重投**
+  → sign-up 页显示「已填 5/5」→ 勾选第一个「改道」（绿色图标 = 已上线 = 986470）→ 提交
+  → 活动列表「关注的活动」显示 **「已通过」**。
+- ⚠️ **profile 分工记死**：`wb-ff-taptap4` 用于全部后台操作（提审/投稿/包体）；
+  `wb-ff-taptap5` 已失效，勿再用。
+
+#### 结论
+
+**全程参与奖四项硬条件全部满足**：按时有效投稿（已通过）✓ / 完整展示核心玩法 ✓ /
+≥5 篇开发者日志（①10-15 ②10-16 ③10-17 ④10-19 ⑤10-20）✓ / 试玩量 ≥50 属
+10-25~12-03 评审期指标，非截止前要求。
+
+---
+
 ## 12. AI 任务卡模板（派活时照抄）
 
 ```markdown
@@ -2659,10 +2826,9 @@ sim/sim.gd → sim/scenario.gd → sim/grid.gd → sim/flowfield.gd → sim/worl
 
 ### 13.1 冲刺期特别提醒
 
-- **硬截止 2026-10-21（今天 = 2026-10-19）。** 官方建议 10-18 前提交（已过，进入收尾期）。
-  先看 §7.0 确认自己站在哪一天。
-- **开发者日志每天一篇，不许攒**。规则禁止一天内连发，要凑够 5 篇只能每天写。
-  这是全程参与奖（¥200,000 奖池）的硬条件。
+- **硬截止 2026-10-21 12:00 —— 交付已完成**：10-21 00:14 版本上线（`status=online`），
+  活动投稿「已通过」。本节保留为冲刺期历史口径，赛后复盘参考。
+- **开发者日志 5 篇已达成**（①10-15 ②10-16 ③10-17 ④10-19 ⑤10-20），规则为「开发期内累计 ≥5 篇」。
 - **每次改动后立刻提交**。7 天里没有回滚余量。
 - **D3 之后 `sim/` 冻结**，任何数值改动都要连带重录基线，不允许。
 - **D4（10-18）只做提交，不写代码。**
