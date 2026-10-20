@@ -67,6 +67,13 @@ const EDGE_J := 0.05 # 沿边微扰幅度（m；确定性 ihash，去镜面平�
 # 平顶间留一条透背景的细缝，远看即「六边地块边缘发光」。降到 1mm：只跳过真正等高，
 # 任何可见高差都由高格画墙闭合；剖面 delta 另有 0.01 下限，薄墙会埋到低邻顶下，不会穿插。
 const EDGE_MIN_DH := 0.001
+# 自然地形并台（2026-10-20 B）：场内相邻 SOLID 岩顶先按「种子 + 阈值」并块（块内取成员均值，
+# 消除逐格 5~15cm 的拼板噪声），再把块高量化到 PLATE_STEP 的整倍（设计感露台：大块平面 +
+# 干净踢脚，相邻同层块严格共面→内部棱墙全部消失）。只动 _cell_top（视觉顶），不动 sim /
+# ground_y / 拾取；边框圈（x/y=0 或 n-1，带 RIM_BUMP 周向起伏）不并（属 A 的范畴）；
+# 玩家填/挖层（get_h≠0）与可行走地面一律不并，保证建造边缘和单位贴地零变化。
+const PLATE_MERGE_DH := 0.16
+const PLATE_STEP := 0.30
 
 var host: Node3D
 var core: ViewCoreScript
@@ -326,6 +333,59 @@ func _compute_cell_top() -> void:
 					if x == 0 or y == 0 or x == n - 1 or y == n - 1:
 						t += RIM_BUMP * _rim_scale(x, y) # 边框围界（视觉围合；周向起伏 + 南口豁口）
 			_cell_top[y * n + x] = t
+	_merge_plate_tops()
+
+
+## 自然地形并台（B）：场内 SOLID 岩顶按「种子 + 阈值」连通成块（只收与种子高差 ≤ PLATE_MERGE_DH
+## 的格，防止沿坡链式吞并整片地形），块内取成员均值后**量化到 PLATE_STEP 整倍**：相邻同层块
+## 严格等高（内部棱墙消失），跨层块留一条干净的 30cm 踢脚。确定性：行主序种子 + 固定邻序。
+## 只改 _cell_top；不碰 sim、ground_y、边归属（_rebuild_hex 随合并后的顶统一重算棱墙）。
+func _merge_plate_tops() -> void:
+	var n := core.CELL_N
+	if grid == null or _cell_top.size() != n * n:
+		return
+	var done := PackedByteArray()
+	done.resize(n * n)
+	for y in n:
+		for x in n:
+			var i := y * n + x
+			if done[i] == 1:
+				continue
+			# 边框圈不并（RIM_BUMP 周向起伏留给 A）；非 SOLID 与填/挖层不并
+			if x == 0 or y == 0 or x == n - 1 or y == n - 1 or grid.at(x, y) != Grid.SOLID:
+				done[i] = 1
+				continue
+			if grid.get_h(x, y) != 0:
+				done[i] = 1
+				continue
+			var seed_h := _cell_top[i]
+			var members: Array[int] = [i]
+			var sum := seed_h
+			done[i] = 1
+			var qi := 0
+			while qi < members.size():
+				var j: int = members[qi]
+				qi += 1
+				var jx := j % n
+				var jy := j / n
+				for k in 6:
+					var nx := Grid.nx(jx, jy, k)
+					var ny := Grid.ny(jx, jy, k)
+					if nx <= 0 or ny <= 0 or nx >= n - 1 or ny >= n - 1:
+						continue
+					var i2 := ny * n + nx
+					if done[i2] == 1 or grid.at(nx, ny) != Grid.SOLID:
+						continue
+					if grid.get_h(nx, ny) != 0:
+						continue
+					if absf(_cell_top[i2] - seed_h) > PLATE_MERGE_DH:
+						continue
+					done[i2] = 1
+					members.append(i2)
+					sum += _cell_top[i2]
+			var q := roundf((sum / float(members.size())) / PLATE_STEP) * PLATE_STEP
+			for m in members:
+				_cell_top[m] = q
 
 
 ## 重建六棱板网格：逐格顶面（中心 + 6 角扇形；坡度法线/顶点色）+ 落差边剖面

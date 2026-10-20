@@ -387,6 +387,59 @@ func _terrain_edge_check(view, world) -> void:
 	check(me.x >= 0, "同层起伏边扫描")
 	if me.x >= 0:
 		cmp_int(T.edge_kind_at(me.x, me.y, me.z), 0, "同层高差边 = 石阶（微差）")
+	_plate_merge_check(T, world, CELL_N)
+
+
+## 自然地形并台（2026-10-20 B）：场内 SOLID 岩顶应全部落在 PLATE_STEP 整倍上、内部以共面为主、
+## 剩余错台 ≥ 一个台阶、位移有界；边框圈（含 RIM_BUMP 周向起伏）保持原始起伏不并。
+func _plate_merge_check(T, world, CELL_N: int) -> void:
+	var cmap: Dictionary = T.get_script().get_script_constant_map()
+	var step: float = float(cmap["PLATE_STEP"])
+	var dh_lim: float = float(cmap["PLATE_MERGE_DH"])
+	var bump: float = float(cmap["SOLID_BUMP"])
+	var rimb: float = float(cmap["RIM_BUMP"])
+	var n_cells := 0
+	var bad_quant := 0
+	var flat_edges := 0
+	var wall_edges := 0
+	var min_step := 1e9
+	var shift_max := 0.0
+	for y in range(1, CELL_N - 1):
+		for x in range(1, CELL_N - 1):
+			if world.grid.at(x, y) != Grid.SOLID or world.grid.get_h(x, y) != 0:
+				continue
+			n_cells += 1
+			var t: float = T._cell_top[y * CELL_N + x]
+			if absf(t / step - roundf(t / step)) > 1e-4:
+				bad_quant += 1
+			var raw: float = T.field_h[y * CELL_N + x] + bump
+			shift_max = maxf(shift_max, absf(t - raw))
+			for dir in [0, 1, 2]: # 3 个方向即可覆盖无重复边
+				var nx := Grid.nx(x, y, dir)
+				var ny := Grid.ny(x, y, dir)
+				if nx <= 0 or ny <= 0 or nx >= CELL_N - 1 or ny >= CELL_N - 1:
+					continue
+				if world.grid.at(nx, ny) != Grid.SOLID or world.grid.get_h(nx, ny) != 0:
+					continue
+				var d := absf(T._cell_top[ny * CELL_N + nx] - t)
+				if d <= 1e-5:
+					flat_edges += 1
+				else:
+					wall_edges += 1
+					min_step = minf(min_step, d)
+	check(n_cells > 0, "并台样本（场内 SOLID %d 格）" % n_cells)
+	check(bad_quant == 0, "SOLID 岩顶对齐 %.2fm 台阶（越界 %d）" % [step, bad_quant])
+	check(flat_edges > wall_edges, "岩顶内部以共面为主（flat=%d wall=%d）" % [flat_edges, wall_edges])
+	check(min_step >= step - 0.002, "剩余错台 ≥ 一个台阶（最小 %.3f）" % min_step)
+	check(shift_max <= 2.0 * dh_lim + step * 0.5 + 0.01, "并台位移有界（最大 %.3f）" % shift_max)
+	var border_ok := true
+	for b in [Vector2i(0, 20), Vector2i(CELL_N - 1, 20), Vector2i(20, 0), Vector2i(20, CELL_N - 1)]:
+		if world.grid.at(b.x, b.y) != Grid.SOLID or world.grid.get_h(b.x, b.y) != 0:
+			continue
+		var want: float = T.field_h[b.y * CELL_N + b.x] + bump + rimb * T._rim_scale(b.x, b.y)
+		if absf(T._cell_top[b.y * CELL_N + b.x] - want) > 1e-5:
+			border_ok = false
+	check(border_ok, "边框圈保留 RIM_BUMP 原始起伏（不参与并台）")
 
 
 ## 剖面形状：P0 恒在顶面边框线（无顶缝）；末点贴低邻顶；高度单调不增；外伸在界内。
