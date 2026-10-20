@@ -412,7 +412,10 @@ func _profile_shape_check(T, CELL_N: int, x: int, y: int, k: int, kind: int) -> 
 
 ## 顶点账目独立重算：顶面恒 7 顶点/格；界外边（崖壁·双面）按崖壁剖面 strip×4×2；
 ## 内侧画出边按 kind 剖面点数（函数内自调 edge_profile 取点数，跟随实现演进）× 4 顶点；被跳过边 0。
+## 等高阈值取 T.EDGE_MIN_DH（2026-10-20 由 0.02 降到 0.001：旧阈值会漏画 0~2cm 高差边，
+## 平顶缝透出背景成「边缘发光」；探针与渲染共用同一常量，防止再次分叉）。
 func _edge_verts_expect(T, CELL_N: int) -> int:
+	var min_dh: float = float(T.get_script().get_script_constant_map().get("EDGE_MIN_DH", 0.001))
 	var total := 0
 	for y in CELL_N:
 		for x in CELL_N:
@@ -426,7 +429,7 @@ func _edge_verts_expect(T, CELL_N: int) -> int:
 					total += (po - 1) * 4 * 2
 					continue
 				var t2: float = T._cell_top[ny * CELL_N + nx]
-				if t <= t2 + 0.02:
+				if t <= t2 + min_dh:
 					continue
 				var pts: int = T.edge_profile(x, y, k, t, t2, T.edge_kind_at(x, y, k)).size() / 2
 				total += (pts - 1) * 4

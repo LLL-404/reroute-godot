@@ -63,6 +63,10 @@ const LIP_V := 0.14 # 圆唇垂落（m，微差边按落差比例收窄）
 const RAMP_RUN := 0.34 # 可爬边坡坡脚外伸基准（m，随视觉落差限幅缩放）
 const BATTER := 0.12 # 崖壁底部外扩（斜壁坡率感，m）
 const EDGE_J := 0.05 # 沿边微扰幅度（m；确定性 ihash，去镜面平整感）
+# 同层边「等高」阈值（2026-10-20）：旧 0.02 会把 0~2cm 高差当成等高、两侧都不画棱墙，
+# 平顶间留一条透背景的细缝，远看即「六边地块边缘发光」。降到 1mm：只跳过真正等高，
+# 任何可见高差都由高格画墙闭合；剖面 delta 另有 0.01 下限，薄墙会埋到低邻顶下，不会穿插。
+const EDGE_MIN_DH := 0.001
 
 var host: Node3D
 var core: ViewCoreScript
@@ -389,7 +393,7 @@ func _rebuild_hex() -> void:
 				var inside := nx2 >= 0 and ny2 >= 0 and nx2 < n and ny2 < n
 				if inside:
 					var t2 := _cell_top[ny2 * n + nx2]
-					if t <= t2 + 0.02:
+					if t <= t2 + EDGE_MIN_DH:
 						continue # 同高/我低（低侧由对面格画）
 					t_lo = t2
 				else:
