@@ -52,6 +52,12 @@ var yaw := 0.0 # 水平旋转（绕 Y，正 = 左旋；QE 修改）
 var _pitch := 0.0 # 基准俯角（rad，取景时定；操控不改）
 var _dist := 0.0 # 相机到 focus 的基准距离（取景时定；滚轮缩放叠乘 _zoom）
 var _zoom := 1.0 # 滚轮缩放倍率（0.6–1.8；取景重置 1.0）
+# 震屏（B3）：只做平移抖动，不旋转相机 —— 旋转会让 world_to_screen 缓存与 HUD 对位漂移。
+var shake_on := true # 探针运行时关闭（截图不能被抖偏，像素校验口径）
+var shake_t := 0.0 # 剩余时间（秒）
+var shake_dur := 0.0 # 本次总时长（秒；衰减分母）
+var shake_amp := 0.0 # 峰值幅度（米）
+var shake_phase := 0.0 # 相位推进（秒×42）
 var _fit: Dictionary = {}
 var _fit_w := 0.0
 var _fit_h := 0.0
@@ -446,6 +452,30 @@ func fit_camera() -> void:
 	_fit_h = H
 
 
+## 触发震屏（amp 单位米，dur 秒）。同帧多次触发取「更强 + 更久」各一项，幅值不叠加：
+## 多塔同时打核心时叠加会直接晃吐，取 max 才是可以连续触发的口径。
+func shake(amp: float, dur: float) -> void:
+	if not shake_on:
+		return
+	shake_amp = maxf(shake_amp, amp)
+	shake_dur = maxf(shake_dur, dur)
+	shake_t = maxf(shake_t, dur)
+
+
+## 逐帧推进震屏并重算相机；返回是否仍在震（调用方无需处理返回值，这里自己沉降）。
+## 归零那一帧也要 _apply_cam()：把相机摆回无偏移位姿，否则会停在最后一帧的偏移上。
+func update_shake(dt: float) -> bool:
+	if shake_t <= 0.0:
+		return false
+	shake_phase += dt * 42.0
+	shake_t = maxf(shake_t - dt, 0.0)
+	if shake_t <= 0.0:
+		shake_amp = 0.0
+		shake_dur = 0.0
+	_apply_cam()
+	return true
+
+
 ## 由 (focus, yaw, 基准俯角/距离, 缩放) 沉降相机位姿，并刷新投影缓存。
 func _apply_cam() -> void:
 	var sr := sin(_pitch)
@@ -454,6 +484,16 @@ func _apply_cam() -> void:
 	var u := Vector3(0.0, cr, -sr).rotated(Vector3.UP, yaw)
 	var d := _dist * _zoom
 	camera.position = focus - f * d
+	if shake_t > 0.0 and shake_amp > 0.0:
+		var k := shake_t / maxf(shake_dur, 0.001)
+		var a := shake_amp * k * k # 二次衰减：收尾干脆，不留尾巴
+		# 两个不同频率的正弦叠加 = 不规则的抖，比单一正弦更像撞击
+		var rx := sin(shake_phase * 1.7) + sin(shake_phase * 0.53) * 0.5
+		var ry := cos(shake_phase * 1.31) + cos(shake_phase * 0.71) * 0.5
+		var right := f.cross(Vector3.UP)
+		if right.length_squared() < 1e-6:
+			right = Vector3.RIGHT
+		camera.position += (right.normalized() * rx + u.normalized() * ry) * a
 	camera.look_at(camera.position + f * 100.0, u)
 	_update_fit_cache()
 

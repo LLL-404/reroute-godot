@@ -60,6 +60,8 @@ func _ready() -> void:
 	_setup_shell()
 	_setup_run_ui()
 	_is_probe_run = _detect_probe_run()
+	if _is_probe_run:
+		view.core.shake_on = false # 震屏会抖偏截图：探针/selfcheck/headless 一律不启用（像素校验口径）
 	_settings = UserSettings.load_cfg()
 	if _is_probe_run:
 		UserSettings.apply_audio(_settings) # 探针只应用音量（显示/画质保持默认，保 gate 截图口径）
@@ -763,6 +765,8 @@ func _update_camera(dt: float) -> void:
 		rot -= 1.0
 	if rot != 0.0:
 		view.camera_rotate(rot * CAM_ROT_SPEED * dt)
+	# 震屏放最后：pan/rotate 各自会 _apply_cam()，震动必须叠在它们之上，否则被覆盖
+	view.update_shake(dt)
 
 
 # ---------------- 输入（移植 main.lua：拖拽放墙/塔、点覆盖层挖矿、点建筑拆除） ----------------

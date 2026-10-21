@@ -96,6 +96,16 @@ func camera_zoom(factor: float) -> void:
 	core.zoom_by(factor)
 
 
+## 震屏（B3，amp 米 / dur 秒；只平移不旋转；探针运行时由 main 关闭）
+func shake(amp: float, dur: float) -> void:
+	core.shake(amp, dur)
+
+
+## 逐帧推进震屏（main 每帧调；无震动时零成本早退）
+func update_shake(dt: float) -> void:
+	core.update_shake(dt)
+
+
 ## 应用蓝图（→ view_terrain）；anchor 可选：地标对齐当局 Scenario（见 blueprint.compose）
 func apply_blueprint(bp: Dictionary, seed: int, anchor: Dictionary = {}) -> void:
 	terrain.apply_blueprint(bp, seed, anchor)

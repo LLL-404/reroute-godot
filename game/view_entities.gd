@@ -24,6 +24,12 @@ const GOLD_SFX_GLOBAL := 8 # 收金音最小间隔 → 2.5 次/秒
 const FLASH_TICKS := 6 # 闪白时长 = 受击脉冲同长（0.3s）
 const FLASH_HI_LEVEL := 0.22 # 高档 ADD 加法强度（实测 0.30 起暗色单位会读成灰白，0.22 仍保留色相）
 const FLASH_LO_LEVEL := 0.10 # 低档（脉冲后半程衰减）
+# 震屏（B3）：只平移不旋转。核心受击 2 次/秒、技能 1 次/释放 —— 都是"力度大但不密集"的点。
+const CORE_SHAKE_THROTTLE := 10 # 核心受击震屏节流（tick）
+const CORE_SHAKE_AMP := 0.30 # 米（约 1.5% 屏高 @默认取景）
+const CORE_SHAKE_DUR := 0.22
+const SKILL_SHAKE_AMP := 0.45
+const SKILL_SHAKE_DUR := 0.28
 # 敌人 kind → 资产形态（照母版 view3d.ZFORM：虫群 → blade，蛮兽 → king）
 const ZFORM := { 1: 2, 2: 3 }
 
@@ -80,6 +86,7 @@ var _units_n := 0
 var _horn_tick := -999
 var _core_hp := -1 # 核心血量缓存（受击音检测；-1 = 未建档）
 var _core_hit_tick := -999 # 最近核心受击音节流点
+var _core_shake_tick := -999 # 最近核心受击震屏点（独立、更密的节流）
 var _hurt_sfx_tick := -999 # 最近全局受击音 tick（限流）
 var _attack_sfx_tick := -999 # 最近全局攻击音 tick（限流）
 var _gold_sfx_tick := -999 # 最近收金音 tick（限流）
@@ -659,11 +666,15 @@ func sync(world: World) -> void:
 					tower_fired = true
 				entry["cd"] = cdn
 			if int(b["kind"]) == Sim.B_CORE:
-				# 核心受击=血量下降；30t 节流防多敌同啃叠音（首次建档不响）
+				# 核心受击=血量下降；音效 30t 节流防多敌同啃叠音，震屏 10t 独立节流（要更密的反馈）
 				var chp: int = int(b["hp"])
-				if _core_hp >= 0 and chp < _core_hp and (world.tick_count - _core_hit_tick) > CORE_HIT_THROTTLE:
-					audio.play_sound("core_hit.mp3", 0.8)
-					_core_hit_tick = world.tick_count
+				if _core_hp >= 0 and chp < _core_hp:
+					if (world.tick_count - _core_shake_tick) > CORE_SHAKE_THROTTLE:
+						core.shake(CORE_SHAKE_AMP, CORE_SHAKE_DUR)
+						_core_shake_tick = world.tick_count
+					if (world.tick_count - _core_hit_tick) > CORE_HIT_THROTTLE:
+						audio.play_sound("core_hit.mp3", 0.8)
+						_core_hit_tick = world.tick_count
 				_core_hp = chp
 			var w := core.cell_to_world(int(b["x"]), int(b["y"]))
 			var by := terrain.ground_y(int(b["x"]), int(b["y"]))
@@ -970,6 +981,7 @@ func update_shock_ring(world: World) -> void:
 		var hx: int = h["x"]
 		var hy: int = h["y"]
 		if int(h["skill_cd"]) > _hero_cd:
+			core.shake(SKILL_SHAKE_AMP, SKILL_SHAKE_DUR) # 技能释放：一次性重震，无节流（释放本身有冷却）
 			var w := core.cell_to_world(hx, hy)
 			var g := Node3D.new()
 			g.name = "shockring"

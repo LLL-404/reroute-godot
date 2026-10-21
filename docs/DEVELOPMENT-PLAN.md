@@ -2879,7 +2879,7 @@ APK 侧则直接用 `select-package`（`{"slot":"main","package":{"id":"<新apk>
   以会话收敛后的最终态为准）
 - 预览邮件随附 6-7 张截图（title/settings/slots/gameover/hud/game/game_tablet）
 
-### 11.35 打击感补丁：静默音效接线 + 受击闪白 + 音高抖动（2026-10-21）
+### 11.35 打击感补丁：静默音效接线 + 受击闪白 + 震屏 + 音高抖动（2026-10-21）
 
 #### 起因：音效库 30 个文件只用了 12 个
 
@@ -2896,6 +2896,7 @@ APK 侧则直接用 `select-package`（`{"slot":"main","package":{"id":"<新apk>
 | A3 收金音 | 同上 | 比较 `world.supply` 增量 → `gold_collect`，音量 0.4；本帧有挖矿覆盖层消失时让位（已有 `mining_gold_hit`） |
 | B1 音高抖动 | `game/view_audio.gd` | `pitch_scale = 1 ± 4%`，独立 `RandomNumberGenerator`，不污染 sim 确定性 |
 | B2 受击闪白 | `game/view_entities.gd` | `MeshInstance3D.material_overlay` 挂共享 ADD 材质，随脉冲两档衰减（0.22 → 0.10 → 关） |
+| B3 震屏 | `game/view_core.gd` / `view.gd` / `main.gd` | 相机位姿只叠**平移**偏移（两频正弦 + 二次衰减）；探针态由 `main` 关 `shake_on` |
 
 **限流是硬要求**（大群围攻逐兵逐帧触发必音爆）：
 
@@ -2915,6 +2916,18 @@ APK 侧则直接用 `select-package`（`{"slot":"main","package":{"id":"<新apk>
 两档强度实测依据：`shots/flash_off.png` / `flash_on.png`（同姿态对照）。0.30 起暗色 zerg 就读成灰白、丢失色相，**0.22 是保留色相的上限**。
 低画质档（`fx_quality == 0`）强制关闪白，但**仍要走一次写 null 的路径**，否则切档后残留亮层。
 
+#### 震屏：三条设计约束
+
+| 约束 | 原因 |
+|---|---|
+| **只平移，不旋转** | 旋转会改 `world_to_screen` 的闭式解缓存，HUD 浮动文字与建造预览会跟着漂；平移不动朝向，HUD 对位不变 |
+| **同帧多次触发取 max，不叠加** | 多塔同时打核心时幅值叠乘会直接晃吐；`shake_amp = max(amp)` 才支持连续触发 |
+| **探针态必须关（`shake_on = false`）** | 截图探针靠固定取景做像素校验，抖动会让基准图漂移；`main._ready` 里按 `_detect_probe_run()` 关 |
+
+归零那一帧也必须 `_apply_cam()` —— 否则相机会停在最后一帧的偏移上，回不到基准位（`probe_gamefeel` 第三段专测这条）。
+
+口径：核心受击 0.30m / 0.22s、10 tick 独立节流（约 2 次/秒，比音效的 30 tick 更密）；技能释放 0.45m / 0.28s，无节流（释放本身有冷却）。
+
 #### 验收
 
 | 闸 | 结果 |
@@ -2927,19 +2940,19 @@ APK 侧则直接用 `select-package`（`{"slot":"main","package":{"id":"<新apk>
 | `probe_smoke`（窗口模式） | `checks=34 bad=0 PASS` |
 | `probe_hud` | `checks=91 bad=0 PASS` |
 | `probe_input` | `checks=93 bad=0 PASS` |
-| **`probe_flash`（新增闸）** | `checks=12 bad=0 PASS`（tick 940 首次闪白命中 + 消退验证） |
+| **`probe_gamefeel`（新增闸）** | `checks=18 bad=0 PASS`（闪白触发 tick 940 + 消退 + 震屏生命周期 + 核心受击触发点） |
 
-⚠️ `probe_audio` / `probe_asset` / `probe_smoke` / `probe_flash` **必须窗口模式**：
+⚠️ `probe_audio` / `probe_asset` / `probe_smoke` / `probe_gamefeel` **必须窗口模式**：
 `audio_on` 在 headless 下为 false，6 条「播放中」断言会假失败；`probe_asset` 在 headless 会 SIGTERM。
 
 #### 未做（留档备选）
 
 | 项 | 未做原因 |
 |---|---|
-| 屏幕震动 | 探针截图会抖动，需要先给 `view_core` 加 `shake_on` 闸并接到 `_detect_probe_run` |
 | 通用飘字（伤害/资源） | 需先把 `hud.float_bounty` 的池扩成通用接口，属 hud.gd 改动（该文件有外部并发写入史，改动前必须重读） |
 | 顿帧 | 塔防节奏会被打断，只适合核心受击单点，待玩法侧裁定 |
 | 敌人头顶血条 | 会让玩家精确算血，削弱塔防的不确定焦虑，**不建议做** |
+| 建造落位尘土 | 需要新增粒子节点，还要考虑低画质档降级，成本高于前四项 |
 
 ---
 
