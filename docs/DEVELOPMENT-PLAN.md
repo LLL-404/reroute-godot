@@ -2972,6 +2972,52 @@ APK 侧则直接用 `select-package`（`{"slot":"main","package":{"id":"<新apk>
 
 ---
 
+### 11.37 v2.5 双端包重出 + 提审被活动规则拦截（2026-10-21 12:00~13:45）
+
+**动因**：UI v2.5（图标指挥盘 + 三屏翻新，§11.35）+ 撤销 pill + §11.36 低血警告 +
+打击感/震屏 + 地形法线图 RG 重建 Z（修复地形不吃直射光）；用户确认界面后按 §11.26
+口径重出四件并提审。
+
+**产物（`export/`）**：
+
+| 产物 | 字节 | SHA-256 |
+|---|---|---|
+| `game.exe` | 109,551,432 | `0539d11b…85bc`（复签 `SIGNED=Valid`，CN=Reroute；与历次模板同哈希） |
+| `game.pck` | 109,931,816 | `3875e640…c0abe` |
+| `reroute-windows.zip` | 183,819,190 | `0207e344…5681b`（192 条目，无 `.idsig`，exe/pck 在根） |
+| `reroute-release.apk` | 312,256,406 | `5ed7a5b2…0914`（`CN=Reroute`，versionCode **2** / versionName **1.0.1**，targetSdk 36） |
+
+**验证**：107 单测 / `probe_golden` 16 指纹 / `probe_privacy` 9:0 / `probe_shots` 9:0 /
+`check_shots` 44:0 / 包内 `--selfcheck` **33:0 PASS**；APK `apksigner` + `aapt` 复核
+签名与版本号。
+
+**草稿绑定（`V-20261021-1` / id 1118544）**：
+
+- `main` APK = **1068781**（1.0.1 / code 2 / 312,256,406 B；`apk/config` 的
+  `anti_addiction_status=0` + `sandbox_authorized=true`）
+- `windows` = **23569**（1.4.0 / 184,002,566 B；`create-package` + 手填版本三框，
+  可执行文件 `game.exe`、未接入防沉迷）
+- 更新日志 `info.whatsnew` / `info.pc_whatsnew` 已填；发布设置「过审后立即发布」，
+  `release_method` / `release_time` 均为 null（**无首发/定时时间**）。
+
+**提审结果：平台硬性拦截（非本项目缺陷）**：
+
+`POST /api/app/v2/upload-app/submit` → **400**
+
+```json
+{"code":-1,"error":"invalid_request",
+ "msg":"聚光灯活动试玩评审期间禁止发布更新，试玩评审期结束后可自由更新",
+ "error_description":"FAILED_PRECONDITION: 聚光灯活动试玩评审期间禁止发布更新，试玩评审期结束后可自由更新"}
+```
+
+活动页口径：**全民试玩与评审 = 2026-10-25 ~ 12-03**。⇒ 评审期结束前无法发布任何
+新版本；草稿与四件产物保留，12-03 后直接提审（届时复核包体仍在、按需重填更新日志）。
+
+**线上版本未受影响**：`V-20261021` 仍 `Released`（APK 1067414 / Windows 21249）；
+商店页正常显示「上线日期 2026-10-20」「试玩 DEMO」，无「未通过」字样。
+
+---
+
 ## 12. AI 任务卡模板（派活时照抄）
 
 ```markdown
