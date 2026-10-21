@@ -15,15 +15,15 @@ uniform sampler2D sand_nrm : hint_normal, filter_linear_mipmap_anisotropic, repe
 uniform sampler2D rock_col : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
 uniform sampler2D rock_nrm : hint_normal, filter_linear_mipmap_anisotropic, repeat_enable;
 
-uniform vec3 sand_gain = vec3(1.26, 1.39, 1.74); // 1/µ(Ground093C 0.796,0.722,0.576)
-uniform vec3 rock_gain = vec3(3.60, 3.90, 4.20); // Rock061 偏暗（µ 0.33）：两轮标定后定值（陡崖面 = 全帧最大暗源，专攻）
+uniform vec3 sand_gain = vec3(0.95, 1.04, 1.31); // 1/µ(Ground093C) × 0.75（2026-10-21 法线修复后地面吃满主光，原增益过曝）
+uniform vec3 rock_gain = vec3(2.70, 2.93, 3.15); // Rock061 偏暗（µ 0.33）：两轮标定后定值，同步 ×0.75
 uniform float tex_m_sand = 3.4; // 地面纹理：1 平铺的世界米数（1K 砖，标定斜视无平铺感）
 uniform float tex_m_rock = 3.6;
 uniform float rough_sand = 0.62;
 uniform float rough_rock = 0.66; // 暗面粗糙度回收（0.74 实测发闷）
 uniform float nrm_sand = 0.75; // 法线强度（0=平，1=贴图全量）
 uniform float nrm_rock = 0.75; // 岩面法线回收（1.30 时暗面自遮蔽过重）
-uniform float rock_soft_up = 1.05; // 岩面风格化顶光补偿（陡壁面世界法线向上偏 a×此值：借顶光/天光，消北侧阴影面死黑；2026-10-17 自然化调色）
+uniform float rock_soft_up = 0.20; // 岩面风格化顶光补偿（2026-10-21：原 1.05 是「法线朝下」时代的补丁，法线修好后降到 0.20 只保留一点崖壁借光）
 
 varying vec3 v_wpos;
 varying vec3 v_wnrm;

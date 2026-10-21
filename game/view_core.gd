@@ -77,8 +77,9 @@ func setup() -> void:
 	env.background_mode = Environment.BG_COLOR
 	env.background_color = Color(0.55, 0.44, 0.33)
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	env.ambient_light_color = Color(0.50, 0.52, 0.60) # 冷调天光（落日暖阳 + 冷影对比）
-	env.ambient_light_energy = 0.50
+	env.ambient_light_color = Color(0.42, 0.48, 0.60) # 冷调天光（落日暖阳 + 冷影对比）
+	env.ambient_light_energy = 0.24 # 2026-10-21 法线修复后重平衡：0.50 → 0.24（主光终于照到地形，无需再用天光撑亮度）
+	env.tonemap_mode = Environment.TONE_MAPPER_ACES # 2026-10-21：线性 tonemap 下 1.45 的主光会削顶，换 ACES 收高光
 	env.fog_enabled = true
 	env.fog_mode = Environment.FOG_MODE_DEPTH
 	env.fog_light_color = Color(0.60, 0.47, 0.34)
@@ -91,10 +92,17 @@ func setup() -> void:
 
 	sun = DirectionalLight3D.new()
 	sun.name = "Sun"
-	sun.light_energy = 1.55
+	sun.light_energy = 1.45
 	sun.light_color = Color(1.0, 0.84, 0.62) # 金色时刻暖阳（对齐宣传图）
 	sun.shadow_enabled = true
-	sun.rotation_degrees = Vector3(-58.0, 10.0, 0.0) # 2026-10-17 yaw 38→10：南向陡崖面照度 +26%（NdotL 0.42→0.53），贴图文理更吃光
+	sun.rotation_degrees = Vector3(-46.0, -24.0, 0.0) # 2026-10-21：-58/10 → -46/-24。原角度投影几乎全被崖体自身遮住，斜侧主光让地面出现可见投影、拉出立体感
+	# 2026-10-21：相机距地图中心约 81m，默认 100m + fade_start 0.8 → 主场区正好落在淡出区，投影在实机视角几乎不可见。
+	# 拉长到 190m 并关掉淡出，让整片场地都在阴影覆盖内。
+	sun.directional_shadow_max_distance = 190.0
+	sun.directional_shadow_fade_start = 1.0
+	# 法线偏移 2.0m 会把 1m 级岩块的投影整个推没（远景只能看到 3m 以上的大件才有影），收到 0.35m。
+	sun.shadow_bias = 0.04
+	sun.shadow_normal_bias = 0.35
 	host.add_child(sun)
 
 	for k in MAT:
@@ -154,7 +162,7 @@ func apply_video(cfg: Dictionary) -> void:
 		vp.use_taa = aa == 2
 	if sun != null:
 		sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_2_SPLITS if sq == 0 else DirectionalLight3D.SHADOW_PARALLEL_4_SPLITS
-		var dists: Array = [45.0, 80.0, 100.0]
+		var dists: Array = [110.0, 150.0, 190.0]
 		sun.directional_shadow_max_distance = float(dists[sq])
 	if env != null:
 		_post_q = pq
