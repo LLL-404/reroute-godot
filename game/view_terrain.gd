@@ -79,9 +79,6 @@ const PLATE_STEP := 0.30
 # 不改 sim/拾取，也不动 probe_scene/input 的 field_root 子节点结构。
 const ROCK_PROP_SALT := 771
 const ROCK_MOUTH_PAD := 0.6 # 出怪口沿周向额外留白（m）：在 RIM_MOUTH_W 豁口宽度上再让一圈
-# 出怪口保留半径（m，1 格 = 1 世界单位）：边框岩脊在此半径内不铺，保证豁口不被碎石堵住。
-# 引用点 _gate_pts 存世界坐标（main._visual_anchor 已做 odd-r 换算）。
-const ROCK_GATE_KEEP := 1.4
 const ROCK_ICO_T := 1.618034
 const ROCK_ICO_V := [
 	Vector3(-1.0, ROCK_ICO_T, 0.0), Vector3(1.0, ROCK_ICO_T, 0.0),
@@ -494,14 +491,19 @@ func _rebuild_rock_props() -> void:
 				# —— 边框围墙顶：成带岩脊，打散锯齿（出怪口豁口保留）——
 				if Blueprint.ihash(x * 5 + 1, y * 5 + 3, ROCK_PROP_SALT) < 0.22:
 					continue
-				var gate := false
-				for gp in _gate_pts:
-					var dx: float = w.x - gp.x
-					var dz: float = w.z - gp.y
-					if dx * dx + dz * dz < ROCK_GATE_KEEP * ROCK_GATE_KEEP:
-						gate = true
+				# 出怪口：gate_pts 是 spawn 格（径向坐标可落场内），只有侧别 + 切向坐标定义边框豁口；
+				# 与 _rim_scale 同口径，沿切向留白 RIM_MOUTH_W + ROCK_MOUTH_PAD，避免碎石堵住视觉门。
+				var rim_side := Blueprint.gate_side(w.x, w.z)
+				var mouth := false
+				for gp0 in _gate_pts:
+					var gp: Vector2 = gp0
+					if Blueprint.gate_side(gp.x, gp.y) != rim_side:
+						continue
+					var tang := absf(w.x - gp.x) if rim_side <= 1 else absf(w.z - gp.y)
+					if tang < RIM_MOUTH_W + ROCK_MOUTH_PAD:
+						mouth = true
 						break
-				if gate:
+				if mouth:
 					continue
 				var s := 0.46 + 0.34 * Blueprint.ihash(x * 7 + 2, y * 7 + 5, ROCK_PROP_SALT + 1)
 				var hs := 0.60 + 0.30 * Blueprint.ihash(x * 11 + 4, y * 11 + 6, ROCK_PROP_SALT + 2)

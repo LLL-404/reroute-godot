@@ -95,6 +95,20 @@ func _initialize() -> void:
 				break
 		check(found, "六边格(24,24) 中心顶点存在")
 
+	# B2 岩块散布（2026-10-20）：HexField 子节点（不占 field_root 直接子节点名额，ground=1 不变）；
+	# 单 surface、顶点数在预算内（默认图实测约 26k；边界留 3k..120k 容纳变幅图）。
+	if hexes.size() == 1:
+		var rn: Node = hexes[0].get_node_or_null("RockProps")
+		var rp: MeshInstance3D = null
+		if rn is MeshInstance3D:
+			rp = rn
+		var rp_ok: bool = rp != null and rp.mesh != null and rp.mesh.get_surface_count() == 1
+		check(rp_ok, "岩块散布网格就位（RockProps 单 surface）")
+		if rp_ok:
+			var rarr: Array = rp.mesh.surface_get_arrays(0)
+			var rv: PackedVector3Array = rarr[Mesh.ARRAY_VERTEX]
+			check(rv.size() >= 3000 and rv.size() <= 120000, "岩块顶点数在预算内（%d）" % rv.size())
+
 	# ---- 拍2 视觉联动锚点（自由路径首局接线） ----
 	var anchor: Dictionary = main._visual_anchor()
 	check(anchor.get("ridge_off", false) == true, "自由路径关闭预设岩脊（ridge_off）")
