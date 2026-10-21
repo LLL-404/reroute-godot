@@ -1,14 +1,15 @@
 extends ProbeKit
 
-# 受击闪白探针（2026-10-21）：验证 material_overlay 这条提亮通道确实落在 skinned mesh 上，
-# 且在真实对局里能触发、能自行消退。
+# 打击感探针（2026-10-21）：受击闪白 + 震屏。两样都只能靠实测确认是否真的落到画面上。
+#   · 闪白：material_overlay 是否落在 skinned mesh 上、能否触发、能否自行消退
+#   · 震屏：shake() 是否置起计时、是否真的位移了相机、归零后是否精确复位
 #
 # 为什么单独一道闸：overlay 的两个坑都只能靠实测发现，代码审查看不出来 ——
 # ① ADD 混合下 albedo_color 的 alpha 不参与强度，强度必须写进颜色值（否则闪白形同虚设）；
 # ② cull_mode = CULL_DISABLED 会让背面再叠一遍，暗色单位直接过曝成纯白剪影。
 #
-# 跑法（窗口模式）：godot -path <proj> -s res://tests/probes/probe_flash.gd
-# 判定：exit 0 + `[FLASH] PASS`；证据图 shots/flash_off.png / shots/flash_on.png（同姿态对照）。
+# 跑法（窗口模式）：godot -path <proj> -s res://tests/probes/probe_gamefeel.gd
+# 判定：exit 0 + `[GAMEFEEL] PASS`；证据图 shots/flash_off.png / shots/flash_on.png（同姿态对照）。
 
 const ModelsScript = preload("res://game/models.gd")
 const ViewEntitiesScript = preload("res://game/view_entities.gd") # 直接取游戏内常量，避免探针图与实际参数脱节
@@ -102,7 +103,7 @@ func _initialize() -> void:
 				if mi.material_overlay != null:
 					flashed += 1
 		if flashed > 0:
-			print("[FLASH] 首次闪白 @i=", i, " tick=", world.tick_count)
+			print("[GAMEFEEL] 首次闪白 @i=", i, " tick=", world.tick_count)
 			break
 	check(total > 0, "单位 mesh 已收集（样本 " + str(total) + "）")
 	check(flashed > 0, "受击闪白在真实对局中出现（命中 " + str(flashed) + "）")
@@ -126,7 +127,53 @@ func _initialize() -> void:
 			var ms3: Array = e3.get("meshes", [])
 			clear_ok = ms3.size() > 0 and (ms3[0] as MeshInstance3D).material_overlay == null
 	check(clear_ok, "闪白自行消退（overlay 已清空）")
-	finish("FLASH", 3)
+
+	# ---- 第三段：震屏生命周期（探针态 shake_on=false，这里显式打开做单元级验证）----
+	view.core.shake_on = true
+	var cam0: Vector3 = view.core.camera.position
+	view.core.shake(0.30, 0.20)
+	check(view.core.shake_t > 0.0, "shake() 置起震屏计时")
+	view.core.update_shake(0.05)
+	var cam1: Vector3 = view.core.camera.position
+	var dev: float = cam1.distance_to(cam0)
+	check(dev > 0.001, "震屏期间相机偏离基准位（Δ=" + str(snappedf(dev, 0.001)) + "m）")
+	for _i in 8:
+		view.core.update_shake(0.05) # 累计 0.45s > 0.20s
+	check(view.core.shake_t <= 0.0, "震屏按时归零")
+	var cam2: Vector3 = view.core.camera.position
+	check(cam2.distance_to(cam0) < 0.001, "归零后相机回基准位（Δ=" + str(cam2.distance_to(cam0)) + "m）")
+	check(not view.core.update_shake(0.05), "归零后 update_shake 直接早退")
+	view.core.shake_on = false
+
+	# ---- 第四段：真实对局打到核心时，震屏触发点确实被走过（关掉震屏也照样记 tick）----
+	var core_tick := -999
+	for _i in 2200:
+		main._process(0.5) # 5 tick/次 → 上限 11000 tick，足够打到核心
+		if _i % 10 == 0:
+			await process_frame
+		core_tick = int(view.entities._core_shake_tick)
+		if core_tick > -999:
+			break
+	check(core_tick > -999, "核心受击触发震屏点（tick=" + str(core_tick) + "）")
+
+	# ---- 第五段：核心低血渐晕（阈值进出 + 终局淡出）。dt 给大值以走完 move_toward ----
+	var vg = main.danger
+	check(vg != null, "低血渐晕节点已挂载")
+	if vg != null:
+		var hmax: int = int(vg.debug_state()["max_hp"])
+		vg.update_hp(hmax, 2.0, false)
+		check(float(vg.debug_state()["strength"]) < 0.02, "满血时无红晕")
+		vg.update_hp(int(float(hmax) * 0.08), 2.0, false)
+		var lo: float = float(vg.debug_state()["strength"])
+		check(lo > 0.4, "低血量红晕升起（strength=" + str(snappedf(lo, 0.01)) + "）")
+		main.shell.close_all() # 结算屏层级(20) 高于渐晕(15)，截图前先关，否则拍到的是结算屏
+		main.hud.set_visible_hud(true)
+		for _i in 3:
+			await process_frame
+		await _shot("res://shots/danger_low.png")
+		vg.update_hp(int(float(hmax) * 0.08), 2.0, true)
+		check(float(vg.debug_state()["strength"]) < 0.02, "终局/暂停时淡出")
+	finish("GAMEFEEL", 3)
 
 
 func _shot(path: String) -> void:
@@ -135,7 +182,7 @@ func _shot(path: String) -> void:
 	check(img != null, "截图非空 " + path)
 	if img != null:
 		img.save_png(path)
-		print("[FLASH] ", path, " ", img.get_width(), "x", img.get_height())
+		print("[GAMEFEEL] ", path, " ", img.get_width(), "x", img.get_height())
 
 
 func _collect(n: Node, out: Array) -> void:

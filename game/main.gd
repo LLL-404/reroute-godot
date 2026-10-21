@@ -31,6 +31,7 @@ var paused := true # R1 新局即跑（标题屏 R6 接入后恢复"启动即暂
 var time_scale := 1.0
 var hud = null # HUD（game/hud.gd 实例）
 var hud_layer: CanvasLayer
+var danger = null # 核心低血警告（game/danger_vignette.gd 实例，独立 CanvasLayer 15）
 var shell = null # 界面壳（game/screens.gd 实例）
 var over_shown := false
 
@@ -147,6 +148,9 @@ func _setup_hud() -> void:
 	})
 	hud_regions_provider = Callable(hud, "hit_regions")
 	view.on_float = Callable(hud, "float_bounty")
+	danger = preload("res://game/danger_vignette.gd").new()
+	danger.name = "DangerVignette"
+	add_child(danger)
 
 
 ## 界面壳构建与接线（口径同母版 main.Start：Shell.init 注入回调）。
@@ -670,6 +674,8 @@ func _process(dt: float) -> void:
 	update_ghost()
 	_update_undo_ui()
 	_update_camera(dt)
+	# 核心低血警告：暂停/标题/终局一律淡出（壳层本就压在上面，淡出是为了回对局时不残留）
+	danger.update_hp(int(world.core["hp"]), dt, paused or world.outcome != World.RUNNING)
 	if not paused or shell.current_page() == "pause":
 		hud.update(world) # 暂停时仍刷（面板静置）；标题/结算下 HUD 已整体隐藏
 	shell.update()
