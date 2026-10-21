@@ -67,13 +67,14 @@ const EDGE_J := 0.05 # 沿边微扰幅度（m；确定性 ihash，去镜面平�
 # 平顶间留一条透背景的细缝，远看即「六边地块边缘发光」。降到 1mm：只跳过真正等高，
 # 任何可见高差都由高格画墙闭合；剖面 delta 另有 0.01 下限，薄墙会埋到低邻顶下，不会穿插。
 const EDGE_MIN_DH := 0.001
-# 自然地形并台（2026-10-20 B）：场内相邻 SOLID 岩顶先按「种子 + 阈值」并块（块内取成员均值，
-# 消除逐格 5~15cm 的拼板噪声），再把块高量化到 PLATE_STEP 的整倍（设计感露台：大块平面 +
-# 干净踢脚，相邻同层块严格共面→内部棱墙全部消失）。只动 _cell_top（视觉顶），不动 sim /
-# ground_y / 拾取；边框圈（x/y=0 或 n-1，带 RIM_BUMP 周向起伏）不并（属 A 的范畴）；
-# 玩家填/挖层（get_h≠0）与可行走地面一律不并，保证建造边缘和单位贴地零变化。
-const PLATE_MERGE_DH := 0.16
+# 自然地形并台（2026-10-20 B；2026-10-21 扩为全场）：
+# 场内相邻格先按「高度阈值 + 材质（SOLID/软地）」并块（块内取成员均值，消除逐格 5~15cm 的
+# 拼板噪声），再把块高量化到 PLATE_STEP 的整倍（大块平面 + 干净踢脚，块内严格共面）。
+# 只动 _cell_top / _plate_id（视觉层），不动 sim / ground_y / 拾取；边框圈不并；
+# 玩家填/挖层（get_h≠0）不并，保证建造边缘和单位贴地零变化。
+const PLATE_MERGE_DH := 0.34 # 原 0.16：只够吃掉噪声、吃不掉「一格一个高度」的蓝图起伏。提到 0.34 才能连成大片
 const PLATE_STEP := 0.30
+const PLATE_MAX_CELLS := 48 # 单块上限（格）：防止沿坡链式吞并把整张图并成一块
 # 程序化岩块散布（2026-10-20 B2）：场内 SOLID 岩顶（台缘优先）与边框围墙顶撒低模碎岩——
 # 打散拼板缝/锯齿顶。纯视觉、确定性哈希、单网格合并；RockProps 挂 HexField 子节点，
 # 不改 sim/拾取，也不动 probe_scene/input 的 field_root 子节点结构。
@@ -121,6 +122,7 @@ var _ln := 0 # 每轴采样线数
 var _i0 := 0 # 场内采样线起始下标（= -HALF 线）
 var _i1 := 0 # 场内采样线结束下标（= +HALF 线）
 var _cell_top := PackedFloat64Array() # 每格视觉顶（蓝图高 + 模拟层 + SOLID 抬升）
+var _plate_id := PackedInt32Array() # 每格所属地块 ID（-1 = 不参与合并：边框圈/挖填层）；块内色相与高度共用
 var _heights := PackedFloat64Array()
 var _positions := PackedVector3Array()
 var _normals := PackedVector3Array()
@@ -358,34 +360,38 @@ func _compute_cell_top() -> void:
 	_merge_plate_tops()
 
 
-## 自然地形并台（B）：场内 SOLID 岩顶按「种子 + 阈值」连通成块（只收与种子高差 ≤ PLATE_MERGE_DH
-## 的格，防止沿坡链式吞并整片地形），块内取成员均值后**量化到 PLATE_STEP 整倍**：相邻同层块
-## 严格等高（内部棱墙消失），跨层块留一条干净的 30cm 踢脚。确定性：行主序种子 + 固定邻序。
-## 只改 _cell_top；不碰 sim、ground_y、边归属（_rebuild_hex 随合并后的顶统一重算棱墙）。
+## 自然地形并台（B，2026-10-21 扩为全场）：
+## 场内所有「非边框圈、非挖填层」格按「高度（阈值内）+ 材质（SOLID/软地二分）」连通成块，
+## 块内取高度均值后**量化到 PLATE_STEP 整倍** → 块内顶面严格等高 → _rebuild_hex 判同高、
+## 不再画 1mm 级的逐格石阶唇线（原 EDGE_MIN_DH=0.001，5~15cm 的蓝图噪声导致满屏六边形格线）。
+## 同时登记 _plate_id：_field_color 用它代替逐格坐标做哈希，块内色相完全一致。
+## 只改 _cell_top / _plate_id；不碰 sim、ground_y、拾取。确定性：行主序种子 + 固定邻序。
 func _merge_plate_tops() -> void:
 	var n := core.CELL_N
 	if grid == null or _cell_top.size() != n * n:
 		return
+	if _plate_id.size() != n * n:
+		_plate_id.resize(n * n)
+	_plate_id.fill(-1)
 	var done := PackedByteArray()
 	done.resize(n * n)
+	var next_id := 0
 	for y in n:
 		for x in n:
 			var i := y * n + x
 			if done[i] == 1:
 				continue
-			# 边框圈不并（RIM_BUMP 周向起伏留给 A）；非 SOLID 与填/挖层不并
-			if x == 0 or y == 0 or x == n - 1 or y == n - 1 or grid.at(x, y) != Grid.SOLID:
-				done[i] = 1
-				continue
-			if grid.get_h(x, y) != 0:
+			# 边框圈不并（RIM_BUMP 周向起伏留给 A）；挖/填层不并（玩法要看见坑/堆）
+			if x == 0 or y == 0 or x == n - 1 or y == n - 1 or grid.get_h(x, y) != 0:
 				done[i] = 1
 				continue
 			var seed_h := _cell_top[i]
+			var seed_solid: bool = grid.at(x, y) == Grid.SOLID
 			var members: Array[int] = [i]
 			var sum := seed_h
 			done[i] = 1
 			var qi := 0
-			while qi < members.size():
+			while qi < members.size() and members.size() < PLATE_MAX_CELLS:
 				var j: int = members[qi]
 				qi += 1
 				var jx := j % n
@@ -396,10 +402,10 @@ func _merge_plate_tops() -> void:
 					if nx <= 0 or ny <= 0 or nx >= n - 1 or ny >= n - 1:
 						continue
 					var i2 := ny * n + nx
-					if done[i2] == 1 or grid.at(nx, ny) != Grid.SOLID:
+					if done[i2] == 1 or grid.get_h(nx, ny) != 0:
 						continue
-					if grid.get_h(nx, ny) != 0:
-						continue
+					if (grid.at(nx, ny) == Grid.SOLID) != seed_solid:
+						continue # 材质不同不并（沙地 / 岩顶 各自成块）
 					if absf(_cell_top[i2] - seed_h) > PLATE_MERGE_DH:
 						continue
 					done[i2] = 1
@@ -408,6 +414,8 @@ func _merge_plate_tops() -> void:
 			var q := roundf((sum / float(members.size())) / PLATE_STEP) * PLATE_STEP
 			for m in members:
 				_cell_top[m] = q
+				_plate_id[m] = next_id
+			next_id += 1
 
 
 ## 岩块变体（惰性缓存）：二十面体 12 顶点径向抖动 + 压扁/拉宽（半径约 0.5m 的碎岩基形）。
@@ -562,6 +570,46 @@ func _rebuild_rock_props() -> void:
 					var vi2 := int(Blueprint.ihash(x * 47 + 23, y * 47 + 24, ROCK_PROP_SALT + 15) * 4.0)
 					_emit_rock(verts, nrms, cols, tri, Vector3(w.x + px + cos(d2) * o2, t - 0.07, w.z + pz + sin(d2) * o2), yaw2, s2, hs * 0.9, vi2, pid)
 					pid += 1
+	# —— 地块边缘碎石（2026-10-21 并台配套）：非 SOLID 的块边界沿法向压一圈低矮碎石，
+	# 把「六边形折线」遮掉，让地块轮廓看起来是自然岩缘而不是拼板。密度低于岩顶，尺寸更小。
+	if _plate_id.size() == n * n:
+		for y in range(1, n - 1):
+			for x in range(1, n - 1):
+				if grid.at(x, y) == Grid.SOLID:
+					continue
+				var pi0 := y * n + x
+				var t0: float = _cell_top[pi0]
+				var my_id := _plate_id[pi0]
+				var ex0 := 0.0
+				var ez0 := 0.0
+				var dv_max := 0.0
+				for kk in 6:
+					var nx := Grid.nx(x, y, kk)
+					var ny := Grid.ny(x, y, kk)
+					if nx <= 0 or ny <= 0 or nx >= n - 1 or ny >= n - 1:
+						continue
+					var ni := ny * n + nx
+					if _plate_id[ni] != my_id:
+						var dv := t0 - _cell_top[ni]
+						if dv > dv_max:
+							dv_max = dv
+							var w2 := core.cell_to_world(nx, ny)
+							ex0 += w2.x
+							ez0 += w2.z
+				# 只在「真台阶」边缘撒（高差 ≥ 2 档 ≈ 0.6m 以上）；1 档缓坡边保持干净，
+				# 否则沿缓坡排一圈碎石会变成地上的黑麻点，比原折线更难看。
+				if dv_max < PLATE_STEP * 1.5:
+					continue
+				if Blueprint.ihash(x * 3 + 5, y * 3 + 7, ROCK_PROP_SALT + 40) >= 0.55:
+					continue
+				var w0 := core.cell_to_world(x, y)
+				var l0 := maxf(sqrt(ex0 * ex0 + ez0 * ez0), 0.001)
+				var s0 := 0.26 + 0.20 * Blueprint.ihash(x * 7 + 3, y * 7 + 9, ROCK_PROP_SALT + 41)
+				var hs0 := 0.55 + 0.32 * Blueprint.ihash(x * 11 + 5, y * 11 + 6, ROCK_PROP_SALT + 42)
+				var yaw0 := TAU * Blueprint.ihash(x * 13 + 7, y * 13 + 8, ROCK_PROP_SALT + 43)
+				var vi0 := int(Blueprint.ihash(x * 23 + 9, y * 23 + 12, ROCK_PROP_SALT + 44) * 4.0)
+				_emit_rock(verts, nrms, cols, tri, Vector3(w0.x + ex0 / l0 * 0.80, t0 - 0.05, w0.z + ez0 / l0 * 0.80), yaw0, s0, hs0, vi0, pid)
+				pid += 1
 	var mesh := ArrayMesh.new()
 	if verts.size() > 0:
 		var arrays: Array = []
@@ -609,7 +657,9 @@ func _rebuild_hex() -> void:
 				ga += dt * dx * inv
 				gb += dt * dz * inv
 			var nrm := Vector3(-ga * 0.3, 1.0, -gb * 0.3).normalized()
-			var col := _field_color(t, solid, slope, x, y)
+			# 2026-10-21：色阶按「原始连续高度」取（field_h），只让几何走并台量化值。
+			# 否则块高跨档会让 _col_lo/_col_hi（差 2.4 倍）整块跳色，出现刺眼的大色补丁。
+			var col := _field_color(field_h[y * n + x], solid, slope, x, y, _plate_id[y * n + x] if _plate_id.size() == n * n else -1)
 			# 顶面：中心 + 6 角（CW 环序 C0..C5），扇形 6 三角
 			var base := verts.size()
 			verts.append(Vector3(w.x, t, w.z))
@@ -736,6 +786,12 @@ func edge_kind_at(x: int, y: int, k: int) -> int:
 		return EDGE_CLIFF
 	if dh == 1:
 		return EDGE_RAMP
+	# 2026-10-21 并台：同一模拟层内也会出现 0.30 的视觉台阶（PLATE_STEP 量化产物）。
+	# 差 1 档 → 缓坡（可走感连续）；差 2 档以上 → 当崖壁处理。
+	if _cell_top.size() == n * n:
+		var dv := absf(_cell_top[y * n + x] - _cell_top[ny * n + nx])
+		if dv > PLATE_STEP * 0.5:
+			return EDGE_RAMP if dv <= PLATE_STEP * 1.5 else EDGE_CLIFF
 	return EDGE_MICRO
 
 
@@ -757,6 +813,10 @@ func edge_profile(x: int, y: int, k: int, t: float, t_lo: float, kind: int) -> P
 		pts.append(t_lo - 0.010)
 	elif kind == EDGE_RAMP:
 		var run := RAMP_RUN * clampf(delta / 1.2, 0.6, 1.5)
+		# 2026-10-21：并台产生的 0.30 小台阶（delta ≤ 0.55）用固定 0.55m 跨度 → 约 29° 缓坡，
+		# 不再是「近垂直石阶」。模拟层的 1.2m 落差仍走原比例，跨度不变、不侵入邻格。
+		if delta <= 0.55:
+			run = maxf(run, 0.55)
 		var drop := delta - lip_v
 		pts.append(run * 0.45 + _edge_j(x, y, k, 3, 0.02, 3323))
 		pts.append(t - lip_v - drop * 0.5 + _edge_j(x, y, k, 3, 0.025, 3329))
@@ -845,7 +905,7 @@ func _rim_scale(x: int, y: int) -> float:
 
 
 ## 场内顶点色：高程三档连续混色 + 坡度岩石化 + 层理与确定性明度抖动（对齐宣传图崖面观感）。
-func _field_color(h: float, solid: bool, slope: float, cx: int, cy: int) -> Color:
+func _field_color(h: float, solid: bool, slope: float, cx: int, cy: int, pid: int = -1) -> Color:
 	if solid:
 		return _col_rock
 	var t := 0.0
@@ -859,10 +919,19 @@ func _field_color(h: float, solid: bool, slope: float, cx: int, cy: int) -> Colo
 	else:
 		base = _col_mid.lerp(_col_hi, Blueprint.smooth01((t - 0.5) * 2.0))
 	var rock_mix := clampf((slope - 0.45) / 1.2, 0.0, 0.72)
-	var patch := Blueprint.ihash(cx / 4, cy / 4, 4441) # 4 格块状干燥色斑（破单色台面）
-	base = base.lerp(_col_lo, 0.13 * clampf((patch - 0.55) * 2.5, 0.0, 1.0))
-	var strata := 0.5 + 0.5 * sin(h * 5.3 + float(cx) * 0.7 + float(cy) * 0.4)
-	var k := (0.91 + 0.18 * Blueprint.ihash(cx * 3 + 11, cy * 3 - 7, 917)) * (0.94 + 0.07 * strata)
+	# 色斑/层理/明度抖动：并入地块后按块 ID 取哈希（块内完全一致 → 看起来是一整片地面）；
+	# 边框圈与挖填层（pid < 0）退回逐格口径，保持原表现。
+	var hx := cx
+	var hy := cy
+	if pid >= 0:
+		hx = pid % 97
+		hy = pid / 97
+	var patch := Blueprint.ihash(hx / 4, hy / 4, 4441) # 块状干燥色斑（破单色台面）
+	# 2026-10-21 并台后：色斑/明度按「块」取值，块会变得很大，幅度必须比逐格时代小，
+	# 否则相邻块之间会出现明显的亮暗补丁（0.13/±9% → 0.07/±3%）。
+	base = base.lerp(_col_lo, 0.07 * clampf((patch - 0.55) * 2.5, 0.0, 1.0))
+	var strata := 0.5 + 0.5 * sin(h * 5.3 + float(hx) * 0.7 + float(hy) * 0.4)
+	var k := (0.97 + 0.06 * Blueprint.ihash(hx * 3 + 11, hy * 3 - 7, 917)) * (0.98 + 0.04 * strata)
 	# 贴图管线（2026-10-17）：a 位 = 坡度岩石化权值（shader 按权混岩纹理；SOLID 分支恒 a=1）
 	return Color(base.r * k, base.g * k, base.b * k, rock_mix)
 

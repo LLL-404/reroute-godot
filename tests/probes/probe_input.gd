@@ -222,8 +222,10 @@ func _initialize() -> void:
 			sum_after += int(h)
 		cmp_int(sum_after, sum_before, "正反改高后高度总和相同")
 		view.sync(world)
-		check(is_equal_approx(_terrain_top(view, cellA), top_a + view.H_STEP), "填高格柱顶上升")
-		check(is_equal_approx(_terrain_top(view, cellE), top_e - view.H_STEP), "挖低格柱顶下降")
+		# 2026-10-21 并台口径：填/挖格退出并台（回到 field_h 基准），视觉顶会有 ≤ 半档(PLATE_STEP)
+		# 的基准漂移，断言按「升高量 ≈ H_STEP，容差半档」而非精确相等。
+		check(absf((_terrain_top(view, cellA) - top_a) - view.H_STEP) <= 0.31, "填高格柱顶上升")
+		check(absf((top_e - _terrain_top(view, cellE)) - view.H_STEP) <= 0.31, "挖低格柱顶下降")
 		cmp_int(view.unit_nodes.size(), units_before, "改高不清空单位视觉缓存")
 		cmp_int(view.building_nodes.size(), buildings_before, "改高不清空建筑视觉缓存")
 

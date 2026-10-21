@@ -91,7 +91,9 @@ func _initialize() -> void:
 		for v2 in hv:
 			if absf(v2.x - w24.x) < 0.01 and absf(v2.z - w24.z) < 0.01:
 				found = true
-				check(absf(v2.y - gy24) < 0.01, "六边格(24,24) 顶高对拍（%.3f/%.3f）" % [v2.y, gy24])
+				# 2026-10-21 口径变更：地形并台后 _cell_top 被量化到 PLATE_STEP(0.30) 整倍，
+				# 与 sim 贴地真值 ground_y 允许有 ≤ 半档偏差（单位/拾取仍走 ground_y，视觉顶可差一格台阶）。
+				check(absf(v2.y - gy24) <= 0.30, "六边格(24,24) 顶高对拍（%.3f/%.3f）" % [v2.y, gy24])
 				break
 		check(found, "六边格(24,24) 中心顶点存在")
 
