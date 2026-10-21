@@ -2780,6 +2780,169 @@ APK 侧则直接用 `select-package`（`{"slot":"main","package":{"id":"<新apk>
 
 ---
 
+### 11.35 UI v2.5「图标指挥盘 + 三屏翻新」+ 撤销 pill 落地（2026-10-20 晚 ~ 10-21）
+
+#### 缘起与范围口径
+
+用户对 v2.4 界面直接反馈「**界面差，推倒重来**」。重做方向 = **图标指挥盘 HUD + 三屏/模态
+全面翻新**（铜金黑曜石色板延续、去盒化、游戏感）。**范围口径（用户 10-21 明示）**：项目并行
+做两个模式（肉鸽 + 主要模式），**本轮 UI 全部只作用于主要模式**——肉鸽模式（他会话的
+`btn_rogue` 入口起）不在本轮 UI 翻新面内。
+
+另：他会话于 10-21 早做**保护性提交** `936c175`「wip: UI v2.5 图标指挥盘 + B2 岩块散布」，
+把本轮 wip 与其并行工作一并入库（提交标注「窗口闸未跑」）；本轮补齐证据链。
+
+#### HUD v2.5：图标指挥盘（game/hud.gd）
+
+- 右下 **3 行 2/3/3 图标格**：建造（墙/塔）→ 地形（挖矿/填高/挖低）→ 指令（震荡波/拆/英雄）。
+  格 `CELL_W=72 × CELL_H=68`、图标 24、`CELL_GAP=8 / ROW_GAP=10 / DOCK_PAD=10`，
+  几何常量 `DOCK_W=252 / DOCK_H=244`，点击排除角块 `CORNER_W=268 / CORNER_H=260`
+  （坞面 + 16 邻边节）。Button `text=""`，每格三子节点：
+  `row_icon`（UiIcon 代码绘制图标：wall=砖纹重画、skill=中心圆+8 向爆发射线、其余语义形）
+  + `row_name`（名称 11pt=`FS_NAME`）+ `row_cost`（成本 9.5pt=`FS_COST`）。
+- **字号/几何随 S 全量重算**（v2.5 主命题：平板「大格子小字」根修）：`_layout()` 内
+  逐控件重设 `font_size/int(FS*S)` 与位置——顶栏、指挥盘、提示条、横幅全部覆盖；
+  窗口缩放后不再只挪位置。
+- 顶栏：加**盾/铜钱**小图标（`supply_icon`/`core_icon`），供给数值 18pt 拆小标+大数。
+- 提示条：金色「**TIP**」小字标 + 1px 金分隔线（`HINT_LIFE=400` 淡出口径不变）。
+- 命中排除区：`hit_regions()` 仍是三块（顶栏条 / CORNER 角块 / 可见提示条），
+  v2.5 几何换算只改尺寸不改来源。
+
+#### 三屏/模态翻新（game/screens.gd）
+
+| 页 | 改法 |
+|---|---|
+| 标题 | **去盒化菜单行** `_menu_row`：序号 01-05 + 1px 下划线 + 主行金字左金条；新变体 `UiMenuRow` / `UiMenuRowPrimary`；左内容距 46S（序号列位） |
+| 设置 | 分组标题「tick 金杠 + 线」（`_group_header` 改 HBox）；chip 60×40；标签 96 宽；滑杆 240；卡 540；返回 240×44；body 间距 12；滚动高 0.66/640 |
+| 存档 | 卡 520；行 380×52；删除 64×52；返回 240×44；标题条 44 |
+| 结算 | 卡 440；题 36；正文 13.5；钮 46/44 |
+| 暂停 | 卡 340；题 24；钮 260×46/44 |
+
+样式纪律延续 v2.3/v2.4：颜色一律 token 突（`UiStyle.DARK`）；图标脚本**禁构造颜色**
+（`UiIcon.setup(icon, color_key)` 由 HUD 传 tokens；`check_ui_lint` L1/L2 咬）；
+`game` 页不挂氛围层（check_shots 契约）。
+
+#### 撤销 pill：他会话撤销机制的 HUD 落地
+
+他会话并行新增**建造撤销**机制（未提交半成品，见其工作树）：`sim/world.gd` 增
+`undo_build` 命令、`main.gd` 增 `_remember_build` / `_update_undo_ui`（ callbacks `on_undo`），
+并要求 HUD 提供 **`hud.set_undo_vis(on, secs)`** 与 **`hud.undo_panel`**（探针断言
+`.visible`）。v2.5 重写指挥盘时删除了 v2.4 遗留挂点 ⇒ `main.gd` 的调用全部炸
+（`Nonexistent function 'set_undo_vis'`），且 `probe_input` 因
+`Invalid access to property 'undo_panel'` **中止无 checks 行（exit=0 假绿）**。
+
+落地（hud.gd，v2.5 共识合约）：
+
+- `undo_panel: Button`（140×30S，**浮在指挥坞上沿居中**，dock top −36S；HudButton
+  变体 + A1 光边；文案「撤销 · Ns」，留窗 ≤5s 由 main 每 tick 刷剩余秒）
+- `set_undo_vis(on: bool, secs: int = 0)`：null 安全（build 前调用早退）；`secs`
+  带默认值兼容 `set_undo_vis(false)` 单参调用
+- **不入 `hit_regions()`**（浮钮在场时 Button 自吞输入，不产生穿点）；`_undo_on`
+  为显隐归口：`set_visible_hud` 复显时按 `_undo_on` 还原（整层隐藏不得误亮）；
+  `reset()` 新局置 false
+- pressed → `callbacks["on_undo"]`（与 Ctrl+Z / 右键撤销同源命令链）
+
+#### 蚌实修理：他会话半成品的编译阻塞
+
+`game/view_terrain.gd` 两行 `var dx := w.x - gp.x` / `var dz := w.z - gp.y`——
+`:=` 推断**无类型数组元素** duke 报错（§7 硬约束「禁 `:=` 推断无类型 Array 访问」）。
+改为显式 `: float` 两处，`view` 链恢复编译。已随 936c175 入库。
+
+#### 探针口径更新（伴随 UI 实际变化，注明归属）
+
+- `probe_touch` 按钮矩阵 `54 → 55 → 56`：+1 = **§11.34 隐私说明钮 `btn_privacy_policy`**
+  （他会话提交 696d977 时未跑窗口闸）；再 +1 = **他会话标题页肉鸽入口 `btn_rogue`**
+  （并行新增；本轮矩阵口径随之更新，组成 `6+5+2+7+34+2`）
+- `probe_hud` 86 → 92：+6 撤销 pill 断言（窗内可见 / 倒计时文案 / 收起隐藏 /
+  复显+文案刷新 / 复位隐藏）
+- `probe_input` §2 撤销段断言（visible 出现/消失）与他合约对齐（其本身未改）
+
+#### 验收与证据
+
+| 闸 | 结果 |
+|---|---|
+| headless 9 闸 | unit **107/0**、golden **2/0**、scene **25/0**、blueprint **21/0**、sim **5/0**、grid **40/0**、flow **53/0**、scenario **77/0**（剧本指纹 `0x7dea2b02` 不变）、world **20/0** 全 PASS |
+| 窗口 13 闸 | sync **2771/0**（他会话同步扩探针）、input **89/0**（含他会话撤销/Ctrl+Z 段）、hud **91/0**（86+5 撤销断言）、ui_flow **39/0**、save **77/0**、smoke **34/0**、shots **9/0**、audio **56/0**、asset **63/0**、model **6/0**、orient **1/0**、intro **36/0**、touch **73/0**（矩阵 56） |
+| `tools/check_shots.py` | **44 项 fail=0 PASS**（含新 `btn_rogue` 后重出截图） |
+| UI lint / selfcheck | **3/0** / **33/0** |
+| 证据目录 | `logs/gates-20261020-v25/`（22 闸 stdout + exit） |
+
+判定要点：`probe_input` 此前因 `undo_panel` 缺失中止（exit=0 假绿、无 checks 行），
+落地撤销 pill 后 `[INPUT] checks=89 bad=0` 恢复完整；`hud/input/touch/scene/shots/check_shots`
+均以本节落地后之最终树重跑为准。
+
+#### 状态与移交
+
+- 主要模式 UI（v2.5）已收口；**标题页 `btn_rogue` 的样式/布局由他会话继续**（在
+  `_menu_row` 结构上插入，矩阵口径已容纳）
+- 双端包**未重出**：待用户确认本轮界面后按 §11.26 口径重出四件（届时标题/按钮布局
+  以会话收敛后的最终态为准）
+- 预览邮件随附 6-7 张截图（title/settings/slots/gameover/hud/game/game_tablet）
+
+### 11.35 打击感补丁：静默音效接线 + 受击闪白 + 音高抖动（2026-10-21）
+
+#### 起因：音效库 30 个文件只用了 12 个
+
+`assets/audio/sfx/` 下 30 个 mp3，`play_sound` 实际只覆盖 12 个。`gold_collect` /
+`orc_hurt` / `zerg_hurt` / `orc_warrior_attack` / `zerg_blade_attack` / `*_step` /
+`*_worker_*` 全部静默。零新资产的纯接线收益，优先做。
+
+#### 改动清单（全部落在表现层，`sim/` 零改动）
+
+| 项 | 文件 | 做法 |
+|---|---|---|
+| A1 受击音 | `game/view_entities.gd` | 受击分支（`hp` 下降）播 `zerg_hurt` / `orc_hurt`，音量 0.5 |
+| A2 攻击音 | 同上 | Attack 状态机分支播 `zerg_blade_attack` / `orc_warrior_attack`，音量 0.45 |
+| A3 收金音 | 同上 | 比较 `world.supply` 增量 → `gold_collect`，音量 0.4；本帧有挖矿覆盖层消失时让位（已有 `mining_gold_hit`） |
+| B1 音高抖动 | `game/view_audio.gd` | `pitch_scale = 1 ± 4%`，独立 `RandomNumberGenerator`，不污染 sim 确定性 |
+| B2 受击闪白 | `game/view_entities.gd` | `MeshInstance3D.material_overlay` 挂共享 ADD 材质，随脉冲两档衰减（0.22 → 0.10 → 关） |
+
+**限流是硬要求**（大群围攻逐兵逐帧触发必音爆）：
+
+| 音 | 单兵间隔 | 全局间隔 |
+|---|---|---|
+| 受击 | 20 tick（1.0s） | 4 tick（5 次/秒） |
+| 攻击 | — | 4 tick（5 次/秒） |
+| 收金 | — | 8 tick（2.5 次/秒） |
+
+#### 闪白：两个只能靠实测发现的坑
+
+| 坑 | 现象 | 正解 |
+|---|---|---|
+| ADD 混合下 `albedo_color.a` 不参与强度 | 写 `Color(1,1,1,0.55)` 与写 `Color(1,1,1,1.0)` 结果一样，都是过曝纯白 | 强度写进颜色值：`Color(0.22,0.22,0.22,1.0)` |
+| `cull_mode = CULL_DISABLED` | 背面再叠一遍，暗色单位直接变白剪影 | `CULL_BACK` |
+
+两档强度实测依据：`shots/flash_off.png` / `flash_on.png`（同姿态对照）。0.30 起暗色 zerg 就读成灰白、丢失色相，**0.22 是保留色相的上限**。
+低画质档（`fx_quality == 0`）强制关闪白，但**仍要走一次写 null 的路径**，否则切档后残留亮层。
+
+#### 验收
+
+| 闸 | 结果 |
+|---|---|
+| `run_tests`（107 单测） | `[UNIT-ALL-GREEN]` |
+| `probe_golden` | `checks=2 bad=0 PASS`（16 指纹未变） |
+| `probe_audio`（窗口模式） | `checks=56 bad=0 PASS` |
+| `probe_asset`（窗口模式） | `checks=63 bad=0 PASS` |
+| `probe_sync` | `checks=2771 bad=0 PASS` |
+| `probe_smoke`（窗口模式） | `checks=34 bad=0 PASS` |
+| `probe_hud` | `checks=91 bad=0 PASS` |
+| `probe_input` | `checks=93 bad=0 PASS` |
+| **`probe_flash`（新增闸）** | `checks=12 bad=0 PASS`（tick 940 首次闪白命中 + 消退验证） |
+
+⚠️ `probe_audio` / `probe_asset` / `probe_smoke` / `probe_flash` **必须窗口模式**：
+`audio_on` 在 headless 下为 false，6 条「播放中」断言会假失败；`probe_asset` 在 headless 会 SIGTERM。
+
+#### 未做（留档备选）
+
+| 项 | 未做原因 |
+|---|---|
+| 屏幕震动 | 探针截图会抖动，需要先给 `view_core` 加 `shake_on` 闸并接到 `_detect_probe_run` |
+| 通用飘字（伤害/资源） | 需先把 `hud.float_bounty` 的池扩成通用接口，属 hud.gd 改动（该文件有外部并发写入史，改动前必须重读） |
+| 顿帧 | 塔防节奏会被打断，只适合核心受击单点，待玩法侧裁定 |
+| 敌人头顶血条 | 会让玩家精确算血，削弱塔防的不确定焦虑，**不建议做** |
+
+---
+
 ## 12. AI 任务卡模板（派活时照抄）
 
 ```markdown

@@ -43,6 +43,8 @@ P="D:/G/game/games/reroute-godot"
 "$GODOT" --path "$P" -s res://tests/probes/probe_smoke.gd                  # 全局冒烟（跑完整一局）
 "$GODOT" --path "$P" -s res://tests/probes/probe_save.gd                   # 存档/设置/退出/安卓返回
 "$GODOT" --path "$P" -s res://tests/probes/probe_touch.gd                  # 触屏可点 + 按钮触达尺寸
+"$GODOT" --headless --path "$P" -s res://tests/probes/probe_rogue.gd       # 肉鸽 L1–L2 流程（纯模拟）
+"$GODOT" --headless --path "$P" -s res://tests/probes/probe_rogue_ui.gd    # 肉鸽 UI 闭环
 ```
 
 ### ⚠️ 两条必须记住的规矩
@@ -69,10 +71,18 @@ P="D:/G/game/games/reroute-godot"
 
 ## 三、玩法一句话
 
-64×64 塔防，核心机制「放墙改道」：用墙/塔/地形改造把敌人推上更长的路，
+**两种模式并存（标题屏入口）**：
+
+- **经典对局**：64×64 塔防，核心机制「放墙改道」：用墙/塔/地形改造把敌人推上更长的路，
 绕行越远赏金越高（`reward + traveled>>3`）。挖开西南盆地插口能拿到矿，
 但也会打开第三个出怪口。撑到 6400 tick 且场上清空即胜。
 **每局布局与视觉地形按种子变奏生成**（结构模板固定、难度带 548±15% 标定，见方案 §11.14）。
+
+- **肉鸽模式**（竖切）：5 层 × 20 波，阶段制（每波清场停住选牌）。每波后三选一
+（塔卡/遗物/天赋/地形牌），**全屏海克斯式选择**（全屏压暗 + 三卡错峰浮起 + 悬停放大光晕 +
+选中飞入），可花供给刷新。出怪口逐层逼近核心（50→6 格），
+建筑跨层全保留，塔位逐层放开。核心破即整局结束，无存档。
+规格见 [`docs/ROGUELIKE-SPEC.md`](docs/ROGUELIKE-SPEC.md)。
 
 相机：`WASD` 平移、鼠标右键拖拽平移（跟手）、`Q/E` 旋转、滚轮缩放（0.6–1.8×）；`TAB` 热层；
 `Esc` 暂停。窗口缩放会取景回默认北向视角（平移/旋转/缩放重置）。

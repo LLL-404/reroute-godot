@@ -39,6 +39,17 @@ func _initialize() -> void:
 	var cellD := _find_clickable(view, world, 8, 6, 36, 26, false, used)
 	check(cellD.x >= 0, "塔格")
 	used.append(cellD)
+	var cellD2 := _find_clickable(view, world, 8, 6, 36, 26, false, used)
+	check(cellD2.x >= 0, "塔拖拽终点格（应被单点语义忽略）")
+	used.append(cellD2)
+	var cancelA := _find_clickable_h(view, world, 8, 30, 36, 44, used) # 取消测试：可点击即可
+	if cancelA.x < 0:
+		cancelA = _find_clickable(view, world, 8, 30, 36, 44, false, used)
+	check(cancelA.x >= 0, "取消测试起步格")
+	used.append(cancelA)
+	var cancelB := _find_clickable(view, world, 8, 30, 36, 44, false, used)
+	check(cancelB.x >= 0, "取消测试拖拽终点格")
+	used.append(cancelB)
 	var cellE := _find_clickable_h(view, world, 8, 6, 36, 26, used) # 第 12 段反向改高对需要「可挖低端」h > H_MIN
 	if cellE.x < 0:
 		cellE = _find_clickable(view, world, 8, 6, 36, 26, false, used) # 退路：该段自会判失败
@@ -62,34 +73,81 @@ func _initialize() -> void:
 	view.sync(world)
 	cmp_int(view.building_nodes.size(), 2, "墙节点出现（核心+墙）")
 
-	# ---- 2. 拖拽放墙线（4 连）----
+	# ---- 1.5 悬停焦点环 + 建造中途取消（Esc / 右键都不落子）----
+	main.mouse_pos = _sp_of(view, cellA)
+	main.set_mode("remove")
+	main.update_ghost()
+	check(view.focus_ring.visible and view.focus_ring.material_override == view.mats["ring_hot"], "拆除悬停红焦点环")
+	main.set_mode("wall")
+	main.update_ghost()
+	check(view.focus_ring.visible and view.focus_ring.material_override == view.mats["ring_wall"], "建造悬停金焦点环")
+	main.mouse_pos = _sp_of(view, cancelA)
+	main.update_ghost()
+	check(not view.focus_ring.visible, "空悬停隐藏焦点环")
+	var n_c: int = world.buildings.size()
+	var s_c: int = world.supply
+	await _drag_cancel(view, cancelA, cancelB, true)
+	cmp_int(world.buildings.size(), n_c, "Esc 取消拖拽零建造")
+	cmp_int(world.supply, s_c, "Esc 取消零扣费")
+	check(not main.paused, "Esc 取消不误触暂停")
+	await _drag_cancel(view, cancelA, cancelB, false)
+	cmp_int(world.buildings.size(), n_c, "右键取消拖拽零建造")
+	cmp_int(world.supply, s_c, "右键取消零扣费")
+
+	# ---- 2. 拖拽放墙线（4 连）→ Ctrl+Z 整条撤销 → 重放 ----
 	main.set_mode("wall")
 	var sup1: int = world.supply
-	var n0: int = world.buildings.size()
+	var n0: int = _alive_count(world)
 	await _drag(view, row_cells[0], row_cells[3])
-	cmp_int(world.buildings.size(), n0 + 4, "拖拽放墙 4 格")
+	cmp_int(_alive_count(world), n0 + 4, "拖拽放墙 4 格")
 	cmp_int(world.supply, sup1 - 40, "拖拽扣费 40")
+	check(main.hud.undo_panel.visible, "建造后撤销提示出现")
+	await _key_mod(KEY_Z, true)
+	cmp_int(_alive_count(world), n0, "Ctrl+Z 撤销整条墙线")
+	cmp_int(world.supply, sup1, "撤销墙线全额退款 40")
+	check(not main.hud.undo_panel.visible, "撤销后提示消失")
+	await _drag(view, row_cells[0], row_cells[3])
+	cmp_int(_alive_count(world), n0 + 4, "重放墙线 4 格")
+	cmp_int(world.supply, sup1 - 40, "重放扣费 40")
 
-	# ---- 3. 挖矿 ----
+	# ---- 3. 挖矿（M2-a：矿格隔空点挖被拒，改为派英雄去邻格；开挖闭环见 probe_dig_intent）----
 	main.set_mode("dig")
 	var sup2: int = world.supply
 	await _click(view, ore_cell)
-	cmp_int(world.grid.at(ore_cell.x, ore_cell.y), Grid.OPEN, "矿格变 OPEN")
-	cmp_int(world.supply, sup2 + 25, "挖矿 +25")
+	cmp_int(world.grid.at(ore_cell.x, ore_cell.y), Grid.COVER, "矿格隔空点挖被拒（仍 COVER）")
+	cmp_int(world.supply, sup2, "隔空点挖零扣费")
+	check(not main._ore_intent.is_empty(), "已记录矿格意图")
+	var stand: Vector2i = main._ore_intent.get("stand", Vector2i(-1, -1))
+	check(stand.x >= 0 and Grid.hex_dist(stand.x, stand.y, ore_cell.x, ore_cell.y) == 1, "站位为矿格六邻")
+	cmp_int(int(world.hero["tx"]), stand.x, "英雄已收到前往命令 x")
+	cmp_int(int(world.hero["ty"]), stand.y, "英雄已收到前往命令 y")
 
-	# ---- 4. 放塔（施工压扁）----
+	# ---- 4. 放塔（单点语义：拖拽也只落起点一格；施工进度 0.12 起步）----
 	main.set_mode("tower")
 	var sup3: int = world.supply
-	await _click(view, cellD)
+	var n_before_t: int = world.buildings.size()
+	main.mouse_pos = _sp_of(view, cellD)
+	main.update_ghost()
+	cmp_int(view.preview_root.get_child_count(), 1, "塔预览模型")
+	cmp_int(view.range_root.get_child_count(), 2, "塔射程预览")
+	await _drag(view, cellD, cellD2)
 	var bD = world.building_at(cellD.x, cellD.y)
-	check(bD != null and int(bD["kind"]) == Sim.B_TOWER, "单击放塔")
+	check(bD != null and int(bD["kind"]) == Sim.B_TOWER, "拖拽放塔（单点）")
+	check(world.building_at(cellD2.x, cellD2.y) == null, "塔拖拽不沿线铺塔")
+	cmp_int(world.buildings.size(), n_before_t + 1, "塔拖拽只落 1 格")
 	if bD == null:
 		finish("INPUT", 15)
 		return
 	cmp_int(world.supply, sup3 - 60, "放塔扣费 60")
 	view.sync(world)
 	var eD = view.building_nodes.get(int(bD["id"]))
-	check(eD != null and absf(float(eD["node"].scale.y) - 0.35) < 0.001, "塔施工压扁 0.35")
+	check(eD != null and absf(float(eD["node"].scale.y) - 0.12) < 0.02, "塔施工起步 0.12")
+	check(eD != null and eD.get("fx") != null and eD["fx"].visible, "塔施工脚手架可见")
+	# Ctrl+Z：单塔全额撤销
+	var sup_t: int = world.supply
+	await _key_mod(KEY_Z, true)
+	check(world.building_at(cellD.x, cellD.y) == null, "Ctrl+Z 撤销塔")
+	cmp_int(world.supply, sup_t + 60, "撤销塔全额退款 60")
 
 	# ---- 5. 拆除（退 50%）----
 	main.set_mode("remove")
@@ -332,6 +390,15 @@ func _sp_of(view, cell: Vector2i) -> Vector2:
 	return view.camera.unproject_position(Vector3(w.x, gy + 0.1, w.z))
 
 
+## 活建筑数（撤销只把 hp 置 0，尸体在本 tick 清理前仍留在 world.buildings 数组里）。
+func _alive_count(world) -> int:
+	var n := 0
+	for b in world.buildings:
+		if int(b["hp"]) > 0:
+			n += 1
+	return n
+
+
 func _click(view, cell: Vector2i) -> void:
 	var sp := _sp_of(view, cell)
 	var down := InputEventMouseButton.new()
@@ -374,6 +441,57 @@ func _key(code: Key) -> void:
 	ev.keycode = code
 	ev.pressed = true
 	get_root().push_input(ev)
+	await process_frame
+
+
+## 带 Ctrl 修饰的按键（撤销 Ctrl+Z）。
+func _key_mod(code: Key, ctrl: bool) -> void:
+	var ev := InputEventKey.new()
+	ev.keycode = code
+	ev.ctrl_pressed = ctrl
+	ev.pressed = true
+	get_root().push_input(ev)
+	await process_frame
+
+
+## 拖拽中途取消：esc=true 用 Esc；false 用右键。均不发左键起手后的落子。
+func _drag_cancel(view, from_cell: Vector2i, to_cell: Vector2i, esc: bool) -> void:
+	var sp0 := _sp_of(view, from_cell)
+	var sp1 := _sp_of(view, to_cell)
+	var down := InputEventMouseButton.new()
+	down.button_index = MOUSE_BUTTON_LEFT
+	down.pressed = true
+	down.position = sp0
+	get_root().push_input(down)
+	await process_frame
+	var mv := InputEventMouseMotion.new()
+	mv.position = sp1
+	get_root().push_input(mv)
+	await process_frame
+	if esc:
+		var ev := InputEventKey.new()
+		ev.keycode = KEY_ESCAPE
+		ev.pressed = true
+		get_root().push_input(ev)
+		await process_frame
+	else:
+		var rmb := InputEventMouseButton.new()
+		rmb.button_index = MOUSE_BUTTON_RIGHT
+		rmb.pressed = true
+		rmb.position = sp1
+		get_root().push_input(rmb)
+		await process_frame
+		rmb = InputEventMouseButton.new()
+		rmb.button_index = MOUSE_BUTTON_RIGHT
+		rmb.pressed = false
+		rmb.position = sp1
+		get_root().push_input(rmb)
+		await process_frame
+	var up := InputEventMouseButton.new()
+	up.button_index = MOUSE_BUTTON_LEFT
+	up.pressed = false
+	up.position = sp1
+	get_root().push_input(up)
 	await process_frame
 
 

@@ -61,6 +61,8 @@ var heat_btn: Button
 var pause_btn: Button
 var mode_buttons: Dictionary = {}
 var skill_btn: Button
+var undo_panel: Button # 撤销 pill（5s 撤销窗内可见；main._update_undo_ui 驱动）
+var _undo_on := false # 撤销窗开关的归口状态（set_visible_hud 复显时按此还原）
 var dock: Panel
 var dock_caps: Array = []
 var dock_rows: Array = [] # 3 行控件（2/3/3），_layout 逐格定位
@@ -127,6 +129,7 @@ func build(cb: Dictionary) -> void:
 	_build_top_bar()
 	_build_hint()
 	_build_dock()
+	_build_undo()
 	_build_banner()
 	_build_floats()
 	set_mode(mode)
@@ -337,6 +340,37 @@ func _build_dock() -> void:
 	_paint_rows()
 
 
+## 构建撤销 pill（v2.5 落地：他会话撤销机制的 HUD 侧）。贴指挥坞上沿的小浮钮，
+## 5s 撤销窗内由 main `set_undo_vis(true, 剩余秒)` 点亮；点按走 on_undo 回调
+## （与 Ctrl+Z / 右键撤销同源命令链）。默认隐藏：不入 _toplevel（显隐归口见 set_undo_vis）。
+func _build_undo() -> void:
+	undo_panel = Button.new()
+	undo_panel.name = "undo_panel"
+	undo_panel.text = "撤销"
+	undo_panel.custom_minimum_size = Vector2(140.0 * S, 30.0 * S)
+	undo_panel.size = Vector2(140.0 * S, 30.0 * S)
+	undo_panel.focus_mode = Control.FOCUS_NONE
+	undo_panel.add_theme_font_size_override("font_size", int(11.5 * S))
+	undo_panel.theme_type_variation = UiStyle.BTN_HUD_VAR
+	UiStyle.edge_dress(undo_panel, DARK["edge_hi"], UiStyle.RULE) # A1 光边
+	undo_panel.visible = false
+	undo_panel.pressed.connect(func() -> void:
+		if callbacks.has("on_undo"):
+			callbacks["on_undo"].call())
+	add_child(undo_panel)
+
+
+## 撤销窗显隐 + 倒计时文案。main 每 tick 传剩余秒（`on` 为 false 时无参调用）；
+## `secs` 带默认值兼容单参调用。显隐不归 set_visible_hud 管（见 _undo_on 归口）。
+func set_undo_vis(on: bool, secs: int = 0) -> void:
+	if undo_panel == null:
+		return
+	_undo_on = on
+	undo_panel.visible = on
+	if on:
+		undo_panel.text = "撤销 · %d s" % maxi(1, int(secs))
+
+
 ## 构建波次/暗门横幅（卡片 + 左金条强调 + 标题/副标题两行）
 func _build_banner() -> void:
 	banner_root = Control.new()
@@ -506,6 +540,14 @@ func _layout() -> void:
 			cl.reset_size()
 			cl.position = Vector2((CELL_W * S - cl.size.x) * 0.5, 47.0 * S)
 
+	# 撤销 pill：浮在指挥坞上沿居中（仅撤销窗内可见；隐藏时也保持定位防 resize 漂移）
+	if undo_panel != null:
+		var uw := 140.0 * S
+		undo_panel.custom_minimum_size = Vector2(uw, 30.0 * S)
+		undo_panel.size = undo_panel.custom_minimum_size
+		undo_panel.add_theme_font_size_override("font_size", int(11.5 * S))
+		undo_panel.position = Vector2(dock.position.x + (DOCK_W * S - uw) * 0.5, dock.position.y - 36.0 * S)
+
 	# 横幅（顶部居中，v2.4 瘦身）
 	banner_card.reset_size()
 	banner_card.position = Vector2((x0 + x1 - banner_card.size.x) / 2.0, y0 + 96.0 * S)
@@ -543,6 +585,8 @@ func set_visible_hud(vis: bool) -> void:
 		c.visible = vis
 	if banner_root != null:
 		banner_root.visible = vis and _banner_until != null
+	if undo_panel != null: # 撤销 pill：显隐归口 = _undo_on（整层隐藏时不得复显）
+		undo_panel.visible = vis and _undo_on
 	if not vis:
 		for f in floats:
 			f["active"] = false
@@ -809,6 +853,9 @@ func reset() -> void:
 		hint_panel.visible = true
 		hint_panel.modulate.a = 1.0
 	_hint_hidden = false
+	if undo_panel != null: # 新局撤销窗口天然关闭
+		undo_panel.visible = false
+		_undo_on = false
 	for f in floats:
 		f["active"] = false
 		var el: Label = f["el"]

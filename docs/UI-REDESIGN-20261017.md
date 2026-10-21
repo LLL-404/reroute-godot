@@ -200,3 +200,27 @@ L3 变体名只用常量、且禁与内置类同名（MenuButton→UiMenuButton�
    lint L1/L2 会咬）。
 5. **存档删除列**：删除钮与同宽 pad 互斥显隐（62px），读档/存档/空槽栅格恒定；
    save 模式「隐藏删除钮」的探针口径保留。
+
+## 10. v2.5 图标指挥盘 + 三屏翻新（2026-10-21 实装）
+
+决策记录 = 方案 §11.35。维护口径：
+
+1. **图标指挥盘** = 3 行 2/3/3（建造→地形→指令）；Button `text=""`，每格三子节点
+   `row_icon`（UiIcon 代码绘制）/ `row_name` / `row_cost`。**图标脚本禁构造颜色**——
+   `UiIcon.setup(icon, color_key)` 只收 tokens（lint L1/L2 会咬）；选中态换色统一走
+   `_paint_rows()` / `_update_affordability()`，禁向单钮挂样式盒 override。
+2. **字号与几何随 S 全量重算**：新增任何控件都**必须在 `_layout()` 内挂
+   font_size / 位置 / 尺寸重算**，禁止 build 时一次定死（平板大 DPI「大格子小字」根修）。
+   本轮顶栏 / 指挥盘 / 提示条 / 横幅已覆盖。
+3. **撤销 pill 契约**（后会话撤销机制的唯一 HUD 口）：`hud.undo_panel`（Button）+
+   `hud.set_undo_vis(on, secs:=0)`；main 每 tick 驱动；pressed → `on_undo` 回调。
+   pill **不入 `hit_regions()`**（Button 自吞输入即可，勿双排）；显隐归口 =
+   `_undo_on`（`set_visible_hud` 复显按归口还原、`reset()` 置 false）。改名/挪位置
+   须连 `probe_input` §2 与 `probe_hud` §5a 一起核。
+4. **标题去盒化菜单行** `_menu_row`：序号列 01-NN = 46S 左缩进契约 + 1px 下划线 +
+   金字左金条；新行插菜单**复用 `_menu_row`**（如他会话的 `btn_rogue`），不要回退到
+   盒式按钮。变体 `UiMenuRow` / `UiMenuRowPrimary`（§8 内置类避让规约延续）。
+5. **设置分组头** `_group_header`（tick 金杠 + 线 HBox）与 chip 60×40 / 滑杆 240 /
+   标签 96 宽是设置页栅格基准；加新分组先复用该头，不自绘。
+6. **v2.4 口径不退**:提示条 TIP 金标 + `HINT_LIFE=400` 淡出、滚动渐隐 `UiStyle.fade_tex`、
+   存档删除列互斥占位、game 页禁挂氛围层，均继续生效。

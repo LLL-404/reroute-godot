@@ -5,6 +5,7 @@ extends RefCounted
 
 const SFX_POOL_N := 4 # 母版 4 个轮换源，避免同帧多音互相掐断
 const AUDIO_DIR := "res://assets/audio/sfx/"
+const PITCH_JITTER := 0.04 # ±4% 随机音高：同一音效反复播不机械（独立 RNG，不污染 sim 确定性）
 const UserSettings = preload("res://game/user_settings.gd") # bus 名 + 音量应用（设置页共用）
 
 var host: Node3D
@@ -17,6 +18,7 @@ var audio_on := true # headless 跳过实际播放（Dummy 驱动；见 _setup_a
 var sfx_log: Dictionary = {} # 诊断计数：文件名 → 播放次数（探针用，生产无害）
 var _sfx_next := 0 # 轮换下标
 var _streams: Dictionary = {} # 流缓存（每文件 load 一次）
+var _pitch_rng := RandomNumberGenerator.new() # 音高抖动专用（独立于 sim Rng，不进指纹）
 
 
 ## 构造注入：记宿主节点（音频源挂其下；由 view._ready 组装）
@@ -29,6 +31,7 @@ func _init(p_host: Node3D) -> void:
 ## headless（Dummy 音频驱动）跳过实际播放：听不见，且退出的播放对象回收存在竞态
 ## （ObjectDB 泄漏 + resources still in use，实测）——接口/资源/状态断言照常可测。
 func _setup_audio() -> void:
+	_pitch_rng.randomize()
 	audio_on = DisplayServer.get_name() != "headless"
 	# 用户音量 bus（BGM/SFX）：先确保存在再路由，设置页只改 bus 音量、不动逐音增益
 	UserSettings.ensure_bus(UserSettings.BGM_BUS)
@@ -85,6 +88,7 @@ func play_sound(sname: String, gain: float = 0.8) -> void:
 	_sfx_next = (_sfx_next + 1) % sfx_players.size()
 	p.stream = s
 	p.volume_db = linear_to_db(gain)
+	p.pitch_scale = 1.0 + _pitch_rng.randf_range(-PITCH_JITTER, PITCH_JITTER)
 	if audio_on:
 		p.play()
 	sfx_log[sname] = int(sfx_log.get(sname, 0)) + 1

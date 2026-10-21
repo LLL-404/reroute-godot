@@ -94,6 +94,25 @@ func setup() -> void:
 	for k in MAT:
 		var c: Array = MAT[k]
 		mats[k] = make_material(c[0], c[1], c[2], [0.10, 0.55, 0.48] if k == "core" else null)
+	# 建筑底座光环 / 射程预览 / 施工（2026-10-20 建筑表现轮）：全部 unshaded 半透明，
+	# 不参与光照与投影；按类型分色，悬停/拆除时切红。
+	mats["ring_wall"] = make_flat_material(Color8(200, 168, 108, 115))
+	mats["ring_tower"] = make_flat_material(Color8(96, 208, 220, 130))
+	mats["ring_core"] = make_flat_material(Color8(64, 200, 176, 165))
+	mats["ring_hot"] = make_flat_material(Color8(228, 92, 72, 210))
+	# 射程/幽灵模型剔除背面：六边板与 glb 都是闭合体，双面渲染会让半透明叠两层，
+	# 实测 alpha 26 的填充会叠成 ~37% 的实色块、幽灵模型也会糊成实心。
+	mats["range_fill"] = make_flat_material(Color8(96, 208, 220, 18), 0, BaseMaterial3D.CULL_BACK)
+	mats["range_edge"] = make_flat_material(Color8(120, 224, 232, 130), 0, BaseMaterial3D.CULL_BACK)
+	mats["scaffold"] = make_flat_material(Color8(224, 198, 140, 95))
+	# 幽灵底板半透明（绿=可建 / 红=不可建）：让实物模型轮廓压过底板，而不是糊成一团实色。
+	for gk in ["ghost_ok", "ghost_bad"]:
+		var gm: StandardMaterial3D = mats[gk]
+		gm.albedo_color = Color(gm.albedo_color.r, gm.albedo_color.g, gm.albedo_color.b, 0.62)
+		gm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	# 实物幽灵模型：着色 + 弱自发光（有明暗面才有体积感；纯 unshaded 会糊成一块绿板）。
+	mats["ghost_ok_model"] = make_ghost_model_material(Color8(110, 235, 140, 150))
+	mats["ghost_bad_model"] = make_ghost_model_material(Color8(238, 96, 74, 150))
 
 
 ## 地图视觉动机应用调色板时写入雾基准；当前后期档决定实际雾距（换图/改档都幂等）。
@@ -162,6 +181,34 @@ func make_material(r: float, g: float, b: float, emissive: Variant = null) -> St
 	return m
 
 
+## 创建无光照半透明材质（底座环/射程/脚手架）：双面、不投影、不写深度。
+func make_flat_material(c: Color, priority: int = 0, cull: int = BaseMaterial3D.CULL_DISABLED) -> StandardMaterial3D:
+	var m := StandardMaterial3D.new()
+	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	m.albedo_color = c
+	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	m.cull_mode = cull
+	m.no_depth_test = false
+	m.disable_receive_shadows = true
+	m.disable_ambient_light = true
+	m.render_priority = priority
+	return m
+
+
+## 建筑幽灵模型材质：半透明着色 + 弱自发光，既保留明暗体积感又在暗地形上够醒目。
+func make_ghost_model_material(c: Color) -> StandardMaterial3D:
+	var m := StandardMaterial3D.new()
+	m.albedo_color = c
+	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	m.cull_mode = BaseMaterial3D.CULL_BACK
+	m.roughness = 0.85
+	m.emission_enabled = true
+	m.emission = Color(c.r, c.g, c.b)
+	m.emission_energy_multiplier = 0.55
+	m.disable_receive_shadows = true
+	return m
+
+
 ## 在 parent 下添加一个盒体部件（位置 + 缩放 + 材质名）
 func _part(parent: Node3D, px: float, py: float, pz: float, sx: float, sy: float, sz: float, matname: String) -> void:
 	var mi := MeshInstance3D.new()
@@ -187,6 +234,7 @@ const HEX_CORNERS := [
 ]
 
 var hex_plate_mesh: ArrayMesh = null # 六边板（薄棱柱，中心原点，厚 1.0；幽灵/热层共用）
+var hex_ring_mesh: ArrayMesh = null # 六边环（扁平，底座光环用；中心原点，y=0）
 
 
 ## 格子坐标 → 世界坐标（格中心；奇行（y 为奇数）+0.5 右移 = odd-r）
@@ -270,6 +318,31 @@ func _ensure_hex_plate() -> void:
 		st.add_vertex(b2)
 		st.add_vertex(b)
 	hex_plate_mesh = st.commit()
+
+
+## 六边环网格（懒构建）：外圈 1.05 / 内圈 0.955 的扁平环带，贴地 y=0。
+## 底座光环用：墙金 / 塔青 / 核玉；比格宽 5%，建筑本体压不住。
+func _ensure_hex_ring() -> void:
+	if hex_ring_mesh != null:
+		return
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var outer := 1.05
+	var inner := 0.955
+	for i in 6:
+		var a0: Vector2 = HEX_CORNERS[i] * outer
+		var a1: Vector2 = HEX_CORNERS[(i + 1) % 6] * outer
+		var b0: Vector2 = HEX_CORNERS[i] * inner
+		var b1: Vector2 = HEX_CORNERS[(i + 1) % 6] * inner
+		st.set_normal(Vector3.UP)
+		st.add_vertex(Vector3(a0.x, 0.0, a0.y))
+		st.add_vertex(Vector3(b0.x, 0.0, b0.y))
+		st.add_vertex(Vector3(b1.x, 0.0, b1.y))
+		st.set_normal(Vector3.UP)
+		st.add_vertex(Vector3(a0.x, 0.0, a0.y))
+		st.add_vertex(Vector3(b1.x, 0.0, b1.y))
+		st.add_vertex(Vector3(a1.x, 0.0, a1.y))
+	hex_ring_mesh = st.commit()
 
 
 ## 构建 MultiMeshInstance3D（实例数组 + 材质；pmesh 缺省盒体，可传六边板等）

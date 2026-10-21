@@ -2,7 +2,14 @@
 # -*- coding: utf-8 -*-
 """批量转换《改道》全部游戏资产：UMD2/UANI → glb
 
-SRC 母版（2026-10-17 修正）：reroute-maker/assets（旧 reroute 目录已不存在）。
+SRC 母版：reroute-maker/assets。
+**2026-10-21：reroute-maker 工作树已删除**，完整 git 历史（含全部母版资产）存于
+`D:/G/game/games/reroute-maker-backup-20261021.bundle`（216MB，`git bundle verify` 通过）。
+需要重转或新增模型时先还原：
+
+    git clone D:/G/game/games/reroute-maker-backup-20261021.bundle D:/G/game/games/reroute-maker
+
+还原后本脚本可直接运行（路径口径不变）。
 - 单位：zerg 三形态 × 5 动画
 - 金堆：4 档（metallic 0.65 / roughness 0.8）
 - 瓦砾：3 变体（metallic 0.1 / roughness 0.9）

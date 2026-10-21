@@ -19,6 +19,12 @@ const MENU_FPS := 60 # 菜单/标题/结算限帧（压风扇/GPU）；对局态
 var view = null # View（preload 脚本实例）；动态引用
 var world: World = null
 var sc: Scenario = null
+var run: RunState = null # 非空 = 当前是肉鸽局（world/sc 指向 run 内部实例）
+var run_ui = null # 肉鸽 HUD（game/run_ui.gd）
+var hex = null # 海克斯式三选一面板（game/hex_picker.gd）
+var tower_pick := 0 # 肉鸽模式当前选中的塔种下标（run.tower_kinds）
+var terrain_card := "" # 待落地形牌 id（点地图 3×3 中心生效）
+var _last_run_phase := -1
 var run_index := 0
 var acc := 0.0
 var paused := true # R1 新局即跑（标题屏 R6 接入后恢复"启动即暂停"口径）
@@ -39,31 +45,22 @@ var rmb_last := Vector2.ZERO # 右键拖拽上一帧位置（用位置差算位�
 ## HUD 命中区提供者（R5 注入；未注入 = 无 HUD 区域）
 var hud_regions_provider: Callable
 var _last_back_ms := 0 # Android 返回键双入口（通知 / ui_cancel 动作）去抖时间戳
+var _undo_cells: Array = [] # 最近一次建造（单格/拖拽一条线）的格子；5s 窗口内可全额撤销
+var _undo_tick := -99999 # 该次建造的 tick（撤销窗口 = World.UNDO_WINDOW_TICKS）
 var _intro = null # 开屏动画层（game/intro.gd；仅冷启动非探针路径创建，播完自毁）
 var _settings: Dictionary = {} # 玩家设置缓存（含 runs 跨会话局数；save_cfg 回写）
 var _is_probe_run := false # 探针/自检运行：不读不写跨会话局数（保探针确定性与种子口径）
+var _ore_intent := {} # M2-a 待开挖矿格意图：{ "ore": Vector2i, "stand": Vector2i }
 
 
-## 初始化：隐私门 → 建 HUD/壳、开新局、显示标题屏；自检模式触发 export 验收
+## 初始化：建 HUD/壳、开新局、显示标题屏；自检模式触发 export 验收
 func _ready() -> void:
 	view = $View
-	_is_probe_run = _detect_probe_run()
-	_settings = UserSettings.load_cfg()
-	# 隐私门（合规）：冷启动且未同意 → 先弹窗；此时不建 HUD/壳、不开局、不播开屏，
-	# 也不写 user://settings.cfg（同意动作由 _on_privacy_agreed 落盘）。
-	# 探针/自检/headless 一律跳过，保 22 闸与 selfcheck 口径不变。
-	if not _is_probe_run and not bool(_settings.get("privacy_agreed", false)):
-		# 先按玩家设置摆正窗口（尺寸/模式/垂直同步），否则默认小窗会把隐私卡片压到最小宽度。
-		UserSettings.apply_video(_settings)
-		_show_privacy_gate()
-		return
-	_boot()
-
-
-## 正常启动流程（原 _ready 主体）：隐私门通过后调用。
-func _boot() -> void:
 	_setup_hud()
 	_setup_shell()
+	_setup_run_ui()
+	_is_probe_run = _detect_probe_run()
+	_settings = UserSettings.load_cfg()
 	if _is_probe_run:
 		UserSettings.apply_audio(_settings) # 探针只应用音量（显示/画质保持默认，保 gate 截图口径）
 	else:
@@ -80,26 +77,6 @@ func _boot() -> void:
 		_run_selfcheck()
 	elif _intro_enabled():
 		_play_intro()
-
-
-## 弹隐私门：同意 → 落盘 + 走正常启动；不同意 → 退出应用。
-func _show_privacy_gate() -> void:
-	var gate = load("res://game/privacy_gate.gd").new()
-	add_child(gate)
-	gate.agreed.connect(_on_privacy_agreed)
-	gate.declined.connect(_on_privacy_declined)
-
-
-## 同意隐私政策：写盘（privacy/agreed=true）后继续启动。
-func _on_privacy_agreed() -> void:
-	_settings["privacy_agreed"] = true
-	UserSettings.save_cfg(_settings)
-	_boot()
-
-
-## 不同意：直接退出（不留任何数据写入）。
-func _on_privacy_declined() -> void:
-	get_tree().quit(0)
 
 
 ## 开屏动画装载（探针零影响口径）：selfcheck / headless / 探针脚本主循环（-s res://tests/）
@@ -164,6 +141,7 @@ func _setup_hud() -> void:
 		"on_pause": Callable(self, "_on_hud_pause"),
 		"on_heat": Callable(self, "_on_hud_heat"),
 		"on_skill": Callable(self, "_on_hud_skill"),
+		"on_undo": Callable(self, "_on_hud_undo"),
 	})
 	hud_regions_provider = Callable(hud, "hit_regions")
 	view.on_float = Callable(hud, "float_bounty")
@@ -176,6 +154,7 @@ func _setup_shell() -> void:
 	add_child(shell)
 	shell.init({
 		"start_match": Callable(self, "start_match"),
+		"start_rogue": Callable(self, "start_rogue"),
 		"restart": Callable(self, "restart_game"),
 		"resume": Callable(self, "resume_game"),
 		"to_title": Callable(self, "to_title"),
@@ -186,6 +165,25 @@ func _setup_shell() -> void:
 		"video_changed": Callable(self, "_on_video_changed"),
 		"ui_changed": Callable(self, "_on_ui_changed"),
 	}, hud)
+
+
+## 肉鸽 HUD 构建与接线（独立 CanvasLayer，不侵入 hud/screens）
+func _setup_run_ui() -> void:
+	run_ui = preload("res://game/run_ui.gd").new()
+	run_ui.name = "RunUi"
+	add_child(run_ui)
+	run_ui.init({
+		"start_wave": Callable(self, "_run_start_wave"),
+		"pick": Callable(self, "_run_pick"),
+		"refresh": Callable(self, "_run_refresh"),
+		"skip": Callable(self, "_run_skip"),
+		"advance": Callable(self, "_run_advance"),
+		"use_card": Callable(self, "_run_use_card"),
+	}, hud)
+	hex = preload("res://game/hex_picker.gd").new()
+	hex.name = "HexPicker"
+	add_child(hex)
+	hex.init({ "sfx": Callable(view, "play_sound") }, hud)
 
 
 # ---------------- 屏幕流转（页状态 = 游戏状态：进行中 = 空态） ----------------
@@ -201,6 +199,87 @@ func start_match() -> void:
 	view.bgm(true)
 	shell.close_all()
 	_persist_runs()
+
+
+## 开一局肉鸽：新种子 → RunState（内含独立 Scenario + World）→ 切表现层
+func start_rogue() -> void:
+	run_index += 1
+	run = RunState.new(BASE_SEED + run_index)
+	sc = run.sc
+	world = run.world
+	tower_pick = 0
+	terrain_card = ""
+	_last_run_phase = -1
+	view.set_heat(false)
+	var picked: Array = Blueprint.pick(run_index)
+	view.apply_blueprint(picked[0], picked[1], _visual_anchor())
+	view.is_ore = Callable(sc, "is_ore")
+	view.build_terrain(world.grid)
+	view.sync(world)
+	acc = 0.0
+	drag_start = Vector2i(-1, -1)
+	heat_on = false
+	over_shown = false
+	if hud != null:
+		hud.reset()
+		hud.set_heat_vis(false)
+	_reset_undo()
+	paused = true # INTRO 阶段：等玩家点开始
+	hud.set_visible_hud(true)
+	hud.top_bar.visible = false # 经典顶栏的「终局 tick / 波次」在肉鸽局无意义，由 run_ui 接管
+	run_ui.show_run(run)
+	shell.close_all()
+	view.bgm(true)
+	print("[Game] 肉鸽开局 seed=", BASE_SEED + run_index)
+	_persist_runs()
+
+
+# ---------------- 肉鸽回调（run_ui → RunState） ----------------
+
+func _run_start_wave() -> void:
+	if run == null:
+		return
+	run.start_wave()
+	run_ui.refresh()
+
+
+func _run_pick(idx: int) -> void:
+	if run == null:
+		return
+	var card: Dictionary = run.pick(idx)
+	if card.is_empty():
+		return
+	run_ui.refresh()
+
+
+func _run_refresh() -> void:
+	if run == null:
+		return
+	if not run.refresh_offers():
+		run_ui.flash("供给不足或已刷满")
+		return
+	_open_hex() # 换牌后重播一次入场动画
+
+
+func _run_skip() -> void:
+	if run == null or run.phase != RunState.PHASE_PICK:
+		return
+	run.world.supply += 50
+	run.offers = []
+	run.start_wave()
+	run_ui.refresh()
+
+
+func _run_advance() -> void:
+	if run == null:
+		return
+	run.advance_layer()
+	run_ui.refresh()
+
+
+func _run_use_card(cid: String) -> void:
+	terrain_card = cid
+	run_ui.flash("点地图选 3×3 中心")
 
 
 ## 跨会话局数落盘（进入对局才记：标题屏预烘焙的那局不算「玩过」；探针/自检跳过）。
@@ -244,8 +323,11 @@ func resume_game() -> void:
 	shell.resume()
 
 
-## 暂停/结算 → 重开一局
+## 暂停/结算 → 重开一局（肉鸽局重开仍是肉鸽）
 func restart_game() -> void:
+	if run != null:
+		start_rogue()
+		return
 	new_game()
 	start_match()
 
@@ -254,6 +336,13 @@ func restart_game() -> void:
 func to_title() -> void:
 	paused = true
 	drag_start = Vector2i(-1, -1)
+	run = null
+	terrain_card = ""
+	_last_run_phase = -1
+	if run_ui != null:
+		run_ui.hide_run()
+	if hex != null:
+		hex.close()
 	hud.set_visible_hud(false)
 	view.bgm(false)
 	new_game()
@@ -285,6 +374,7 @@ func load_game(slot: int) -> bool:
 	if hud != null:
 		hud.reset()
 		hud.set_heat_vis(false)
+	_reset_undo()
 	start_match()
 	print("[Game] 读档 槽=", slot, " run=", run_index, " tick=", world.tick_count)
 	return true
@@ -343,9 +433,29 @@ func _notification(what: int) -> void:
 		_android_back_handle()
 
 
-## HUD 回调：顶栏模式按钮 → 设置操作模式
+## HUD 回调：顶栏模式按钮 → 设置操作模式（肉鸽模式点两次「塔」= 轮换已解锁塔种）
 func _on_hud_mode(m: String) -> void:
+	if m == "tower" and run != null and run.tower_kinds.size() > 1:
+		if mode == "tower":
+			tower_pick = (tower_pick + 1) % run.tower_kinds.size()
+			run_ui.flash("当前塔：" + _tower_name(_current_tower_kind()))
+		set_mode(m)
+		return
 	set_mode(m)
+
+
+## 肉鸽模式当前选中的塔 bkind
+func _current_tower_kind() -> int:
+	if run == null or run.tower_kinds.is_empty():
+		return Sim.B_TOWER
+	return int(run.tower_kinds[clampi(tower_pick, 0, run.tower_kinds.size() - 1)])
+
+
+func _tower_name(bk: int) -> String:
+	if world == null:
+		return "?"
+	var d: Dictionary = world.bdef(bk)
+	return String(d.get("name", "?"))
 
 
 ## HUD 回调：顶栏暂停按钮 → 进暂停页
@@ -363,6 +473,71 @@ func _on_hud_skill() -> void:
 	if world != null and int(world.hero["skill_cd"]) == 0:
 		world.apply_command({ "kind": "shock" }) # 冷却/终局守卫在模拟层
 		view.play_sound("orc_chief_roar.mp3", 0.9)
+
+
+## HUD 回调：撤销按钮 → 撤销最近一次建造（同 Ctrl+Z）
+func _on_hud_undo() -> void:
+	do_undo_build()
+
+
+# ---------------- 建造撤销（5s 全额退款；只由玩家输入触发） ----------------
+
+## 记下一次建造（墙线/单塔）：作为「上一步」候选。成功放置才覆盖。
+func _remember_build(cells: Array) -> void:
+	if cells.is_empty():
+		return
+	_undo_cells = cells.duplicate()
+	_undo_tick = world.tick_count
+	if hud != null:
+		hud.set_undo_vis(true, ceili(float(World.UNDO_WINDOW_TICKS) / 20.0))
+
+
+## 撤销是否仍可用（窗口内 + 目标格建筑完好非核心）。
+func can_undo_build() -> bool:
+	if world == null or _undo_cells.is_empty() or world.outcome != World.RUNNING:
+		return false
+	if world.tick_count - _undo_tick > World.UNDO_WINDOW_TICKS:
+		return false
+	for c in _undo_cells:
+		var b = world.building_at(c.x, c.y)
+		if b == null or int(b["hp"]) <= 0 or int(b["kind"]) == Sim.B_CORE:
+			return false
+	return true
+
+
+## 执行撤销：逐格下发 undo_build（模拟层守卫窗口/满血），成功与否都清候选。
+func do_undo_build() -> bool:
+	var ok := can_undo_build()
+	if ok:
+		for c in _undo_cells:
+			world.apply_command({ "kind": "undo_build", "x": c.x, "y": c.y })
+		view.play_sound("building_remove.mp3", 0.6)
+	_undo_cells = []
+	_undo_tick = -99999
+	if hud != null:
+		hud.set_undo_vis(false)
+	return ok
+
+
+## 撤销候选清空（新局/读档/暂停切页时调用）。
+func _reset_undo() -> void:
+	_undo_cells = []
+	_undo_tick = -99999
+	if hud != null:
+		hud.set_undo_vis(false)
+
+
+## 每帧刷新撤销提示：窗口内且有完好目标才亮；到点/失效就熄灭。
+func _update_undo_ui() -> void:
+	if hud == null or world == null:
+		return
+	var on := can_undo_build()
+	var secs := 0
+	if on:
+		secs = maxi(1, ceili(float(World.UNDO_WINDOW_TICKS - (world.tick_count - _undo_tick)) / 20.0))
+	else:
+		_undo_cells = []
+	hud.set_undo_vis(on, secs)
 
 
 ## 视觉地标锚点：岩脊/盆地/前哨峰对齐当局玩法图（纯表现层单向；sim 不知道本系统存在）。
@@ -450,6 +625,7 @@ func new_game() -> void:
 	if hud != null:
 		hud.reset()
 		hud.set_heat_vis(false)
+	_reset_undo()
 	print("[Game] 新对局 run=", run_index, " seed=", BASE_SEED + run_index, " sc_seed=", sc.seed)
 
 
@@ -470,27 +646,91 @@ func _process(dt: float) -> void:
 	_sync_fps_cap()
 	if world == null:
 		return
+	_sync_run_phase()
 	if world.outcome == World.RUNNING and not paused:
 		acc += dt * time_scale
 		var steps := 0
 		while acc >= TICK_DT and steps < MAX_CATCHUP:
 			world.tick()
+			_tick_ore_intent()
+			if run != null:
+				run.after_tick()
+				if run.phase != RunState.PHASE_WAVE:
+					acc = 0.0 # 阶段已切走：立即停止本帧补步，别让 tick 越过停顿点
+					break
 			acc -= TICK_DT
 			steps += 1
 		if steps == MAX_CATCHUP:
 			acc = 0.0
+	_sync_run_phase() # 循环内可能刚切到 PICK/OVER：同帧把暂停态与 HUD 追上
 	_check_outcome()
 	view.sync(world)
 	update_ghost()
+	_update_undo_ui()
 	_update_camera(dt)
 	if not paused or shell.current_page() == "pause":
 		hud.update(world) # 暂停时仍刷（面板静置）；标题/结算下 HUD 已整体隐藏
 	shell.update()
 
 
+## 肉鸽阶段同步：阶段变化即重设暂停态并刷新 HUD（WAVE 之外一律不推进 tick）
+func _sync_run_phase() -> void:
+	if run == null:
+		return
+	var ph: int = run.phase
+	if ph == _last_run_phase:
+		return
+	_last_run_phase = ph
+	paused = ph != RunState.PHASE_WAVE
+	if run_ui != null:
+		run_ui.refresh()
+	if ph == RunState.PHASE_PICK:
+		_open_hex()
+	elif hex != null:
+		hex.close()
+
+
+## 展开海克斯三选一（阶段制下唯一会盖满屏幕的交互）
+func _open_hex() -> void:
+	if hex == null:
+		return
+	if run == null or run.phase != RunState.PHASE_PICK or run.offers.is_empty():
+		hex.close()
+		return
+	var cost := 0
+	if run.refresh_used < RewardPool.REFRESH_COSTS.size():
+		cost = int(RewardPool.REFRESH_COSTS[run.refresh_used])
+	hex.open(run.offers, {
+		"title": "第 %d 层 · 第 %d 波结束 · 选择一项强化" % [run.layer, run.wave_in_layer],
+		"supply": run.world.supply,
+		"refresh_cost": cost,
+		"can_refresh": cost > 0,
+	}, {
+		"pick": Callable(self, "_run_pick"),
+		"refresh": Callable(self, "_run_refresh"),
+		"skip": Callable(self, "_run_skip"),
+	})
+
+
 ## 终局触发（胜/负）：结算屏 + 胜负音 + 结算 BGM；「未暂停且未展示过」时执行一次。
 func _check_outcome() -> void:
-	if world == null or world.outcome == World.RUNNING or paused or over_shown:
+	if world == null:
+		return
+	if run != null:
+		if run.phase != RunState.PHASE_WON and run.phase != RunState.PHASE_OVER:
+			return
+		if over_shown:
+			return
+		over_shown = true
+		paused = true
+		hud.set_visible_hud(false)
+		run_ui.hide_run()
+		var ran_won: bool = run.phase == RunState.PHASE_WON
+		shell.open_gameover(ran_won, world)
+		view.play_sound("match_win.mp3" if ran_won else "match_lose.mp3", 0.85)
+		view.bgm_settlement(true)
+		return
+	if world.outcome == World.RUNNING or paused or over_shown:
 		return
 	over_shown = true
 	hud.set_visible_hud(false)
@@ -538,7 +778,11 @@ func _unhandled_input(event: InputEvent) -> void:
 			else:
 				pointer_up(mb.position)
 		elif mb.button_index == MOUSE_BUTTON_RIGHT:
-			rmb_panning = mb.pressed and not in_hud_region(mb.position.x, mb.position.y)
+			if mb.pressed and drag_start.x >= 0:
+				_cancel_drag() # 拖拽中右键 = 取消本次建造（不落子、不进平移）
+				rmb_panning = false
+			else:
+				rmb_panning = mb.pressed and not in_hud_region(mb.position.x, mb.position.y)
 			rmb_last = mb.position
 		elif (mb.button_index == MOUSE_BUTTON_WHEEL_UP or mb.button_index == MOUSE_BUTTON_WHEEL_DOWN) and mb.pressed:
 			if _camera_free() and not in_hud_region(mb.position.x, mb.position.y):
@@ -561,6 +805,12 @@ func _unhandled_input(event: InputEvent) -> void:
 		var kc := mk.keycode
 		if kc == KEY_ESCAPE or mk.is_action(&"ui_cancel"):
 			kc = KEY_ESCAPE # 安卓返回键的键事件形态统一按 Esc 语义路由
+		if (mk.ctrl_pressed or mk.meta_pressed) and kc == KEY_Z:
+			if do_undo_build():
+				return
+		if kc == KEY_ESCAPE and drag_start.x >= 0:
+			_cancel_drag() # 拖拽中 Esc = 取消本次建造（不落子、不进暂停）
+			return
 		if shell != null and shell.handle_key(kc):
 			return
 		if mk.keycode == KEY_TAB:
@@ -575,7 +825,11 @@ func _unhandled_input(event: InputEvent) -> void:
 
 ## 相机操控是否可用（标题/暂停/结算冻结；滚轮缩放与 WASD 同口径）
 func _camera_free() -> bool:
-	return not paused and (shell == null or shell.current_page() == "")
+	if shell != null and shell.current_page() != "":
+		return false
+	if run != null:
+		return true # 肉鸽模式：INTRO/PICK 停 tick 但仍要能环视战场
+	return not paused
 
 
 ## 坐标是否落在 HUD 区域内（点击排除用）
@@ -593,8 +847,11 @@ func in_hud_region(x: float, y: float) -> bool:
 ## 模式合法性（口径同母版 mode_valid；非法 = 幽灵红色 + 命令被模拟层守卫拒绝）。
 func mode_valid(m: String, x: int, y: int) -> bool:
 	if m == "wall" or m == "tower":
-		var def: Dictionary = Sim.BUILDINGS[(Sim.B_WALL if m == "wall" else Sim.B_TOWER) - 1]
+		var bk: int = Sim.B_WALL if m == "wall" else _current_tower_kind()
+		var def: Dictionary = world.bdef(bk)
 		if world.supply < int(def["cost"]):
+			return false
+		if world.tower_cap >= 0 and bk != Sim.B_CORE and world.live_buildings() >= world.tower_cap:
 			return false
 		if not world.grid.passable(x, y):
 			return false
@@ -650,16 +907,91 @@ func line_cells(a: Vector2i, b: Vector2i) -> Array:
 	return cells
 
 
-## 设置当前操作模式（墙/塔/挖矿/填/挖/拆/英雄）
+## 设置当前操作模式（墙/塔/挖矿/填/挖/拆/英雄）；换模式即取消未完成的拖拽。
 func set_mode(m: String) -> void:
+	if m != mode:
+		_cancel_drag()
 	mode = m
 	if hud != null:
 		hud.set_mode(m)
 
 
+## 取消当前拖拽（右键/Esc/换模式）：不落子，下一帧预览回到悬停单格。
+func _cancel_drag() -> void:
+	drag_start = Vector2i(-1, -1)
+	if view != null:
+		view.show_ghost([], false, "")
+
+
+# ---------------- 矿格手动开挖（M2-a / DIGGING-SPEC §2.3）----------------
+# 矿格是 COVER，不可通行，英雄只能站在六邻开挖。本阶段（M2-a）沿用旧 dig 语义：
+# 到达即挖开 + 立即产出，不含 2.5s 进度条（M2-b 才做）。sim 层零改动。
+
+## 该格是否为「尚未挖开的矿格」。
+func _is_locked_ore(x: int, y: int) -> bool:
+	if world == null or sc == null or not world.grid.inb(x, y):
+		return false
+	return world.grid.at(x, y) == Grid.COVER and sc.is_ore(x, y)
+
+
+## 矿格六邻里离英雄最近、可站立且无建筑的一格；无解返回 (-1,-1)。
+func _pick_ore_stand(x: int, y: int) -> Vector2i:
+	var best := Vector2i(-1, -1)
+	var best_d := INT64_MAX
+	var hx := int(world.hero["x"])
+	var hy := int(world.hero["y"])
+	for k in 6:
+		var nx: int = Grid.nx(x, y, k)
+		var ny: int = Grid.ny(x, y, k)
+		if not world.grid.inb(nx, ny) or not world.grid.passable(nx, ny):
+			continue
+		if world.building_at(nx, ny) != null:
+			continue
+		var d: int = Grid.hex_dist(nx, ny, hx, hy)
+		if d < best_d:
+			best_d = d
+			best = Vector2i(nx, ny)
+	return best
+
+
+## 下「去挖这一格」的意图：选站位 → 命令英雄前往。
+func _order_ore_dig(x: int, y: int) -> bool:
+	var stand := _pick_ore_stand(x, y)
+	if stand.x < 0:
+		return false
+	_ore_intent = { "ore": Vector2i(x, y), "stand": stand }
+	world.apply_command({ "kind": "hero", "x": stand.x, "y": stand.y })
+	return true
+
+
+## 每 tick 后判定意图：英雄已到矿格邻位 → 代发 dig。
+## M2-a 用纯距离判定（路过顺手挖）；M2-b 接入进度条时改为「站定且未移动」。
+func _tick_ore_intent() -> void:
+	if _ore_intent.is_empty() or world == null:
+		return
+	var ore: Vector2i = _ore_intent["ore"]
+	if not _is_locked_ore(ore.x, ore.y):
+		_ore_intent = {} # 已被挖开 / 地形变了：意图作废
+		return
+	var hx := int(world.hero["x"])
+	var hy := int(world.hero["y"])
+	if Grid.hex_dist(hx, hy, ore.x, ore.y) > 1:
+		return # 还没走到（被顶开/绕路）：保留意图，等英雄靠近
+	world.apply_command({ "kind": "dig", "x": ore.x, "y": ore.y })
+	_ore_intent = {}
+
+
 ## 在指定格执行当前模式对应的命令（填/挖成功 → 对应地形音；D1-7）。
 func apply_mode_at(m: String, x: int, y: int) -> void:
+	# M2-a：矿格不接受隔空开挖，改为派英雄去邻格（D02）；普通土方保持原口径。
+	if m == "dig" and _is_locked_ore(x, y):
+		_order_ore_dig(x, y)
+		return
+	_ore_intent = {} # 任何其它操作都放弃未完成的矿格意图
 	var h_before: int = world.grid.get_h(x, y)
+	if m == "tower" and run != null:
+		world.apply_command({ "kind": "build", "bkind": _current_tower_kind(), "x": x, "y": y })
+		return
 	world.apply_command({ "kind": m, "x": x, "y": y })
 	if m == "fill" and world.grid.get_h(x, y) > h_before:
 		view.play_sound("terrain_fill.mp3", 0.8)
@@ -667,55 +999,92 @@ func apply_mode_at(m: String, x: int, y: int) -> void:
 		view.play_sound("terrain_lower.mp3", 0.8)
 
 
-## 鼠标按下：记录拖拽起点（墙/塔）或立即执行单格操作（挖矿/填/挖/拆/英雄）
+## 批量落子（墙线/单塔）：逐格尝试，成功后把「本次成功格」记为可撤销一步。
+func _commit_cells(m: String, cells: Array) -> void:
+	var placed: Array = []
+	for c in cells:
+		var before = world.building_at(c.x, c.y)
+		apply_mode_at(m, c.x, c.y)
+		var after = world.building_at(c.x, c.y)
+		if before == null and after != null:
+			placed.append(c)
+	if not placed.is_empty():
+		_remember_build(placed)
+
+
+## 是否允许编辑战场：肉鸽模式下 INTRO / PICK 阶段虽然不推进 tick，但必须能建造
+func _edit_allowed() -> bool:
+	if world == null or world.outcome != World.RUNNING:
+		return false
+	if shell != null and shell.current_page() != "":
+		return false
+	if not paused:
+		return true
+	return run != null and run.phase != RunState.PHASE_WAVE
+
+
+## 鼠标按下：墙记录拖拽起点；塔立即单点落子（不做拖拽线）；其余立即执行单格操作。
 func pointer_down(pos: Vector2) -> void:
 	mouse_pos = pos
-	if world == null or world.outcome != World.RUNNING or paused:
+	if not _edit_allowed():
 		return
 	if in_hud_region(pos.x, pos.y):
 		return
 	var cell: Vector2i = view.pick_cell(pos.x, pos.y)
 	if cell.x < 0:
 		return
-	if mode == "wall" or mode == "tower":
+	if terrain_card != "" and run != null:
+		if run.use_terrain(terrain_card, cell.x, cell.y):
+			terrain_card = ""
+			run_ui.refresh()
+		return
+	if mode == "wall":
 		drag_start = cell
+	elif mode == "tower":
+		_commit_cells("tower", [cell])
 	else:
 		apply_mode_at(mode, cell.x, cell.y)
 
 
-## 鼠标抬起：拖拽模式沿 Bresenham 线批量执行；单格模式空转
+## 鼠标抬起：墙拖拽沿 Bresenham 线批量落子；塔/单格模式空转（按下即完成）。
 func pointer_up(pos: Vector2) -> void:
 	mouse_pos = pos
-	if paused:
+	if paused and not _edit_allowed():
 		drag_start = Vector2i(-1, -1)
 		return
 	if drag_start.x >= 0:
 		var cell: Vector2i = view.pick_cell(pos.x, pos.y)
 		if cell.x >= 0 and world.outcome == World.RUNNING:
-			for c in line_cells(drag_start, cell):
-				apply_mode_at(mode, c.x, c.y)
+			_commit_cells("wall", line_cells(drag_start, cell))
 		drag_start = Vector2i(-1, -1)
 
 
-## 幽灵预览（口径同母版 update_ghost）。
+## 幽灵预览（口径同母版 update_ghost；2026-10-20 起墙/塔带实物模型与射程，悬停建筑加焦点环）。
 func update_ghost() -> void:
-	if world == null or world.outcome != World.RUNNING or paused or mouse_pos.x < 0.0 or in_hud_region(mouse_pos.x, mouse_pos.y):
-		view.show_ghost([], false)
+	if not _edit_allowed() or mouse_pos.x < 0.0 or in_hud_region(mouse_pos.x, mouse_pos.y):
+		view.show_ghost([], false, "")
+		view.set_focus(Vector2i(-1, -1))
 		return
 	var cell: Vector2i = view.pick_cell(mouse_pos.x, mouse_pos.y)
 	if cell.x < 0:
-		view.show_ghost([], false)
+		view.show_ghost([], false, "")
+		view.set_focus(Vector2i(-1, -1))
 		return
-	if (mode == "wall" or mode == "tower") and drag_start.x >= 0:
+	var hovered = world.building_at(cell.x, cell.y)
+	if hovered != null and int(hovered["hp"]) > 0:
+		view.set_focus(cell, mode == "remove") # 拆=红，其余=金（可交互提示）
+	else:
+		view.set_focus(Vector2i(-1, -1))
+	if mode == "wall" and drag_start.x >= 0:
 		var cells: Array = line_cells(drag_start, cell)
 		var is_bad := false
 		for c in cells:
 			if not mode_valid(mode, c.x, c.y):
 				is_bad = true
 				break
-		view.show_ghost(cells, is_bad)
+		view.show_ghost(cells, is_bad, mode)
 	else:
-		view.show_ghost([cell], not mode_valid(mode, cell.x, cell.y))
+		view.show_ghost([cell], not mode_valid(mode, cell.x, cell.y), mode)
 
 
 ## 威胁热层开关（TAB / 顶栏按钮共用；仅进行中——标题/暂停/结算下不响应）。

@@ -42,6 +42,26 @@ func _initialize() -> void:
 		return
 
 	world.apply_command({ "kind": "wall", "x": wall_cell.x, "y": wall_cell.y })
+	# 相邻墙（自动拼接测试）：优先取 wall_cell 的空闲六邻
+	var wall_cell2 := Vector2i(-1, -1)
+	for k in 6:
+		var nx := Grid.nx(wall_cell.x, wall_cell.y, k)
+		var ny := Grid.ny(wall_cell.x, wall_cell.y, k)
+		if nx < 0 or ny < 0 or nx >= world.sc.w or ny >= world.sc.h:
+			continue
+		if not world.grid.passable(nx, ny) or world.building_at(nx, ny) != null:
+			continue
+		if not world.cell_vacant(nx, ny):
+			continue
+		if nx == int(world.hero["x"]) and ny == int(world.hero["y"]):
+			continue
+		if (Vector2i(nx, ny) == spawn_a or Vector2i(nx, ny) == spawn_b):
+			continue
+		wall_cell2 = Vector2i(nx, ny)
+		break
+	check(wall_cell2.x >= 0, "相邻墙格扫描")
+	if wall_cell2.x >= 0:
+		world.apply_command({ "kind": "wall", "x": wall_cell2.x, "y": wall_cell2.y })
 	world.apply_command({ "kind": "tower", "x": tower_cell.x, "y": tower_cell.y })
 	world.apply_command({ "kind": "spawn", "x": spawn_a.x, "y": spawn_a.y, "speed": 4, "kind_id": Sim.E_SWARM })
 	world.apply_command({ "kind": "spawn", "x": spawn_b.x, "y": spawn_b.y, "speed": 8, "kind_id": Sim.E_BEHEMOTH })
@@ -51,7 +71,16 @@ func _initialize() -> void:
 	# 初建断言：节点齐、种类缩放字面量
 	var st0: Dictionary = view.debug_stats()
 	cmp_int(st0["units"], 2, "初始单位节点数")
-	cmp_int(st0["buildings"], 3, "初始建筑节点数（核心+墙+塔）")
+	cmp_int(st0["buildings"], 4, "初始建筑节点数（核心+双墙+塔）")
+	# 连续墙：孤墙 6 条外轮廓；两墙相邻 = 5+5 外轮廓 + 1 条共享厚边 = 11
+	var wkey1 := wall_cell.x * 1000 + wall_cell.y
+	var wkey2 := wall_cell2.x * 1000 + wall_cell2.y
+	check(view.wall_edges.has(wkey1), "墙 1 边缘段容器")
+	if view.wall_edges.has(wkey1) and view.wall_edges.has(wkey2):
+		var e1n: int = (view.wall_edges[wkey1] as Node3D).get_child_count()
+		var e2n: int = (view.wall_edges[wkey2] as Node3D).get_child_count()
+		cmp_int(e1n + e2n, 11, "相邻墙共享边拼接（5+5 轮廓 + 1 共享）")
+	cmp_int(int(st0["rings"]), 4, "每栋建筑一条底座光环")
 	check(st0["hero"] == true, "英雄节点")
 	var e1a = view.unit_nodes.get(1)
 	var e2a = view.unit_nodes.get(2)
@@ -150,8 +179,19 @@ func _initialize() -> void:
 		check(view.ghost_mi.material_override == view.mats["ghost_bad"], "幽灵无效染色 bad")
 	var diag := [Vector2i(8, 8), Vector2i(9, 9), Vector2i(10, 10), Vector2i(11, 11)]
 	_ghost_cells_check(view, diag, false)
+	# 实物预览：塔 = 塔模 + 射程填充/边缘；墙 = 连续墙段本体 + 边缘拼接
+	view.show_ghost([Vector2i(8, 8)], false, "tower")
+	cmp_int(view.preview_root.get_child_count(), 1, "塔预览模型节点")
+	cmp_int(view.range_root.get_child_count(), 2, "塔射程填充+边缘")
+	view.show_ghost([Vector2i(8, 8), Vector2i(9, 8)], false, "wall")
+	cmp_int(view.preview_root.get_child_count(), 2, "墙预览逐格节点")
+	if view.preview_root.get_child_count() > 0:
+		var pv0: Node3D = view.preview_root.get_child(0)
+		check(pv0.get_child_count() >= 2, "墙预览含本体 + 边缘段")
 	view.show_ghost([])
 	check(view.ghost_alive == false and view.ghost == null, "幽灵清除")
+	cmp_int(view.preview_root.get_child_count(), 0, "实物预览清除")
+	cmp_int(view.range_root.get_child_count(), 0, "射程预览清除")
 
 	# ---- 热层 ----
 	view.set_heat(true)
@@ -245,9 +285,17 @@ func _verify(view, world) -> void:
 			var gy2: float = view.ground_y(int(b["x"]), int(b["y"]))
 			var bnd: Node3D = e2["node"]
 			cmp_v3(bnd.position, Vector3(w2.x, gy2, w2.z), "建筑 %d 位置 t=%d" % [int(b["id"]), t])
-			var k := 0.35 if int(b["build_left"]) > 0 else 1.0
-			cmp_v3(bnd.scale, Vector3(0.96, k, 0.96), "建筑 %d 压扁 t=%d" % [int(b["id"]), t])
+			# 2026-10-20 建筑表现：墙升起走 body 子节点（wrapper 恒 1.0）；塔按施工进度 0.12→1.0；核恒 1.0。
+			var k := 1.0
+			if int(b["kind"]) == Sim.B_TOWER and int(b["build_left"]) > 0:
+				var total: int = maxi(int(e2.get("build_total", int(b["build_left"]))), 1)
+				k = 0.12 + 0.88 * (1.0 - float(int(b["build_left"])) / float(total))
+			cmp_v3(bnd.scale, Vector3(0.96, k, 0.96), "建筑 %d 压扁/进度 t=%d" % [int(b["id"]), t])
+			check(e2.get("ring") != null and (e2["ring"] as Node3D).visible, "建筑 %d 底座光环 t=%d" % [int(b["id"]), t])
 	cmp_int(view.building_nodes.size(), alive_b, "建筑节点数 t=%d" % t)
+	# 墙边缘段：每格一个容器（连续墙靠共享边 + 外轮廓压边）
+	var ds: Dictionary = view.debug_stats()
+	cmp_int(int(ds["wall_edges"]), int(ds["wall_cells"]), "墙边缘段容器数与墙格数一致 t=%d" % t)
 
 	# 英雄：位置/起伏/朝向
 	var h: Dictionary = world.hero

@@ -1,14 +1,15 @@
 extends ProbeKit
 
 # C3 判定：窗口渲染出帧（非 headless 运行）。
-# 布置一局丰富场景（单位/墙阵/双塔/英雄），推进 90 tick 后截 8 张：
+# 布置一局丰富场景（单位/墙阵/双塔/英雄），推进 90 tick 后截 9 张：
 #   shots/game.png          对局全景（含地形/建筑/单位/核心）
 #   shots/heat.png          威胁热层开启
-#   shots/ghost.png         放墙预览幽灵（斜线逐格绿板，D5-3 目视件）
+#   shots/ghost.png         放墙预览幽灵（斜线逐格绿板 + 半透明连续墙段，D5-3/2026-10-20）
+#   shots/build_preview.png 塔实物预览 + 12 格射程
 #   shots/game_20x9.png / game_narrow.png / game_tablet.png / game_16x10.png  宽屏/窄屏/平板目视件（D1-5 扩展）
 #   shots/game_closeup.png  改造特写（自然化 T1：填两级崖壁+裙脚 / 挖一级坑，相机拉近）
 # 跑法（cwd=reroute-godot）：godot -s res://tests/probes/probe_shots.gd   （窗口模式，勿加 --headless）
-# 判定：exit 0 + stdout 含 [SHOTS] PASS（8 图非空）；像素口径交给 tools/check_shots.py。
+# 判定：exit 0 + stdout 含 [SHOTS] PASS（9 图非空）；像素口径交给 tools/check_shots.py。
 
 
 func _initialize() -> void:
@@ -60,16 +61,23 @@ func _initialize() -> void:
 		await process_frame
 	_shot("res://shots/heat.png")
 
-	# ---- 幽灵预览（斜线拖拽：经 main.line_cells 的真产线，逐格绿板）----
+	# ---- 幽灵预览（斜线拖拽：经 main.line_cells 的真产线，逐格绿板 + 实物墙段）----
 	view.set_heat(false)
-	view.show_ghost(main.line_cells(Vector2i(20, 12), Vector2i(23, 15)), false)
+	view.show_ghost(main.line_cells(Vector2i(20, 12), Vector2i(23, 15)), false, "wall")
 	view.sync(world)
 	for _i in 3:
 		await process_frame
 	_shot("res://shots/ghost.png")
 
+	# ---- 塔实物预览 + 射程（12 格填充 + 边缘带）----
+	view.show_ghost([Vector2i(20, 12)], false, "tower")
+	view.sync(world)
+	for _i in 3:
+		await process_frame
+	_shot("res://shots/build_preview.png")
+
 	# ---- 宽屏 20:9 与窄屏 4:3（D1-5 目视件：canvas_items+expand 下取景与 HUD S）----
-	view.show_ghost([], false)
+	view.show_ghost([], false, "")
 	view.sync(world)
 	root.size = Vector2i(1600, 720)
 	for _i in 5:
@@ -108,7 +116,7 @@ func _initialize() -> void:
 		for _i in 3:
 			await process_frame
 		_shot("res://shots/game_closeup.png")
-		finish("SHOTS", 8)
+		finish("SHOTS", 9)
 		return
 	finish("SHOTS", 5)
 

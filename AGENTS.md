@@ -348,6 +348,21 @@ python tools/check_shots.py    # 截图像素校验
   设置页滚动区底缘渐隐 + 返回分隔线（`UiStyle.fade_tex`）；存档删除列 62px 占位对齐；
   标题菜单列 240→264。全 22 闸 + `check_shots` 39/0 + lint 绿（hud 73→82）；证据
   `logs/gates-20261020-v24/`；决策记录 = 方案 §11.33。包仍为 §11.32 的 v2.3 内容。
+- UI v2.5「图标指挥盘 + 三屏翻新」+ 撤销 pill（2026-10-21）**已完成**：用户判 v2.4 界面差
+  → 推倒重做；**范围口径 = 主要模式 UI**（并行做肉鸽 + 主要两模式，本轮只动主要模式）。
+  HUD 右下 3 行 2/3/3 图标指挥盘（UiIcon 代码绘制 8 图标；格 72×68、名称 11/成本 9.5；
+  DOCK 252×244 / CORNER 268×260）；**字号/几何 `_layout()` 随 S 全量重算**
+  （平板「大格子小字」根修）；顶栏加盾/铜钱图标 + 供给 18；提示条 TIP 金标。三屏：
+  标题去盒化 `_menu_row`（序号 01-05 + 下划线 + 金字左金条；变体
+  `UiMenuRow`/`UiMenuRowPrimary`）+ 设置/存档/结算/暂停全重排。**撤销 pill** 落他会话
+  undo 机制合约（`hud.undo_panel` + `set_undo_vis(on, secs:=0)`：dock 上沿浮钮
+  140×30S；不入 `hit_regions`；`_undo_on` 显隐归口；`probe_input` §2 / `probe_hud`
+  §5a 断言绿——此前 `undo_panel` 缺失令 input 探针中止假绿）。顺手修
+  `view_terrain.gd` 两行 `:=` 无类型数组编译错（他会话 B2 半成品；已随 936c175 入库）。
+  probe 口径：touch 矩阵 54→56（+1 `btn_privacy_policy` §11.34 / +1 `btn_rogue`
+  他会话肉鸽入口）、hud 86→91；全 22 闸 + `check_shots` 44/0 绿。
+  证据 `logs/gates-20261020-v25/`；决策记录 = 方案 §11.35 + UI-REDESIGN §10。
+  **包未重出**（等用户确认界面后按 §11.26 口径重出四件）。
 
 ---
 

@@ -15,6 +15,9 @@ const RUNNING := 0
 const WON := 1
 const LOST := 2
 const INT64_MAX := 9223372036854775807
+# 建造撤销窗口（tick，5s）：只允许撤销刚落下的建筑并全额退款。
+# 仅主循环/HUD 用；placed_tick 不进 canonical_bytes，不影响黄金指纹。
+const UNDO_WINDOW_TICKS := 100
 
 var sc: Scenario
 var seed: int
@@ -34,6 +37,18 @@ var by_cell: Dictionary # idx -> building
 var next_unit_id: int
 var next_building_id: int
 var core: Dictionary
+
+# ---- 肉鸽模式扩展点（经典模式全部保持默认值 ⇒ 16 指纹零漂移） ----
+# btab 为空 = 用 Sim.BUILDINGS（经典）；非空 = 8 种塔的扩展表（肉鸽）。
+# bounty_shift / hero_radius / hero_cd_max 默认取 Sim 常量；肉鸽遗物/天赋覆写。
+# wave_driver 非空时接管 run_waves()：肉鸽模式由 RunState 按波内节奏发怪。
+# 以上字段均不进 canonical_bytes（不参与指纹），故不影响经典基线。
+var btab: Array = []
+var bounty_shift: int = 0
+var hero_radius: int = 0
+var hero_cd_max: int = 0
+var wave_driver: Callable = Callable()
+var tower_cap: int = -1 # 塔位上限；-1 = 不限（经典模式）。肉鸽按层给出
 
 # 主场（目标=核心格）+ 围攻场（惰性，目标=全部存活建筑格）
 var field: FlowField
@@ -91,6 +106,12 @@ func _init(psc: Scenario, pseed: int, prebuild_budget: int = 2048) -> void:
 	hero_field_rev = -1
 	hero_goal_tx = -1
 	hero_goal_ty = -1
+	# 肉鸽扩展点默认值：与经典常量逐位一致
+	bounty_shift = Sim.CONVOY_SHIFT
+	hero_radius = int(Sim.HERO["skill_radius"])
+	hero_cd_max = int(Sim.HERO["skill_cooldown"])
+	wave_driver = Callable()
+	tower_cap = -1
 	place_building(Sim.B_CORE, sc.core.x, sc.core.y)
 
 
@@ -121,8 +142,13 @@ func apply_command(cmd: Dictionary) -> void:
 	elif kind == "wall" or kind == "tower":
 		var bkind := Sim.B_WALL if kind == "wall" else Sim.B_TOWER
 		try_build(bkind, cmd["x"], cmd["y"])
+	elif kind == "build":
+		# 肉鸽模式：按显式 bkind 建造（8 种塔）。经典模式不发此命令 ⇒ 基线不变。
+		try_build(int(cmd["bkind"]), cmd["x"], cmd["y"])
 	elif kind == "remove":
 		try_remove(cmd["x"], cmd["y"])
+	elif kind == "undo_build":
+		try_undo_build(cmd["x"], cmd["y"])
 	elif kind == "hero":
 		# 点地移动：目标须可通行且不是原地；被墙截断时英雄场重建自动续路
 		if grid.passable(cmd["x"], cmd["y"]) and not (cmd["x"] == hero["x"] and cmd["y"] == hero["y"]):
@@ -185,9 +211,32 @@ func cell_vacant(x: int, y: int) -> bool:
 	return true
 
 
+## 建筑定义查询：经典模式（btab 空）恒走 Sim.BUILDINGS；肉鸽模式走扩展表。
+## 越界返回空字典——调用方必须先保证 bkind 合法（apply_command 的守卫链已保证）。
+func bdef(bkind: int) -> Dictionary:
+	var i: int = bkind - 1
+	if btab.is_empty():
+		if i < 0 or i >= Sim.BUILDINGS.size():
+			return {}
+		return Sim.BUILDINGS[i]
+	if i < 0 or i >= btab.size():
+		return {}
+	return btab[i]
+
+
+## 存活建筑数（不含核心）——塔位上限判定用
+func live_buildings() -> int:
+	var n := 0
+	for i in buildings.size():
+		var b: Dictionary = buildings[i]
+		if b["hp"] > 0 and int(b["kind"]) != Sim.B_CORE:
+			n += 1
+	return n
+
+
 ## 放置建筑（含施工时间、立即挡路）；核心额外记录
 func place_building(bkind: int, x: int, y: int) -> Dictionary:
-	var def: Dictionary = Sim.BUILDINGS[bkind - 1]
+	var def: Dictionary = bdef(bkind)
 	# 第 1 波之前施工时间减半（切片 1 的教学让步）
 	var build: int = def["build_ticks"]
 	if sc.waves.size() > 0 and tick_count < sc.waves[0][0]:
@@ -200,6 +249,7 @@ func place_building(bkind: int, x: int, y: int) -> Dictionary:
 		"hp": def["hp"],
 		"build_left": build,
 		"cooldown": 0,
+		"placed_tick": tick_count, # 仅撤销窗口用；不进 canonical/save
 	}
 	next_building_id += 1
 	buildings.append(b)
@@ -212,7 +262,9 @@ func place_building(bkind: int, x: int, y: int) -> Dictionary:
 
 ## 尝试建造（供给/通行/占用/英雄守卫通过后扣费放置）
 func try_build(bkind: int, x: int, y: int) -> void:
-	var def: Dictionary = Sim.BUILDINGS[bkind - 1]
+	if tower_cap >= 0 and bkind != Sim.B_CORE and live_buildings() >= tower_cap:
+		return # 肉鸽塔位已满（经典模式 tower_cap=-1，此分支永不触发）
+	var def: Dictionary = bdef(bkind)
 	if supply < def["cost"]:
 		return
 	if not grid.passable(x, y):
@@ -232,12 +284,30 @@ func try_remove(x: int, y: int) -> void:
 	var b = building_at(x, y)
 	if b == null or b["kind"] == Sim.B_CORE or b["hp"] <= 0:
 		return
-	var def: Dictionary = Sim.BUILDINGS[b["kind"] - 1]
+	var def: Dictionary = bdef(int(b["kind"]))
 	var refund := Lua64.idiv(def["cost"] * (50 if b["build_left"] <= 0 else 80), 100)
 	supply += refund
 	by_cell.erase(grid.idx(x, y))
 	grid.set_cell(x, y, Grid.OPEN)
 	b["hp"] = 0 # 待清理；已付的建造时间不退
+
+
+## 撤销刚落下的建筑（5 秒窗口、未受损、非核心）：全额退款并恢复通行。
+## 只由 main 的「撤销上一步」调用；不进黄金回放命令表，故不影响 16 指纹。
+func try_undo_build(x: int, y: int) -> void:
+	var b = building_at(x, y)
+	if b == null or int(b["kind"]) == Sim.B_CORE or int(b["hp"]) <= 0:
+		return
+	var placed := int(b.get("placed_tick", -UNDO_WINDOW_TICKS - 1))
+	if tick_count - placed > UNDO_WINDOW_TICKS:
+		return
+	var def: Dictionary = bdef(int(b["kind"]))
+	if int(b["hp"]) < int(def["hp"]):
+		return # 已被啃过：走普通拆除退款，避免满血价撤销
+	supply += int(def["cost"])
+	by_cell.erase(grid.idx(x, y))
+	grid.set_cell(x, y, Grid.OPEN)
+	b["hp"] = 0
 
 
 # ---------------- 一 tick ----------------
@@ -273,6 +343,9 @@ func tick() -> void:
 ## 波次导演：到点的波次表条目发射；暗门开后定时渗怪。
 ## 出怪点解析走 sc.wave_cell（自由路径三主口按表序轮转；旧路径逐位同历史）。
 func run_waves() -> void:
+	if wave_driver.is_valid():
+		wave_driver.call() # 肉鸽模式：RunState 按波内相对时刻发怪
+		return
 	for ei in sc.waves.size():
 		var w: Array = sc.waves[ei]
 		if w[0] == tick_count:
@@ -322,7 +395,12 @@ func move_units() -> void:
 		var unit: Dictionary = units[ui]
 		if unit["atk_cd"] > 0:
 			unit["atk_cd"] = unit["atk_cd"] - 1
-		if (tick_count + unit["id"]) % unit["speed_ticks"] == 0: # 未到步点则跳过
+		var spd: int = unit["speed_ticks"]
+		var slow_left: int = int(unit.get("slow", 0))
+		if slow_left > 0:
+			unit["slow"] = slow_left - 1
+			spd = spd * 2 # 减速：步点间隔翻倍（经典模式无 slow 键 ⇒ 恒走原值）
+		if (tick_count + unit["id"]) % spd == 0: # 未到步点则跳过
 			var dir := field.dir_at(unit["x"], unit["y"])
 			if dir >= 0:
 				var nx: int = Grid.nx(unit["x"], unit["y"], dir)
@@ -388,8 +466,8 @@ func ensure_siege() -> void:
 ## 无单位且高度边合法（可震下崖、不可推上崖）。不改地形、不耗 Rng；冷却期命令为 Nop（零副作用）。
 ## 六边击退方向 = 轴向差的主轴符号（|dq|→|dr|→|ds| 平手优先，确定性）。
 func cast_shock() -> void:
-	hero["skill_cd"] = Sim.HERO["skill_cooldown"]
-	var r2: int = Sim.HERO["skill_radius"] * Sim.HERO["skill_radius"]
+	hero["skill_cd"] = hero_cd_max
+	var r2: int = hero_radius * hero_radius
 	for i in units.size():
 		var u: Dictionary = units[i]
 		var dx: int = u["x"] - hero["x"]
@@ -506,11 +584,15 @@ func towers_and_build() -> void:
 			if b["build_left"] > 0:
 				b["build_left"] = b["build_left"] - 1
 			else:
-				var def: Dictionary = Sim.BUILDINGS[b["kind"] - 1]
+				var def: Dictionary = bdef(int(b["kind"]))
 				if def["shoots"]:
 					if b["cooldown"] > 0:
 						b["cooldown"] = b["cooldown"] - 1
 					else:
+						var beh: String = String(def.get("behavior", ""))
+						if beh != "":
+							fire_behavior(b, def, beh) # 肉鸽扩展塔；经典塔无此字段
+							continue
 						var best_u = null
 						var best_d := INT64_MAX
 						for ui in units.size():
@@ -527,10 +609,61 @@ func towers_and_build() -> void:
 							b["cooldown"] = def["cooldown"]
 							if best_u["hp"] <= 0:
 								# 改道经济：赏金 = 基础 + 绕行路程折算；只有塔火能兑现
-								var bonus := Lua64.lshr(best_u["traveled"], Sim.CONVOY_SHIFT)
+								var bonus := Lua64.lshr(best_u["traveled"], bounty_shift)
 								supply += Sim.ENEMIES[best_u["kind"] - 1]["reward"] + bonus
 								convoy_earned += bonus
 								kills += 1
+
+
+## 单位受伤与击杀结算（肉鸽扩展塔共用）。经典模式不经过本函数，故不进指纹。
+## 赏金口径与塔火一致：基础赏金 + 绕行路程 >> bounty_shift。
+func damage_unit(u: Dictionary, dmg: int) -> void:
+	u["hp"] = u["hp"] - dmg
+	if u["hp"] <= 0:
+		var bonus := Lua64.lshr(u["traveled"], bounty_shift)
+		supply += Sim.ENEMIES[u["kind"] - 1]["reward"] + bonus
+		convoy_earned += bonus
+		kills += 1
+
+
+## 扩展塔开火（肉鸽模式专用）。经典模式 btab 为空 ⇒ 无任何塔带 behavior 字段，
+## 本函数永不被调用，16 指纹零影响。
+##   slow   = 命中最近目标并附加减速（目标 slow 剩余 tick = def.slow_ticks）
+##   aoe    = 射程内全部目标受同等伤害
+##   pierce = 射程内最近 pierce_n 个目标各受一次伤害
+func fire_behavior(b: Dictionary, def: Dictionary, beh: String) -> void:
+	var r2: int = def["range"] * def["range"]
+	var dmg: int = def["damage"]
+	var scored: Array = []
+	for ui in units.size():
+		var un: Dictionary = units[ui]
+		if un["hp"] <= 0:
+			continue
+		var dx: int = un["x"] - b["x"]
+		var dy: int = un["y"] - b["y"]
+		var d2: int = dx * dx + dy * dy
+		if d2 <= r2:
+			scored.append([d2, int(un["id"]), un])
+	if scored.is_empty():
+		return
+	scored.sort_custom(func(a: Array, c: Array) -> bool:
+		if int(a[0]) != int(c[0]):
+			return int(a[0]) < int(c[0])
+		return int(a[1]) < int(c[1]))
+	if beh == "aoe":
+		for it in scored:
+			damage_unit(it[2], dmg)
+		b["cooldown"] = def["cooldown"]
+		return
+	var count: int = 1
+	if beh == "pierce":
+		count = int(def.get("pierce_n", 3))
+	for k in mini(count, scored.size()):
+		var target: Dictionary = scored[k][2]
+		damage_unit(target, dmg)
+		if beh == "slow":
+			target["slow"] = int(def.get("slow_ticks", 40))
+	b["cooldown"] = def["cooldown"]
 
 
 ## 清尸：移除死亡单位（保留核心建筑）

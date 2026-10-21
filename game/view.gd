@@ -122,9 +122,14 @@ func heat_enabled() -> bool:
 	return terrain.heat_enabled()
 
 
-## 幽灵预览（→ view_entities）
-func show_ghost(cells: Array, bad: bool = false) -> void:
-	entities.show_ghost(cells, bad)
+## 幽灵预览（→ view_entities）；mode = "wall"/"tower" 时叠实物半透明模型（含射程/边缘拼接）
+func show_ghost(cells: Array, bad: bool = false, mode: String = "") -> void:
+	entities.show_ghost(cells, bad, mode)
+
+
+## 建筑悬停/拆除焦点环（→ view_entities；cell.x < 0 隐藏）
+func set_focus(cell: Vector2i, hot: bool = true) -> void:
+	entities.set_focus(cell, hot)
 
 
 ## 播一个音效（→ view_audio）
@@ -184,6 +189,22 @@ var ghost_mi: MeshInstance3D:
 var ghost_alive: bool:
 	get:
 		return entities.ghost_alive
+
+var preview_root: Node3D:
+	get:
+		return entities.preview_root
+
+var range_root: Node3D:
+	get:
+		return entities.range_root
+
+var wall_edges: Dictionary:
+	get:
+		return entities._wall_edges
+
+var focus_ring: MeshInstance3D:
+	get:
+		return entities.focus_ring
 
 var is_ore: Callable:
 	get:

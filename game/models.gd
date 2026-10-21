@@ -46,13 +46,13 @@ const BUILDING_SCENES := {
 	"tower": "res://assets/models/tower_ballista.glb",
 	"core": "res://assets/models/core_jade.glb",
 }
-# 目标口径照被替换的盒体分件总尺寸（view_entities._building 旧盘）：
-# 墙 = 0.94×1.33×0.94（各轴独立，保 footprint 满 0.94 与原遮挡线高）；
-# 塔 = 等比到总高 3.1（细长比例模型，不宜变形）；核 = 等比到总高 2.5。
+# 目标口径（2026-10-20 建筑层级统一）：墙 1.15 < 塔 2.6 < 核心 3.2。
+# 墙 = 0.94×1.15×0.94（footprint 满 0.94，连续墙由 view_entities 边缘段补齐）；
+# 塔 = 等比到总高 2.6；核 = 等比到总高 3.2（核心明显大于普通建筑）。
 const BUILDING_SIZE := {
-	"wall": Vector3(0.94, 1.33, 0.94),
-	"tower": Vector3(0.94, 3.10, 0.94),
-	"core": Vector3(0.94, 2.50, 0.94),
+	"wall": Vector3(0.94, 1.15, 0.94),
+	"tower": Vector3(0.94, 2.60, 0.94),
+	"core": Vector3(0.94, 3.20, 0.94),
 }
 
 var _cache: Dictionary = {}
@@ -278,7 +278,8 @@ func spawn_ore(parent: Node, pos: Vector3, footprint: float) -> Node3D:
 ## 建筑 3 件（墙/塔/核）：返回已校准的 glb 实例（不建 wrapper、不挂父节点），
 ## 调用方挂到自己的 building_root 包装节点下（简化缩放/摆位/音效路径）。
 ## 墙各轴独立对齐 BUILDING_SIZE（footprint 优先）；塔/核等比缩放（细长晶体/塔柱不宜变形）。
-func spawn_building(kind_name: String) -> Node3D:
+## lod_override > 0 时强制显示该级 LOD（建筑幽灵预览用 lod3，省顶点）。
+func spawn_building(kind_name: String, lod_override: int = 0) -> Node3D:
 	var packed := scene(BUILDING_SCENES[kind_name])
 	var inst: Node3D = packed.instantiate()
 	var box := mesh_aabb(inst)
@@ -292,5 +293,11 @@ func spawn_building(kind_name: String) -> Node3D:
 	inst.scale = s
 	var c := box.get_center()
 	inst.position = Vector3(-c.x * s.x, -box.position.y * s.y, -c.z * s.z)
-	inst.set_meta("lod", bind_lod(inst, 0.5 * maxf(target.x, maxf(target.y, target.z))))
+	var st := bind_lod(inst, 0.5 * maxf(target.x, maxf(target.y, target.z)))
+	if lod_override > 0 and not st.is_empty():
+		var nodes: Array = st["nodes"]
+		for k in range(LOD_LEVELS):
+			(nodes[k] as MeshInstance3D).visible = (k == lod_override)
+		st["idx"] = lod_override
+	inst.set_meta("lod", st)
 	return inst

@@ -99,6 +99,19 @@ if im_ghost is not None:
     chk(n_green > 200, 'ghost 幽灵绿不足 %d（阈值 200）' % n_green)
     print('[SHOTS] ghost green=%d' % n_green)
 
+# 2026-10-20 建筑表现：塔实物预览 + 射程（青色填充/边缘带）
+im_preview = load('build_preview.png')
+chk(im_preview is not None, 'build_preview.png 存在')
+if im_preview is not None:
+    chk(im_preview.size == (W, H), 'build_preview 尺寸 %s != %s' % (im_preview.size, (W, H)))
+    colors_p = im_preview.quantize(colors=256).getcolors()
+    chk(colors_p is not None and len(colors_p) > 60, 'build_preview 唯一色数过少 %d' % len(colors_p or []))
+    n_teal_p = scan(im_preview, teal)
+    chk(n_teal_p > 20, 'build_preview 射程青色不足 %d（阈值 20）' % n_teal_p)
+    d3 = diff_ratio(im_game, im_preview)
+    chk(d3 > 0.0001, 'game 与 build_preview 差异不足 %.5f（阈值 0.0001）' % d3)
+    print('[SHOTS] build_preview teal=%d diff=%.5f' % (n_teal_p, d3))
+
 # D1-5：宽屏 20:9 与窄屏 4:3（阈值保守，目视件为主）
 for name, im, dims in (('game_20x9.png', im_w9, (1600, 720)), ('game_narrow.png', im_narrow, (960, 720))):
     chk(im is not None, name + ' 存在')

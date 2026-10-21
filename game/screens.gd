@@ -533,27 +533,32 @@ func _build_title() -> Control:
 	col.add_child(_rule())
 	col.add_child(_gap(12.0 * S))
 
-	var btn_start := _menu_row(1, "开始对局", true, 300.0 * S, func() -> void:
+	var btn_rogue := _menu_row(1, "肉鸽模式", true, 300.0 * S, func() -> void:
+		cb["start_rogue"].call())
+	btn_rogue.name = "btn_rogue"
+	col.add_child(btn_rogue)
+
+	var btn_start := _menu_row(2, "经典对局", false, 300.0 * S, func() -> void:
 		cb["start_match"].call())
 	btn_start.name = "btn_start"
 	col.add_child(btn_start)
 
-	var btn_continue := _menu_row(2, "读档存档", false, 300.0 * S, func() -> void:
+	var btn_continue := _menu_row(3, "读档存档", false, 300.0 * S, func() -> void:
 		open_slots("load", "title"))
 	btn_continue.name = "btn_continue"
 	col.add_child(btn_continue)
 
-	var btn_settings := _menu_row(3, "设置", false, 300.0 * S, func() -> void:
+	var btn_settings := _menu_row(4, "设置", false, 300.0 * S, func() -> void:
 		open_settings("title"))
 	btn_settings.name = "btn_settings"
 	col.add_child(btn_settings)
 
-	var btn_tips := _menu_row(4, "玩法说明", false, 300.0 * S, func() -> void:
+	var btn_tips := _menu_row(5, "玩法说明", false, 300.0 * S, func() -> void:
 		tips_panel.visible = not tips_panel.visible)
 	btn_tips.name = "btn_tips"
 	col.add_child(btn_tips)
 
-	var btn_quit := _menu_row(5, "退出游戏", false, 300.0 * S, func() -> void:
+	var btn_quit := _menu_row(6, "退出游戏", false, 300.0 * S, func() -> void:
 		open_quit_confirm())
 	btn_quit.name = "btn_quit"
 	col.add_child(btn_quit)

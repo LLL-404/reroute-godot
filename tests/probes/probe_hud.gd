@@ -29,10 +29,12 @@ func _initialize() -> void:
 	check(hud.banner_root.visible == false, "开局无横幅（空卡片不驻留）")
 	var regions: Array = hud.hit_regions()
 	cmp_rect(regions[0], Rect2(0, 0, 1280, 64), "命中区·顶栏条")
-	cmp_rect(regions[1], Rect2(1120, 303, 160, 417), "命中区·右下钮簇")
+	cmp_rect(regions[1], Rect2(1280 - 268, 720 - 260, 268, 260), "命中区·右下指挥坞")
 	var chars := "放墙改道 · 怪绕得越远死时赏金越高——修运河，别只堵路".length()
 	cmp_int(chars, 28, "提示文本字符数")
-	cmp_rect(regions[2], Rect2(0, 64, 284, 36), "命中区·提示徽章")
+	check(regions[2].position == Vector2(16, 64), "命中区·提示条起点")
+	check(regions[2].size.x > 280.0 and regions[2].size.x < 330.0, "命中区·提示条宽度（得 %s）" % str(regions[2].size.x))
+	check(regions[2].size.y > 20.0 and regions[2].size.y < 34.0, "命中区·提示条高度（得 %s）" % str(regions[2].size.y))
 
 	# ---- 2. 血条/文本跟随 ----
 	hud.update(world)
@@ -66,11 +68,13 @@ func _initialize() -> void:
 	world.tick_count = 5000
 	hud.update(world)
 	check(hud.wave_text.text == "暗门已开 · 终局 1:10", "终局倒计时文案（得 " + hud.wave_text.text + "）")
+	# v2.4：教学提示条驻留 20s 后自动淡出（hit_regions 随之让位）
+	check(hud._hint_hidden, "提示条 20s 后自动淡出")
 
 	# ---- 4. 供给跳动 ----
 	world.supply = 250
 	hud.update(world)
-	check(hud.supply_text.text == "供给 250", "供给文本更新")
+	check(hud.supply_text.text == "250", "供给文本更新")
 	var c_flash: Color = hud.supply_text.get_theme_color("font_color")
 	check(c_flash.is_equal_approx(hud.DARK["text"]), "供给变化闪白")
 	world.tick_count = 5005 # 向前推进（tick 单调增是真实对局口径）
@@ -86,9 +90,19 @@ func _initialize() -> void:
 	_check_btn_color(hud, "wall", false, "set_mode 复原 wall")
 	hud.set_mode("wall") # 复位，让"点击生效"有可观测的状态迁移
 	check(hud.mode == "wall", "点击前复位 wall")
-	check(hud.mode_buttons["wall"].text == "墙 ×10", "墙钮文案")
-	check(hud.mode_buttons["tower"].text == "塔 ×60", "塔钮文案")
-	check(hud.mode_buttons["fill"].text == "填高 ×15", "填高钮文案")
+	check(hud.row_name["wall"].text == "墙" and hud.row_cost["wall"].text == "10", "墙行 名称/成本")
+	check(hud.row_name["tower"].text == "塔" and hud.row_cost["tower"].text == "60", "塔行 名称/成本")
+	check(hud.row_cost["fill"].text == "15" and hud.row_cost["lower"].text == "10", "填高/挖低 成本")
+	# ---- 5a. 撤销 pill（5s 撤销窗浮钮：窗内可见 + 倒计时文案；收起复位） ----
+	hud.set_undo_vis(true, 4)
+	check(hud.undo_panel != null and hud.undo_panel.visible, "撤销 pill 窗内可见")
+	check(String(hud.undo_panel.text).contains("4"), "撤销 pill 倒计时 4s")
+	hud.set_undo_vis(false)
+	check(not hud.undo_panel.visible, "撤销 pill 收起隐藏")
+	hud.set_undo_vis(true, 9)
+	check(hud.undo_panel.visible and String(hud.undo_panel.text).contains("9"), "撤销 pill 复显 + 文案刷新 9s")
+	hud.set_undo_vis(false) # 复位（后续排除区/战场断言不受浮钮影响）
+	check(not hud.undo_panel.visible, "撤销 pill 复位隐藏")
 	# 点击"塔"按钮（真实事件）
 	var btn_tower: Button = hud.mode_buttons["tower"]
 	var center: Vector2 = btn_tower.global_position + btn_tower.size * 0.5
@@ -122,10 +136,29 @@ func _initialize() -> void:
 	# ---- 7. 技能钮冷却文案 ----
 	world.hero["skill_cd"] = 400
 	hud.update(world)
-	check(hud.skill_btn.text == "冷却 20s" and hud.skill_btn.disabled, "技能冷却文案+禁用")
+	check(hud.row_cost["skill"].text == "20s" and hud.skill_btn.disabled, "技能冷却文案+禁用")
 	world.hero["skill_cd"] = 0
 	hud.update(world)
-	check(hud.skill_btn.text == "震荡波" and not hud.skill_btn.disabled, "技能就绪复原")
+	check(hud.row_cost["skill"].text == "就绪" and not hud.skill_btn.disabled, "技能就绪复原")
+	check(hud.row_cost["skill"].get_theme_color("font_color").is_equal_approx(hud.DARK["supply"]), "就绪成本金字")
+
+	# ---- 7b. 指挥坞与成本可负担性（v2.4）----
+	check(hud.dock != null and hud.dock.size.x > 0.0 and hud.dock.size.y > 0.0, "指挥坞已建")
+	check(hud.dock.get_rect().encloses(Rect2(hud.mode_buttons["hero"].position, hud.mode_buttons["hero"].size)), "坞面板包住末行")
+	# v2.5：3 行 2/3/3 图标格（图标子节点随钮换色）
+	check(hud.dock_rows.size() == 3 and hud.dock_rows[0].size() == 2 and hud.dock_rows[1].size() == 3 and hud.dock_rows[2].size() == 3, "指挥盘 2/3/3 格")
+	check(hud.row_icon.size() == 8 and hud.row_icon["wall"].kind == "wall", "八格图标齐备")
+	hud.set_mode("tower")
+	check(hud.row_icon["tower"].color.is_equal_approx(hud.DARK["on_gold"]), "选中格图标转深字")
+	hud.set_mode("wall")
+	world.supply = 5
+	hud.update(world)
+	check(hud.row_cost["tower"].get_theme_color("font_color").is_equal_approx(hud.DARK["danger"]), "供给不足 → 成本红")
+	world.supply = 250
+	hud.update(world)
+	hud.set_mode("wall")
+	check(hud.row_cost["wall"].get_theme_color("font_color").is_equal_approx(hud.DARK["on_gold"]), "供给充足 → 点亮行成本深字")
+	check(hud.row_cost["tower"].get_theme_color("font_color").is_equal_approx(hud.DARK["muted"]), "供给充足 → 常态行成本 muted")
 
 	# ---- 8. 浮字池生命周期 ----
 	world.tick_count = 120
@@ -141,6 +174,12 @@ func _initialize() -> void:
 	world.tick_count = 138
 	hud.update(world)
 	check(f0["active"] == false and not el0.visible, "浮字到期熄灭")
+	# v2.4：贴屏幕上缘的赏金浮字钳在顶栏下（不压 HUD 条）
+	hud.float_bounty(100.0, 10.0, "+9")
+	world.tick_count = 142
+	hud.update(world)
+	var f2: Dictionary = hud.floats[0]
+	check(absf(f2["el"].position.y - (hud.TOP_STRIP_H + 4.0)) < 0.01, "浮字钳在顶栏下（得 " + str(f2["el"].position.y) + "）")
 
 	# ---- 9. 整体显隐 ----
 	hud.float_bounty(50.0, 50.0, "+3")
@@ -232,8 +271,10 @@ func _initialize() -> void:
 	check(hud.top_bar.position.is_equal_approx(Vector2(48, 24)), "安全区·顶栏起点内缩")
 	check(absf(hud.top_bar.size.x - (1280.0 - 48.0 - 60.0)) < 0.5, "安全区·顶栏宽度内缩")
 	var mbtn: Button = hud.mode_buttons["wall"]
-	var want_bx: float = 1280.0 - 60.0 - (hud.EDGE + hud.COL_W) * hud.S
-	check(absf(mbtn.position.x - want_bx) < 0.5, "安全区·模式列右缘内缩")
+	# 首行 2 格居中：坞内偏移 = PAD + (内容宽 - 2 格宽) / 2
+	var row_w0: float = 2.0 * hud.CELL_W + hud.CELL_GAP
+	var want_bx: float = hud.dock.position.x + (hud.DOCK_PAD + (hud.DOCK_W - hud.DOCK_PAD * 2.0 - row_w0) * 0.5) * hud.S
+	check(absf(mbtn.position.x - want_bx) < 0.5, "安全区·模式盘右缘内缩")
 	hud.set_safe_insets_override(Vector4(-1.0, -1.0, -1.0, -1.0))
 	await process_frame
 	cmp_rect(hud.hit_regions()[0], Rect2(0, 0, 1280, 64), "安全区复位·顶栏条")
