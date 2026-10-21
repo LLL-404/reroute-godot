@@ -72,8 +72,8 @@ const EDGE_MIN_DH := 0.001
 # 拼板噪声），再把块高量化到 PLATE_STEP 的整倍（大块平面 + 干净踢脚，块内严格共面）。
 # 只动 _cell_top / _plate_id（视觉层），不动 sim / ground_y / 拾取；边框圈不并；
 # 玩家填/挖层（get_h≠0）不并，保证建造边缘和单位贴地零变化。
-const PLATE_MERGE_DH := 0.34 # 原 0.16：只够吃掉噪声、吃不掉「一格一个高度」的蓝图起伏。提到 0.34 才能连成大片
-const PLATE_STEP := 0.30
+const PLATE_MERGE_DH := 0.42 # 原 0.16：只够吃掉噪声、吃不掉「一格一个高度」的蓝图起伏。提到 0.34 才能连成大片
+const PLATE_STEP := 0.15 # 原 0.30：台阶差减半，痕迹更淡（H_STEP=1.2 仍是其整倍，填挖断言语义不变）
 const PLATE_MAX_CELLS := 48 # 单块上限（格）：防止沿坡链式吞并把整张图并成一块
 # 程序化岩块散布（2026-10-20 B2）：场内 SOLID 岩顶（台缘优先）与边框围墙顶撒低模碎岩——
 # 打散拼板缝/锯齿顶。纯视觉、确定性哈希、单网格合并；RockProps 挂 HexField 子节点，
@@ -598,7 +598,7 @@ func _rebuild_rock_props() -> void:
 							ez0 += w2.z
 				# 只在「真台阶」边缘撒（高差 ≥ 2 档 ≈ 0.6m 以上）；1 档缓坡边保持干净，
 				# 否则沿缓坡排一圈碎石会变成地上的黑麻点，比原折线更难看。
-				if dv_max < PLATE_STEP * 1.5:
+				if dv_max < 0.50: # 绝对值（不随 PLATE_STEP 变）：只有半个身位以上的真台阶边缘才撒碎石
 					continue
 				if Blueprint.ihash(x * 3 + 5, y * 3 + 7, ROCK_PROP_SALT + 40) >= 0.55:
 					continue
@@ -790,8 +790,8 @@ func edge_kind_at(x: int, y: int, k: int) -> int:
 	# 差 1 档 → 缓坡（可走感连续）；差 2 档以上 → 当崖壁处理。
 	if _cell_top.size() == n * n:
 		var dv := absf(_cell_top[y * n + x] - _cell_top[ny * n + nx])
-		if dv > PLATE_STEP * 0.5:
-			return EDGE_RAMP if dv <= PLATE_STEP * 1.5 else EDGE_CLIFF
+		if dv > 0.08:
+			return EDGE_RAMP if dv <= 0.45 else EDGE_CLIFF
 	return EDGE_MICRO
 
 
@@ -813,10 +813,10 @@ func edge_profile(x: int, y: int, k: int, t: float, t_lo: float, kind: int) -> P
 		pts.append(t_lo - 0.010)
 	elif kind == EDGE_RAMP:
 		var run := RAMP_RUN * clampf(delta / 1.2, 0.6, 1.5)
-		# 2026-10-21：并台产生的 0.30 小台阶（delta ≤ 0.55）用固定 0.55m 跨度 → 约 29° 缓坡，
-		# 不再是「近垂直石阶」。模拟层的 1.2m 落差仍走原比例，跨度不变、不侵入邻格。
+		# 2026-10-21：并台小台阶（delta ≤ 0.55）拉长到 0.85m 跨度 → 约 19°，接近自然缓起伏；
+		# 模拟层的 1.2m 落差仍走原比例，跨度不变、不侵入邻格。
 		if delta <= 0.55:
-			run = maxf(run, 0.55)
+			run = maxf(run, 0.85)
 		var drop := delta - lip_v
 		pts.append(run * 0.45 + _edge_j(x, y, k, 3, 0.02, 3323))
 		pts.append(t - lip_v - drop * 0.5 + _edge_j(x, y, k, 3, 0.025, 3329))
@@ -851,9 +851,10 @@ func _edge_color(kind: int, sj: int, col: Color, h_mid: float, x: int, y: int, k
 	if sj == 0:
 		out = col.darkened(0.03)
 	elif sj == 1:
-		out = col.darkened(0.13)
+		# 2026-10-21：缓坡/微差边的圆唇不再压暗 13%（那是台阶痕迹的主体），只有崖壁保留
+		out = col.darkened(0.13 if kind == EDGE_CLIFF else 0.045)
 	elif kind == EDGE_RAMP:
-		out = col.lerp(_col_lo, 0.30).lightened(0.05) if sj == 2 else col.lerp(_col_lo, 0.46)
+		out = col.lerp(_col_lo, 0.10) if sj == 2 else col.lerp(_col_lo, 0.16)
 		a = minf(col.a * 0.45, 1.0)
 	elif kind == EDGE_CLIFF:
 		var band := 0.5 + 0.5 * sin(h_mid * 8.7 + float(x) * 0.7 + float(y) * 0.5 + float(sj) * 1.7)
