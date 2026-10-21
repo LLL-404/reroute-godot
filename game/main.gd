@@ -57,13 +57,27 @@ var _ore_intent := {} # M2-a 待开挖矿格意图：{ "ore": Vector2i, "stand":
 ## 初始化：建 HUD/壳、开新局、显示标题屏；自检模式触发 export 验收
 func _ready() -> void:
 	view = $View
+	_is_probe_run = _detect_probe_run()
+	_settings = UserSettings.load_cfg()
+	# 隐私门（合规）：冷启动且未同意 → 先弹窗；此时不建 HUD/壳/肉鸽 UI、不开局、不播开屏，
+	# 也不写 user://settings.cfg（同意动作由 _on_privacy_agreed 落盘）。
+	# 探针/自检/headless 一律跳过，保 22 闸与 selfcheck 口径不变。
+	# ⚠️ 2026-10-21 11:17 的 902277b（肉鸽编排层）重写 _ready 时把这段整段丢了，
+	#    导致 v2.5 草稿包（1.0.1）里隐私门不生效 —— 此处恢复，勿再删。
+	if not _is_probe_run and not bool(_settings.get("privacy_agreed", false)):
+		UserSettings.apply_video(_settings) # 先按玩家设置摆正窗口，否则小窗把隐私卡片压到最小宽
+		_show_privacy_gate()
+		return
+	_boot()
+
+
+## 正常启动流程（原 _ready 主体）：隐私门通过后调用。
+func _boot() -> void:
 	_setup_hud()
 	_setup_shell()
 	_setup_run_ui()
-	_is_probe_run = _detect_probe_run()
 	if _is_probe_run:
 		view.core.shake_on = false # 震屏会抖偏截图：探针/selfcheck/headless 一律不启用（像素校验口径）
-	_settings = UserSettings.load_cfg()
 	if _is_probe_run:
 		UserSettings.apply_audio(_settings) # 探针只应用音量（显示/画质保持默认，保 gate 截图口径）
 	else:
@@ -80,6 +94,26 @@ func _ready() -> void:
 		_run_selfcheck()
 	elif _intro_enabled():
 		_play_intro()
+
+
+## 弹隐私门：同意 → 落盘 + 走正常启动；不同意 → 退出应用。
+func _show_privacy_gate() -> void:
+	var gate = load("res://game/privacy_gate.gd").new()
+	add_child(gate)
+	gate.agreed.connect(_on_privacy_agreed)
+	gate.declined.connect(_on_privacy_declined)
+
+
+## 同意隐私政策：写盘（privacy/agreed=true）后继续启动。
+func _on_privacy_agreed() -> void:
+	_settings["privacy_agreed"] = true
+	UserSettings.save_cfg(_settings)
+	_boot()
+
+
+## 不同意：直接退出（不留任何数据写入）。
+func _on_privacy_declined() -> void:
+	get_tree().quit(0)
 
 
 ## 开屏动画装载（探针零影响口径）：selfcheck / headless / 探针脚本主循环（-s res://tests/）
