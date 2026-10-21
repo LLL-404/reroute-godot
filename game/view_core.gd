@@ -77,8 +77,8 @@ func setup() -> void:
 	env.background_mode = Environment.BG_COLOR
 	env.background_color = Color(0.55, 0.44, 0.33)
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	env.ambient_light_color = Color(0.42, 0.48, 0.60) # 冷调天光（落日暖阳 + 冷影对比）
-	env.ambient_light_energy = 0.24 # 2026-10-21 法线修复后重平衡：0.50 → 0.24（主光终于照到地形，无需再用天光撑亮度）
+	env.ambient_light_color = Color(0.22, 0.36, 0.78) # 冷调天光（落日暖阳 + 冷影对比）：红压到 0.22、蓝抬到 0.78，才能透过暖砂 albedo 显出冷影
+	env.ambient_light_energy = 0.34 # 2026-10-21 法线修复后重平衡：0.50 → 0.24 → 0.34（补冷量）
 	env.tonemap_mode = Environment.TONE_MAPPER_ACES # 2026-10-21：线性 tonemap 下 1.45 的主光会削顶，换 ACES 收高光
 	env.fog_enabled = true
 	env.fog_mode = Environment.FOG_MODE_DEPTH
@@ -104,6 +104,16 @@ func setup() -> void:
 	sun.shadow_bias = 0.04
 	sun.shadow_normal_bias = 0.35
 	host.add_child(sun)
+
+	# 冷补光（2026-10-21）：从主光背面低角度补一道冷光，不投影。
+	# 作用是把背光面/阴影面从「暖棕压暗」拉成冷调，和暖阳形成冷暖对比；能量低，不夺主光。
+	var fill := DirectionalLight3D.new()
+	fill.name = "Fill"
+	fill.light_color = Color(0.46, 0.62, 0.95)
+	fill.light_energy = 0.22
+	fill.shadow_enabled = false
+	fill.rotation_degrees = Vector3(-24.0, 152.0, 0.0)
+	host.add_child(fill)
 
 	for k in MAT:
 		var c: Array = MAT[k]
