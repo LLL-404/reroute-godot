@@ -39,14 +39,26 @@ vec3 tri3(sampler2D t, vec3 uv, vec3 w) {
 	return texture(t, uv.zy).rgb * w.x + texture(t, uv.xz).rgb * w.y + texture(t, uv.xy).rgb * w.z;
 }
 
+// 法线图采样 → 切空间法线。
+// 2026-10-21 定位：源 jpg（ground093c_nrm / rock061_nrm）**只存了 RG，B 通道全 0**。
+// 原写法 n.z*2-1 恒为 -1 → 世界法线永远朝下 → 地形完全不吃直射光（只有 ambient），
+// 这才是「光影发闷、无方向感、无投影」的根因。改由 RG 重建 Z，保证朝外半球。
+vec3 tri_ng(sampler2D t, vec2 uv) {
+	vec2 g = texture(t, uv).xy * 2.0 - 1.0;
+	return vec3(g, sqrt(max(0.0, 1.0 - dot(g, g))));
+}
+
 // 平面法线图 → 世界空间：各平面 T/B 取世界正轴（u/v 与采样面同向），N=该平面法线轴。
 vec3 tri_n(sampler2D t, vec3 uv, vec3 w, float s) {
-	vec3 nX = vec3(texture(t, uv.zy).xyz * 2.0 - 1.0) * vec3(s, s, 1.0); // X 面（法线 +x，u=+z，v=+y）
-	vec3 nY = vec3(texture(t, uv.xz).xyz * 2.0 - 1.0) * vec3(s, s, 1.0); // Y 面（法线 +y，u=+x，v=+z）
-	vec3 nZ = vec3(texture(t, uv.xy).xyz * 2.0 - 1.0) * vec3(s, s, 1.0); // Z 面（法线 +z，u=+x，v=+y）
-	vec3 wx = (nX.x * vec3(0.0, 0.0, 1.0) + nX.y * vec3(0.0, 1.0, 0.0) + nX.z * vec3(1.0, 0.0, 0.0)) * w.x;
-	vec3 wy = (nY.x * vec3(1.0, 0.0, 0.0) + nY.y * vec3(0.0, 0.0, 1.0) + nY.z * vec3(0.0, 1.0, 0.0)) * w.y;
-	vec3 wz = (nZ.x * vec3(1.0, 0.0, 0.0) + nZ.y * vec3(0.0, 1.0, 0.0) + nZ.z * vec3(0.0, 0.0, 1.0)) * w.z;
+	vec3 tX = tri_ng(t, uv.zy);
+	vec3 tY = tri_ng(t, uv.xz);
+	vec3 tZ = tri_ng(t, uv.xy);
+	tX.xy *= s;
+	tY.xy *= s;
+	tZ.xy *= s;
+	vec3 wx = (tX.x * vec3(0.0, 0.0, 1.0) + tX.y * vec3(0.0, 1.0, 0.0) + tX.z * vec3(1.0, 0.0, 0.0)) * w.x;
+	vec3 wy = (tY.x * vec3(1.0, 0.0, 0.0) + tY.y * vec3(0.0, 0.0, 1.0) + tY.z * vec3(0.0, 1.0, 0.0)) * w.y;
+	vec3 wz = (tZ.x * vec3(1.0, 0.0, 0.0) + tZ.y * vec3(0.0, 1.0, 0.0) + tZ.z * vec3(0.0, 0.0, 1.0)) * w.z;
 	return normalize(wx + wy + wz);
 }
 
@@ -63,6 +75,10 @@ void fragment() {
 	ALBEDO = mix(sand_c, rock_c, a) * COLOR.rgb;
 	vec3 wn3 = normalize(mix(tri_n(sand_nrm, suv, w, nrm_sand), tri_n(rock_nrm, ruv, w, nrm_rock), a));
 	wn3 = normalize(wn3 + vec3(0.0, rock_soft_up * a, 0.0)); // 岩面顶光补偿（风格化：陡壁借顶光）
+	// 兜底：任何情况下法线不得翻到几何法线背面（贴图异常/极端切向值）
+	if (dot(wn3, n) < 0.0) {
+		wn3 -= 2.0 * dot(wn3, n) * n;
+	}
 	NORMAL = normalize((VIEW_MATRIX * vec4(wn3, 0.0)).xyz);
 	ROUGHNESS = mix(rough_sand, rough_rock, a);
 }
