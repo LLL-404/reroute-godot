@@ -718,7 +718,7 @@ func _process(dt: float) -> void:
 			acc = 0.0
 	_sync_run_phase() # 循环内可能刚切到 PICK/OVER：同帧把暂停态与 HUD 追上
 	_check_outcome()
-	view.sync(world)
+	view.sync(world, clampf(acc / TICK_DT, 0.0, 1.0), dt) # tick_alpha 供单位/英雄帧间插值，delta 供虫群阻尼
 	update_ghost()
 	_update_undo_ui()
 	_update_camera(dt)

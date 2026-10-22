@@ -7,8 +7,13 @@ extends ProbeKit
 # 跑法（cwd=reroute-godot，窗口模式）：godot -s res://tests/probes/probe_sync.gd
 # 判定：exit 0 + stdout 含 [SYNC] match=100 + stderr 无 ERROR。
 var moved_seen := 0
-var prev_cells := {} # id -> Vector2i（上一 tick 快照）
-var prev_hero := Vector2i(-1, -1)
+var from_cells := {} # id -> Vector2i（最近一次移动前的格）
+var to_cells := {} # id -> Vector2i（最近一次移动后的格）
+var move_ticks := {} # id -> int（最近一次移动发生的 tick）
+var hero_from := Vector2i(-1, -1)
+var hero_to := Vector2i(-1, -1)
+var hero_move_tick := -999
+var alpha_checked := false
 
 
 func _initialize() -> void:
@@ -67,6 +72,7 @@ func _initialize() -> void:
 	world.apply_command({ "kind": "spawn", "x": spawn_b.x, "y": spawn_b.y, "speed": 8, "kind_id": Sim.E_BEHEMOTH })
 	world.apply_command({ "kind": "hero", "x": hero_target.x, "y": hero_target.y })
 	view.sync(world)
+	_track_moves(world)
 
 	# 初建断言：节点齐、种类缩放字面量
 	var st0: Dictionary = view.debug_stats()
@@ -91,12 +97,11 @@ func _initialize() -> void:
 		var p2: AnimationPlayer = e2a["player"]
 		check(p2 != null and p2.current_animation == "Crawl", "蛮兽模型基态 Crawl")
 
-	prev_hero = Vector2i(int(world.hero["x"]), int(world.hero["y"]))
-
 	# ---- 主循环：130 tick 逐拍对拍 ----
 	for _step in 130:
 		world.tick()
 		var t: int = world.tick_count
+		_track_moves(world)
 		view.sync(world)
 		_verify(view, world)
 
@@ -165,12 +170,6 @@ func _initialize() -> void:
 		elif t == 98:
 			check(view.ring == null and view.debug_stats()["ring_fx"] == false, "震荡环移除 t=98")
 
-		# 快照（供下一 tick 的期望值）
-		prev_cells = {}
-		for u in world.units:
-			prev_cells[int(u["id"])] = Vector2i(int(u["x"]), int(u["y"]))
-		prev_hero = Vector2i(int(world.hero["x"]), int(world.hero["y"]))
-
 	# ---- 幽灵预览（逐格绘制：直连 + 斜线不越线）----
 	var straight := [Vector2i(8, 8), Vector2i(9, 8), Vector2i(10, 8), Vector2i(11, 8)]
 	_ghost_cells_check(view, straight, false)
@@ -228,9 +227,90 @@ func _initialize() -> void:
 	# ---- 落差边自然化（T1：分级 / 剖面形状 / 顶点账目 / 重建确定性）----
 	_terrain_edge_check(view, world)
 
+	# ---- 视觉虫群（纯表现层）：同格 3 只必须错开，且偏移不越出格心安全半径 ----
+	var swarm_cell := _find_free(world, 0, 0, 63, 63, [], Vector2i(32, 32), 400)
+	check(swarm_cell.x >= 0, "虫群分离测试格扫描")
+	if swarm_cell.x >= 0:
+		var sid0: int = world.units.size()
+		for _i in 3:
+			world.apply_command({ "kind": "spawn", "x": swarm_cell.x, "y": swarm_cell.y, "speed": 4, "kind_id": Sim.E_SWARM })
+		view.sync(world)
+		cmp_int(world.units.size(), sid0 + 3, "虫群分离：同格三只已生成")
+		if world.units.size() == sid0 + 3:
+			var spos: Array = []
+			for i in 3:
+				var su: Dictionary = world.units[sid0 + i]
+				var se = view.unit_nodes.get(int(su["id"]))
+				if se != null:
+					spos.append((se["node"] as Node3D).position)
+			cmp_int(spos.size(), 3, "虫群分离：三只节点齐")
+			if spos.size() == 3:
+				var min_d := 999.0
+				for i in 3:
+					for j in range(i + 1, 3):
+						min_d = minf(min_d, Vector2(spos[i].x - spos[j].x, spos[i].z - spos[j].z).length())
+				check(min_d >= 0.05, "虫群分离：同格不重叠（min_d=%.3f）" % min_d)
+				var cw3: Vector3 = view.cell_to_world(swarm_cell.x, swarm_cell.y)
+				for i in 3:
+					var off := Vector2(spos[i].x - cw3.x, spos[i].z - cw3.z)
+					check(off.length() <= 0.17, "虫群分离：偏移在安全半径内（%.3f）" % off.length())
+		# 只留一只：孤立单位必须零偏移；相邻格单位也零偏移（只有同格才分环）
+		var keep_id: int = int(world.units[sid0]["id"])
+		var kept: Array = []
+		for u2 in world.units:
+			if int(u2["id"]) == keep_id:
+				kept.append(u2)
+		world.units = kept
+		view.sync(world)
+		var ke = view.unit_nodes.get(keep_id)
+		if ke != null:
+			check(absf(float(ke["ox"])) < 0.0001 and absf(float(ke["oz"])) < 0.0001, "虫群分离：孤立单位零偏移")
+			var adj := Vector2i(-1, -1)
+			for dir2 in 6:
+				var ax2 := Grid.nx(swarm_cell.x, swarm_cell.y, dir2)
+				var ay2 := Grid.ny(swarm_cell.x, swarm_cell.y, dir2)
+				if ax2 >= 0 and ay2 >= 0 and ax2 < world.sc.w and ay2 < world.sc.h and world.grid.passable(ax2, ay2) and world.building_at(ax2, ay2) == null and world.cell_vacant(ax2, ay2):
+					adj = Vector2i(ax2, ay2)
+					break
+			check(adj.x >= 0, "虫群分离：相邻空格扫描")
+			if adj.x >= 0:
+				var n_adj: int = world.units.size()
+				world.apply_command({ "kind": "spawn", "x": adj.x, "y": adj.y, "speed": 4, "kind_id": Sim.E_SWARM })
+				view.sync(world)
+				var ae = view.unit_nodes.get(int(world.units[n_adj]["id"]))
+				if ae != null:
+					check(absf(float(ae["ox"])) < 0.0001 and absf(float(ae["oz"])) < 0.0001, "虫群分离：相邻格零偏移")
+					check(absf(float(ke["ox"])) < 0.0001 and absf(float(ke["oz"])) < 0.0001, "虫群分离：相邻格不互推孤立单位")
+
 	# ---- 汇总 ----
 	check(moved_seen >= 20, "移动覆盖（moved_seen=%d）" % moved_seen)
+	check(alpha_checked, "分数帧插值覆盖（tick_alpha 生效）")
 	_report()
+
+
+## 独立跟踪「上一移动格 / 当前格 / 移动 tick」，与 view 内部缓存对拍（不读 view 的 px/py/mt）。
+func _track_moves(world) -> void:
+	var t: int = world.tick_count
+	for u in world.units:
+		var uid: int = int(u["id"])
+		var cur := Vector2i(int(u["x"]), int(u["y"]))
+		if not to_cells.has(uid):
+			from_cells[uid] = cur
+			to_cells[uid] = cur
+			move_ticks[uid] = t - maxi(int(u["speed_ticks"]), 1)
+		elif cur != to_cells[uid]:
+			from_cells[uid] = to_cells[uid]
+			to_cells[uid] = cur
+			move_ticks[uid] = t
+	var hcur := Vector2i(int(world.hero["x"]), int(world.hero["y"]))
+	if hero_to.x < 0:
+		hero_from = hcur
+		hero_to = hcur
+		hero_move_tick = t - maxi(int(Sim.HERO["speed_ticks"]), 1)
+	elif hcur != hero_to:
+		hero_from = hero_to
+		hero_to = hcur
+		hero_move_tick = t
 
 
 func _verify(view, world) -> void:
@@ -245,13 +325,17 @@ func _verify(view, world) -> void:
 			if e == null:
 				fail("单位 %d 无节点 t=%d" % [uid, t])
 				continue
-			var p: Vector2i = prev_cells.get(uid, Vector2i(int(u["x"]), int(u["y"])))
-			var cw: Vector3 = view.cell_to_world(int(u["x"]), int(u["y"]))
+			var cx := int(u["x"])
+			var cy := int(u["y"])
+			var p: Vector2i = from_cells.get(uid, Vector2i(cx, cy))
+			var mt: int = int(move_ticks.get(uid, t - maxi(int(u["speed_ticks"]), 1)))
+			var span := maxi(int(u["speed_ticks"]), 1)
+			var frac := clampf(float(t - mt), 0.0, float(span)) / float(span)
+			var cw: Vector3 = view.cell_to_world(cx, cy)
 			var pw: Vector3 = view.cell_to_world(p.x, p.y)
-			var frac := float((t + uid) % int(u["speed_ticks"])) / float(u["speed_ticks"])
 			var ex := pw.x + (cw.x - pw.x) * frac
 			var ez := pw.z + (cw.z - pw.z) * frac
-			var ey: float = view.ground_y(p.x, p.y) * (1.0 - frac) + view.ground_y(int(u["x"]), int(u["y"])) * frac
+			var ey: float = view.ground_y(p.x, p.y) * (1.0 - frac) + view.ground_y(cx, cy) * frac
 			var m := 1.0
 			var pulse_i: int = e["pulse"]
 			if pulse_i >= 0:
@@ -259,8 +343,24 @@ func _verify(view, world) -> void:
 				if a > 0.0:
 					m = 1.0 + 0.6 * a
 			var nd: Node3D = e["node"]
-			cmp_v3(nd.position, Vector3(ex, ey + 0.02, ez), "单位 %d 位置 t=%d" % [uid, t])
+			var ox := float(e.get("ox", 0.0))
+			var oz := float(e.get("oz", 0.0))
+			check(Vector2(ox, oz).length() <= 0.17, "单位 %d 视觉偏移在安全半径内 t=%d" % [uid, t])
+			cmp_v3(nd.position, Vector3(ex + ox, ey + 0.02, ez + oz), "单位 %d 位置 t=%d" % [uid, t])
 			cmp_v3(nd.scale, Vector3(m, m, m), "单位 %d 缩放 t=%d" % [uid, t])
+			# 插值缓存必须是「上一移动格 + 移动 tick」，而不是每帧覆写成当前格
+			check(int(e["px"]) == p.x and int(e["py"]) == p.y, "单位 %d px/py 保留上一格 t=%d" % [uid, t])
+			check(int(e["mt"]) == mt, "单位 %d mt 记录移动 tick t=%d" % [uid, t])
+			# 分数帧：同一 tick 内 alpha 0.5 必须落在两格中点（旧实现只会格心/瞬移）
+			if not alpha_checked and frac > 0.2 and frac < 0.8:
+				alpha_checked = true
+				var af := clampf(float(t - mt) + 0.5, 0.0, float(span)) / float(span)
+				var ax := pw.x + (cw.x - pw.x) * af
+				var az := pw.z + (cw.z - pw.z) * af
+				var ay: float = view.ground_y(p.x, p.y) * (1.0 - af) + view.ground_y(cx, cy) * af
+				view.sync(world, 0.5)
+				cmp_v3(nd.position, Vector3(ax + ox, ay + 0.02, az + oz), "单位 %d 分数帧插值 t=%d" % [uid, t])
+				view.sync(world, 0.0)
 			var dx := cw.x - pw.x
 			var dz := cw.z - pw.z
 			if dx * dx + dz * dz > 1e-9:
@@ -302,19 +402,22 @@ func _verify(view, world) -> void:
 	if view.hero == null:
 		fail("英雄无节点 t=%d" % t)
 		return
-	var ph := prev_hero
+	var ph := hero_from
 	if ph.x < 0:
 		ph = Vector2i(int(h["x"]), int(h["y"]))
-	var frac2 := float((t + 1) % int(Sim.HERO["speed_ticks"])) / float(Sim.HERO["speed_ticks"])
+	var hspan := maxi(int(Sim.HERO["speed_ticks"]), 1)
+	var frac2 := clampf(float(t - hero_move_tick), 0.0, float(hspan)) / float(hspan)
 	var cw2: Vector3 = view.cell_to_world(int(h["x"]), int(h["y"]))
 	var pw2: Vector3 = view.cell_to_world(ph.x, ph.y)
 	var ix2 := pw2.x + (cw2.x - pw2.x) * frac2
 	var iz2 := pw2.z + (cw2.z - pw2.z) * frac2
 	var iy2: float = view.ground_y(ph.x, ph.y) * (1.0 - frac2) + view.ground_y(int(h["x"]), int(h["y"])) * frac2
-	var moving := (cw2.x != pw2.x or cw2.z != pw2.z)
+	var moving := frac2 < 1.0 and (cw2.x != pw2.x or cw2.z != pw2.z)
 	var bob := 0.03 * sin(frac2 * 6.283) if moving else 0.0
 	var hnd: Node3D = view.hero["node"]
 	cmp_v3(hnd.position, Vector3(ix2, iy2 + bob, iz2), "英雄位置 t=%d" % t)
+	check(int(view.hero["px"]) == ph.x and int(view.hero["py"]) == ph.y, "英雄 px/py 保留上一格 t=%d" % t)
+	check(int(view.hero["mt"]) == hero_move_tick, "英雄 mt 记录移动 tick t=%d" % t)
 	if moving:
 		moved_seen += 1
 		var want_hyaw := atan2(cw2.x - pw2.x, cw2.z - pw2.z)

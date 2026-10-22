@@ -32,6 +32,10 @@ const SKILL_SHAKE_AMP := 0.45
 const SKILL_SHAKE_DUR := 0.28
 # 敌人 kind → 资产形态（照母版 view3d.ZFORM：虫群 → blade，蛮兽 → king）
 const ZFORM := { 1: 2, 2: 3 }
+# 视觉虫群（纯表现层）：同格分环 + 近距离分离；只改模型节点位置，不写模拟/不进指纹。
+const SWARM_SEP_RADIUS := 0.46 # 基础位置小于此距离才互推（格距 1.0，不干扰相邻格正常行进）
+const SWARM_MAX_OFFSET := 0.16 # 离格心最大视觉偏移（六边形内半径约 0.5，留出贴墙余量）
+const SWARM_SMOOTH := 14.0 # 偏移阻尼收敛速度（1/s）
 
 var host: Node3D
 var core: ViewCoreScript
@@ -557,7 +561,10 @@ func set_focus(cell: Vector2i, hot: bool = true) -> void:
 # ---- 每帧同步 ----
 
 ## 每帧同步：地形高度变化重建、热层刷新、覆盖层消失、建筑/英雄/单位/死亡消散/震荡环/相机取景
-func sync(world: World) -> void:
+## tick_alpha = 当前渲染帧在两次模拟 tick 之间的相位（0..1），仅用于单位/英雄的视觉插值。
+## delta = 渲染帧间隔（秒）；>0 时视觉虫群偏移阻尼收敛，<=0（探针/首帧）直接取目标值。
+func sync(world: World, tick_alpha: float = 0.0, delta: float = 0.0) -> void:
+	var alpha := clampf(tick_alpha, 0.0, 1.0)
 	# 仅重建地面网格；高度增减总和相同也必须刷新，实体缓存不得被清掉。
 	if terrain.grid != null and terrain.grid.height_rev != _height_rev:
 		_height_rev = terrain.grid.height_rev
@@ -747,6 +754,7 @@ func sync(world: World) -> void:
 	# 英雄（腿/躯干/双肩/头 四盒合成，行走起伏 + 朝向；插值口径同单位）
 	var h: Dictionary = world.hero
 	if h.size() > 0:
+		var ht: int = world.tick_count
 		if hero == null:
 			var hnode := Node3D.new()
 			hnode.name = "hero"
@@ -756,24 +764,34 @@ func sync(world: World) -> void:
 			core._part(hnode, -0.23, 0.600, 0.0, 0.14, 0.14, 0.14, "hero_dark")
 			core._part(hnode, 0.23, 0.600, 0.0, 0.14, 0.14, 0.14, "hero_dark")
 			core._part(hnode, 0.0, 0.700, 0.0, 0.20, 0.20, 0.20, "hero")
-			hero = { "node": hnode, "px": int(h["x"]), "py": int(h["y"]) }
+			hero = {
+				"node": hnode,
+				"px": int(h["x"]), "py": int(h["y"]),
+				"lx": int(h["x"]), "ly": int(h["y"]),
+				"mt": ht - int(Sim.HERO["speed_ticks"]),
+			}
 		var he: Dictionary = hero
-		var frac := float((world.tick_count + 1) % int(Sim.HERO["speed_ticks"])) / float(Sim.HERO["speed_ticks"])
-		var cw := core.cell_to_world(int(h["x"]), int(h["y"]))
+		var hx := int(h["x"])
+		var hy := int(h["y"])
+		if hx != int(he["lx"]) or hy != int(he["ly"]):
+			he["px"] = he["lx"]
+			he["py"] = he["ly"]
+			he["lx"] = hx
+			he["ly"] = hy
+			he["mt"] = ht
+		var hspan := maxi(int(Sim.HERO["speed_ticks"]), 1)
+		var hfrac := clampf(float(ht - int(he["mt"])) + alpha, 0.0, float(hspan)) / float(hspan)
+		var cw := core.cell_to_world(hx, hy)
 		var pw := core.cell_to_world(int(he["px"]), int(he["py"]))
-		var ix := pw.x + (cw.x - pw.x) * frac
-		var iz := pw.z + (cw.z - pw.z) * frac
-		var iy := terrain.ground_y(int(he["px"]), int(he["py"])) * (1.0 - frac) + terrain.ground_y(int(h["x"]), int(h["y"])) * frac
-		var moving := (cw.x != pw.x or cw.z != pw.z)
-		var bob := 0.0
-		if moving:
-			bob = 0.03 * sin(frac * 6.283)
+		var ix := pw.x + (cw.x - pw.x) * hfrac
+		var iz := pw.z + (cw.z - pw.z) * hfrac
+		var iy := terrain.ground_y(int(he["px"]), int(he["py"])) * (1.0 - hfrac) + terrain.ground_y(hx, hy) * hfrac
+		var moving := hfrac < 1.0 and (cw.x != pw.x or cw.z != pw.z)
+		var bob := 0.03 * sin(hfrac * 6.283) if moving else 0.0
 		var hn: Node3D = he["node"]
 		hn.position = Vector3(ix, iy + bob, iz)
-		if moving:
+		if cw.x != pw.x or cw.z != pw.z:
 			hn.rotation = Vector3(0.0, atan2(cw.x - pw.x, cw.z - pw.z), 0.0)
-		he["px"] = int(h["x"])
-		he["py"] = int(h["y"])
 
 	# 单位（真实模型 + 动作状态机；帧间插值 prev 格存视图层；受击脉冲用 tick 计龄）
 	var useen := {}
@@ -782,6 +800,7 @@ func sync(world: World) -> void:
 			var uid: int = u["id"]
 			useen[uid] = true
 			var e = unit_nodes.get(uid)
+			var t: int = world.tick_count
 			if e == null:
 				var spawn: Dictionary = models.spawn_unit(unit_root, int(ZFORM[int(u["kind"])]))
 				var unode: Node3D = spawn["node"]
@@ -795,6 +814,12 @@ func sync(world: World) -> void:
 					"lod": spawn["lod"],
 					"px": int(u["x"]),
 					"py": int(u["y"]),
+					"lx": int(u["x"]),
+					"ly": int(u["y"]),
+					"mt": t - maxi(int(u["speed_ticks"]), 1),
+					"bx": 0.0, "by": 0.0, "bz": 0.0,
+					"ox": 0.0, "oz": 0.0,
+					"atk": -1,
 					"kind": int(u["kind"]),
 					"hp": int(u["hp"]),
 					"traveled": 0,
@@ -805,7 +830,6 @@ func sync(world: World) -> void:
 					"sfx_hurt": -999,
 				}
 				unit_nodes[uid] = e
-			var t: int = world.tick_count
 			var player: AnimationPlayer = e["player"]
 			if int(u["hp"]) < int(e["hp"]):
 				e["pulse"] = t # 塔火命中 → 受击脉冲/受击动作
@@ -820,12 +844,23 @@ func sync(world: World) -> void:
 				e["anim_until"] = t + Z_ATTACK
 				models.play(player, "Attack", false)
 				_play_attack_sfx(e, t)
-			var frac2 := float((t + uid) % int(u["speed_ticks"])) / float(u["speed_ticks"])
-			var cw2 := core.cell_to_world(int(u["x"]), int(u["y"]))
+			# 位置插值：px/py = 上一次移动前的格，lx/ly = 最近一次移动后的格，mt = 移动发生的 tick。
+			# 只有检测到格子变化才推进 px/lx（旧实现每帧覆写 px=当前格，导致插值恒为 0、单位逐格瞬移）。
+			var cx := int(u["x"])
+			var cy := int(u["y"])
+			if cx != int(e["lx"]) or cy != int(e["ly"]):
+				e["px"] = e["lx"]
+				e["py"] = e["ly"]
+				e["lx"] = cx
+				e["ly"] = cy
+				e["mt"] = t
+			var span := maxi(int(u["speed_ticks"]), 1)
+			var frac2 := clampf(float(t - int(e["mt"])) + alpha, 0.0, float(span)) / float(span)
+			var cw2 := core.cell_to_world(cx, cy)
 			var pw2 := core.cell_to_world(int(e["px"]), int(e["py"]))
 			var ix2 := pw2.x + (cw2.x - pw2.x) * frac2
 			var iz2 := pw2.z + (cw2.z - pw2.z) * frac2
-			var iy2 := terrain.ground_y(int(e["px"]), int(e["py"])) * (1.0 - frac2) + terrain.ground_y(int(u["x"]), int(u["y"])) * frac2
+			var iy2 := terrain.ground_y(int(e["px"]), int(e["py"])) * (1.0 - frac2) + terrain.ground_y(cx, cy) * frac2
 			var m := 1.0
 			var pulse_i: int = e["pulse"]
 			if pulse_i >= 0:
@@ -837,18 +872,18 @@ func sync(world: World) -> void:
 					e["pulse"] = -1
 					_set_flash(e, 0)
 			var und: Node3D = e["node"]
-			und.position = Vector3(ix2, iy2 + 0.02, iz2) # 模型底部贴脚点（母版口径）
+			# 基础位置先缓存；分离偏移在所有人算完后统一应用（避免顺序依赖）。
+			e["bx"] = ix2
+			e["by"] = iy2
+			e["bz"] = iz2
+			e["atk"] = int(u["atk_target"])
 			und.scale = Vector3(m, m, m)
 			var dx := cw2.x - pw2.x
 			var dz := cw2.z - pw2.z
 			if dx * dx + dz * dz > 1e-9:
 				und.rotation = Vector3(0.0, atan2(dx, dz) + Z_YAW, 0.0)
-			e["px"] = int(u["x"])
-			e["py"] = int(u["y"])
 			e["hp"] = int(u["hp"])
 			e["traveled"] = int(u["traveled"])
-			if cam_ok:
-				models.update_lod(e["lod"], cam_pos, Vector3(ix2, iy2, iz2))
 	for uid2 in unit_nodes.keys():
 		if not useen.has(uid2):
 			var e3: Dictionary = unit_nodes[uid2]
@@ -863,6 +898,7 @@ func sync(world: World) -> void:
 				var total: int = int(Sim.ENEMIES[kind3 - 1]["reward"]) + Lua64.lshr(int(e3["traveled"]), Sim.CONVOY_SHIFT)
 				_float_bounty(scr, "+" + str(total))
 			unit_nodes.erase(uid2)
+	_apply_swarm_offsets(world, delta, cam_ok, cam_pos)
 	update_death_fx(world.tick_count)
 	update_shock_ring(world)
 
@@ -950,6 +986,82 @@ func _set_flash(e: Dictionary, lvl: int) -> void:
 		mat = _flash_material(lvl == 2)
 	for mi in e.get("meshes", []):
 		(mi as MeshInstance3D).material_overlay = mat
+
+
+## 视觉虫群（纯表现层）：同格单位按 uid 排序分环，近距离再互推；只改模型节点位置。
+## 偏移基于「基础插值位置」计算（两遍式，无递归），因此与帧率/遍历顺序无关；
+## delta<=0（探针/首帧）直接取目标值，正常游戏按帧时间阻尼收敛，避免分组合并/拆分时跳变。
+func _apply_swarm_offsets(world: World, delta: float, cam_ok: bool, cam_pos: Vector3) -> void:
+	if unit_nodes.is_empty():
+		return
+	var ids: Array = unit_nodes.keys()
+	ids.sort() # uid 排序：同格分环的 rank 必须确定
+	var groups := {} # cellkey -> Array[int]
+	for uid in ids:
+		var e: Dictionary = unit_nodes[uid]
+		var key: int = int(e["lx"]) * 1000 + int(e["ly"])
+		if not groups.has(key):
+			groups[key] = []
+		groups[key].append(uid)
+	var k := 1.0
+	if delta > 0.0:
+		k = 1.0 - exp(-SWARM_SMOOTH * delta)
+	for uid in ids:
+		var e: Dictionary = unit_nodes[uid]
+		var bx: float = e["bx"]
+		var bz: float = e["bz"]
+		var tx := 0.0
+		var tz := 0.0
+		var peers: Array = groups[int(e["lx"]) * 1000 + int(e["ly"])]
+		if peers.size() > 1:
+			var rank: int = peers.find(uid)
+			var ang := TAU * float(rank) / float(peers.size())
+			var rad := minf(0.12, 0.05 + 0.018 * float(peers.size()))
+			tx += cos(ang) * rad
+			tz += sin(ang) * rad
+		for oid in ids:
+			if oid == uid:
+				continue
+			var oe: Dictionary = unit_nodes[oid]
+			var dx := bx - float(oe["bx"])
+			var dz := bz - float(oe["bz"])
+			var d2 := dx * dx + dz * dz
+			if d2 <= 1e-6 or d2 >= SWARM_SEP_RADIUS * SWARM_SEP_RADIUS:
+				continue
+			var d := sqrt(d2)
+			var push := (SWARM_SEP_RADIUS - d) / SWARM_SEP_RADIUS * 0.12
+			tx += dx / d * push
+			tz += dz / d * push
+		# 贴墙/啃墙时收拢偏移，保证攻击与格位读得清
+		var shrink := 1.0
+		if int(e["atk"]) >= 0:
+			shrink = 0.35
+		else:
+			var lx := int(e["lx"])
+			var ly := int(e["ly"])
+			for dir in 6:
+				var nx := Grid.nx(lx, ly, dir)
+				var ny := Grid.ny(lx, ly, dir)
+				if nx < 0 or ny < 0 or nx >= world.sc.w or ny >= world.sc.h:
+					continue
+				var b = world.building_at(nx, ny)
+				if b != null and int(b["hp"]) > 0:
+					shrink = 0.45
+					break
+		tx *= shrink
+		tz *= shrink
+		var tl := sqrt(tx * tx + tz * tz)
+		if tl > SWARM_MAX_OFFSET:
+			tx = tx / tl * SWARM_MAX_OFFSET
+			tz = tz / tl * SWARM_MAX_OFFSET
+		var ox := lerpf(float(e["ox"]), tx, k)
+		var oz := lerpf(float(e["oz"]), tz, k)
+		e["ox"] = ox
+		e["oz"] = oz
+		var und: Node3D = e["node"]
+		und.position = Vector3(bx + ox, float(e["by"]) + 0.02, bz + oz) # 模型底部贴脚点（母版口径）
+		if cam_ok:
+			models.update_lod(e["lod"], cam_pos, und.position)
 
 
 ## 死亡消散：模型的死亡动画播完（Z_DEATH = 28 tick = 1.4s）后移除节点。

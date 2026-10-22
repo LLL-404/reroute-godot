@@ -46,9 +46,9 @@ func _ready() -> void:
 
 # ============ 转发（公共面：外部 ~190 处 view.* 访问零变化）============
 
-## 每帧同步（→ view_entities）
-func sync(world: World) -> void:
-	entities.sync(world)
+## 每帧同步（→ view_entities；tick_alpha = 渲染帧在两次模拟 tick 间的相位，delta = 帧间隔）
+func sync(world: World, tick_alpha: float = 0.0, delta: float = 0.0) -> void:
+	entities.sync(world, tick_alpha, delta)
 
 
 ## 探针用统计（→ view_entities）
