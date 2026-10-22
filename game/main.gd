@@ -14,6 +14,11 @@ const BASE_SEED := 20261003
 const CAM_PAN_SPEED := 24.0 # WASD 平移速度（世界单位/秒）
 const CAM_ROT_SPEED := 1.5 # Q/E 旋转速度（rad/s）
 const CAM_KEYS := [KEY_W, KEY_A, KEY_S, KEY_D, KEY_Q, KEY_E] # 相机键（不参与对局操作）
+# ---- 触屏手势（Android/iOS；桌面鼠标路径完全不受影响）----
+const TOUCH_SLOP := 14.0 # 单指点按判定：位移超过此逻辑像素即视为拖动（平移）
+const TOUCH_PINCH_STEP := 0.14 # 双指缩放单帧变化上限（防抖动跳变）
+const TOUCH_ROT_DEADZONE := 0.04 # 双指旋转单帧死区（rad；滤手指抖动）
+const TOUCH_ROT_LIMIT := 0.5 # 双指旋转单帧上限（rad；两指接近重合时角度噪声过大）
 const MENU_FPS := 60 # 菜单/标题/结算限帧（压风扇/GPU）；对局态 = 玩家上限（默认 0 不限，vsync 全速——用户口径 2026-10-17/18）
 
 var view = null # View（preload 脚本实例）；动态引用
@@ -43,6 +48,15 @@ var heat_on := false
 var cam_keys := {} # 按下的相机键（WASD/QE；事件驱动，无 OS 轮询）
 var rmb_panning := false # 右键拖拽平移中
 var rmb_last := Vector2.ZERO # 右键拖拽上一帧位置（用位置差算位移，不依赖 relative）
+# ---- 触屏手势状态 ----
+var touch_pts := {} # 活跃手指 index → 屏幕位置
+var touch_mode := "" # "" 空闲 / "single" 单指 / "multi" 双指以上
+var touch_start := Vector2.ZERO # 首指落点（点按判定基准）
+var touch_dragging := false # 单指已越过 TOUCH_SLOP（判定为拖动）
+var touch_wall := false # 本次单指手势正在拖墙线
+var _g_prev := Vector2.ZERO # 双指上一帧中点
+var _g_dist := 1.0 # 双指上一帧间距
+var _g_ang := 0.0 # 双指上一帧连线夹角
 ## HUD 命中区提供者（R5 注入；未注入 = 无 HUD 区域）
 var hud_regions_provider: Callable
 var _last_back_ms := 0 # Android 返回键双入口（通知 / ui_cancel 动作）去抖时间戳
@@ -812,8 +826,25 @@ func _update_camera(dt: float) -> void:
 # ---------------- 输入（移植 main.lua：拖拽放墙/塔、点覆盖层挖矿、点建筑拆除） ----------------
 
 ## 输入分发：鼠标按下/抬起（拖拽/点击/右键平移/滚轮缩放）、鼠标移动、键盘（TAB 热层、
-## WASD/QE 相机、Esc 路由）。Android 返回键可能以 ui_cancel 动作事件形态抵达，一并路由。
+## WASD/QE 相机、Esc 路由）、触屏手势（Android：点按建造 / 单指平移 / 双指平移+缩放+旋转）。
+## Android 返回键可能以 ui_cancel 动作事件形态抵达，一并路由。
 func _unhandled_input(event: InputEvent) -> void:
+	# 触屏合成鼠标（device == -1，Godot 内部设备号）在 Android 上会先于 ScreenTouch 抵达，
+	# 且每根手指各合成一次（含第二根）——若照单全收，双指手势会在两指落点各造一座塔。
+	# 一律丢弃，世界区改由下面的原生触摸分支处理。
+	if (event is InputEventMouseButton or event is InputEventMouseMotion) and event.device == -1:
+		return
+	if event is InputEventScreenTouch:
+		var st: InputEventScreenTouch = event
+		if st.pressed:
+			_touch_down(st.index, st.position)
+		else:
+			_touch_up(st.index, st.position)
+		return
+	if event is InputEventScreenDrag:
+		var sd: InputEventScreenDrag = event
+		_touch_drag(sd.index, sd.position, sd.relative)
+		return
 	if event is InputEventMouseButton:
 		var mb: InputEventMouseButton = event
 		if mb.button_index == MOUSE_BUTTON_LEFT:
@@ -865,6 +896,123 @@ func _unhandled_input(event: InputEvent) -> void:
 	elif event.is_action_pressed("ui_cancel"):
 		_android_back_handle() # 安卓返回的动作事件形态（非键盘）
 		get_viewport().set_input_as_handled()
+
+
+# ---------------- 触屏手势（Android/iOS）----------------
+# 语义：单指点按 = 建造/选择/拆除（与鼠标左键同口径，松手才落子）；
+#      单指拖动 = 平移视角（建造模式下 = 拖墙线，平移改用双指）；
+#      双指 = 中点位移平移 + 间距变化缩放 + 连线转角旋转（同时生效）。
+
+## 单指按下。墙模式按下即起线（保留实时预览）；其余模式推迟到抬起判定「点按」，
+## 这样单指拖动的第一段位移不会被当成建造。
+func _touch_down(idx: int, p: Vector2) -> void:
+	touch_pts[idx] = p
+	if touch_pts.size() == 1:
+		touch_mode = "single"
+		touch_start = p
+		touch_dragging = false
+		touch_wall = false
+		mouse_pos = p
+		if mode == "wall" and _edit_allowed() and not in_hud_region(p.x, p.y):
+			var cell: Vector2i = view.pick_cell(p.x, p.y)
+			# 只有「这里真能起墙」才算拖线；否则这段拖动归平移（在岩石/水/建筑上滑屏不会白画空线）
+			if cell.x >= 0 and mode_valid("wall", cell.x, cell.y):
+				drag_start = cell
+				touch_wall = true
+		return
+	# 第二指落下 → 升级为手势：撤销刚起的墙线，本次手势到全部抬指前不再响应单指语义
+	if touch_wall:
+		_cancel_drag()
+		touch_wall = false
+	touch_mode = "multi"
+	touch_dragging = false
+	mouse_pos = Vector2(-1.0, -1.0)
+	view.show_ghost([], false, "")
+	view.set_focus(Vector2i(-1, -1))
+	_gesture_reset()
+
+
+func _touch_drag(idx: int, p: Vector2, rel: Vector2) -> void:
+	if not touch_pts.has(idx):
+		return
+	touch_pts[idx] = p
+	if touch_mode == "multi":
+		_gesture_update()
+		return
+	if touch_mode != "single":
+		return
+	if not touch_dragging:
+		if touch_start.distance_to(p) < TOUCH_SLOP:
+			return
+		touch_dragging = true
+		if not touch_wall:
+			mouse_pos = Vector2(-1.0, -1.0) # 判定为平移：撤掉幽灵预览
+	if touch_wall:
+		mouse_pos = p # 拖线：幽灵线跟手（update_ghost 每帧读 mouse_pos）
+		return
+	if _camera_free() and not in_hud_region(p.x, p.y):
+		view.camera_pan_pixels(rel.x, rel.y)
+
+
+func _touch_up(idx: int, p: Vector2) -> void:
+	touch_pts.erase(idx)
+	if touch_mode == "multi":
+		if touch_pts.is_empty():
+			touch_mode = ""
+			mouse_pos = Vector2(-1.0, -1.0)
+		return # 双指手势收尾：剩余手指抬起前不再触发建造
+	if touch_mode != "single":
+		return
+	touch_mode = ""
+	if touch_wall:
+		pointer_up(p) # 提交墙线（内部清 drag_start）
+		touch_wall = false
+	elif not touch_dragging and not in_hud_region(p.x, p.y):
+		pointer_down(p) # 点按：松手才落子
+		pointer_up(p)
+	mouse_pos = Vector2(-1.0, -1.0) # 手指离开后不留幽灵
+	view.show_ghost([], false, "")
+	view.set_focus(Vector2i(-1, -1))
+
+
+## 双指基线（按手指 index 升序取前两根）。
+func _gesture_reset() -> void:
+	var ks := touch_pts.keys()
+	ks.sort()
+	if ks.size() < 2:
+		return
+	var a: Vector2 = touch_pts[ks[0]]
+	var b: Vector2 = touch_pts[ks[1]]
+	_g_prev = (a + b) * 0.5
+	_g_dist = maxf(a.distance_to(b), 1.0)
+	_g_ang = atan2(b.y - a.y, b.x - a.x)
+
+
+## 双指增量：中点位移 = 平移（抓取感，与右键拖拽同向）；间距比 = 缩放（拉开=拉近）；
+## 连线转角 = 旋转（顺时针拧 = 场景顺时针转）。单帧幅度都夹住，防抖。
+func _gesture_update() -> void:
+	var ks := touch_pts.keys()
+	ks.sort()
+	if ks.size() < 2:
+		return
+	var a: Vector2 = touch_pts[ks[0]]
+	var b: Vector2 = touch_pts[ks[1]]
+	var c := (a + b) * 0.5
+	var d := maxf(a.distance_to(b), 1.0)
+	var ang := atan2(b.y - a.y, b.x - a.x)
+	if _camera_free():
+		var dp := c - _g_prev
+		if dp != Vector2.ZERO:
+			view.camera_pan_pixels(dp.x, dp.y)
+		var r := clampf(d / _g_dist, 1.0 - TOUCH_PINCH_STEP, 1.0 + TOUCH_PINCH_STEP)
+		if absf(r - 1.0) > 0.002:
+			view.camera_zoom(1.0 / r) # 间距变大 = 拉近
+		var da := wrapf(ang - _g_ang, -PI, PI)
+		if absf(da) > TOUCH_ROT_DEADZONE and absf(da) < TOUCH_ROT_LIMIT:
+			view.camera_rotate(da)
+	_g_prev = c
+	_g_dist = d
+	_g_ang = ang
 
 
 ## 相机操控是否可用（标题/暂停/结算冻结；滚轮缩放与 WASD 同口径）
