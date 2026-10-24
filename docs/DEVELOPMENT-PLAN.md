@@ -2572,6 +2572,8 @@ v2.2 的存量陈旧件；目验 gameover/hud/slots 通过）。
   日志 `logs/submit-20261020/auto/auto_resubmit.log`，截图 `activity/05-auto-resubmit.png`；
   含「记录已无驳回则跳过」防重护栏；过 10-21 11:30 自动退出。全部证据见
   `logs/submit-20261020/README.md`。
+  （**10-24 修订**：投稿早已通过、任务失效，计划任务 `RerouteAutoResubmit` 已删，
+  `logs/submit-20261020/` 整目录已清；30 个被追踪文件可从 git 史找回，本条保留为历史口径。）
 - 后续（过审后按序）：
   ① 重投确认通过（记录变为审核中/通过）；
   ② 商店资料写回：**状态机 1/3/4/5 全锁**（官方 skill 文档已核实），已上线后须先
