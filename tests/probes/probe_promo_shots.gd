@@ -10,7 +10,7 @@ const OUT_DIR := "res://shots/promo_test/"
 
 func _initialize() -> void:
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(OUT_DIR))
-	var packed: PackedScene = load("res://game/main.tscn")
+	var packed: PackedScene = load("res://game/app/main.tscn")
 	var main = packed.instantiate()
 	root.add_child(main)
 	for _i in 10:

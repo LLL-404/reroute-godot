@@ -3,7 +3,7 @@ extends ProbeKit
 # 模型渲染探针 v2：三个单位形态 + 金堆，含动画帧（Crawl）截图验证。
 # 判定：exit 0 + stdout 含 [MODEL] PASS。
 
-const ModelsScript = preload("res://game/models.gd")
+const ModelsScript = preload("res://game/view/models.gd")
 
 func _initialize() -> void:
 	var models = ModelsScript.new()

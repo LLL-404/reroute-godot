@@ -11,7 +11,7 @@ var spawned_heavy := false
 
 
 func _initialize() -> void:
-	var packed: PackedScene = load("res://game/main.tscn")
+	var packed: PackedScene = load("res://game/app/main.tscn")
 	main = packed.instantiate()
 	root.add_child(main)
 	for _i in 10:

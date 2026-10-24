@@ -4,7 +4,7 @@ extends CanvasLayer
 # 独立 CanvasLayer（layer 11），不侵入 game/hud.gd 与 game/screens.gd 的既有结构。
 # 只读 RunState，不发命令；所有动作经 cb 回调交回 main。
 
-const UiStyle = preload("res://game/ui_style.gd")
+const UiStyle = preload("res://game/ui/ui_style.gd")
 
 var C: Dictionary = {}
 var S := 1.0

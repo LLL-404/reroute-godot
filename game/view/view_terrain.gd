@@ -18,12 +18,12 @@ extends RefCounted
 # lattice 网格保留场外渐进环 + **场内区改取蓝图高度函数平滑直填**（内部面片整体跳过，
 # 只留最外圈 1 环缝合场外；欠缝/半格锯齿为 odd-r 固有，接受）。高度变化只重建六边网格。
 
-const ViewCoreScript = preload("res://game/view_core.gd")
-const Blueprint = preload("res://game/blueprint.gd")
+const ViewCoreScript = preload("res://game/view/view_core.gd")
+const Blueprint = preload("res://game/core/blueprint.gd")
 
 # 地面贴图管线（2026-10-17，CC0·ambientCG）：双材质三平面 shader；顶点色 a 位 = 岩石权值
 # （shader 按 a 混沙/岩纹理；rgb 维持补过 check_shots 校准的程序化分带色——见 terrain_ground.gdshader 头注）
-const GROUND_SHADER = preload("res://game/terrain_ground.gdshader")
+const GROUND_SHADER = preload("res://game/view/terrain_ground.gdshader")
 const TEX_SAND_COL = preload("res://assets/textures/terrain/ground093c_col.jpg")
 const TEX_SAND_NRM = preload("res://assets/textures/terrain/ground093c_nrm.jpg")
 const TEX_ROCK_COL = preload("res://assets/textures/terrain/rock061_col.jpg")

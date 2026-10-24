@@ -7,12 +7,12 @@ extends Node3D
 # 本文件只做两件事：_ready 组装；把组件公共面原样转发为 view.xxx（外部访问零变化）。
 # 视图层只读模拟状态，绝不回写；插值用的 prev 格存组件里，不进指纹。
 
-const ModelsScript = preload("res://game/models.gd")
+const ModelsScript = preload("res://game/view/models.gd")
 
-const ViewCoreScript = preload("res://game/view_core.gd")
-const ViewAudioScript = preload("res://game/view_audio.gd")
-const ViewTerrainScript = preload("res://game/view_terrain.gd")
-const ViewEntitiesScript = preload("res://game/view_entities.gd")
+const ViewCoreScript = preload("res://game/view/view_core.gd")
+const ViewAudioScript = preload("res://game/view/view_audio.gd")
+const ViewTerrainScript = preload("res://game/view/view_terrain.gd")
+const ViewEntitiesScript = preload("res://game/view/view_entities.gd")
 
 # 常量转发（探针经 view.H_STEP / view.Z_YAW 读取，语义同原 view.gd）
 const H_STEP := ViewCoreScript.H_STEP

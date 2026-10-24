@@ -26,7 +26,7 @@ func _initialize() -> void:
 		kind = "A"
 	shots = OS.get_environment("PROMO_MODE") == "shots"
 
-	var packed: PackedScene = load("res://game/main.tscn")
+	var packed: PackedScene = load("res://game/app/main.tscn")
 	main = packed.instantiate()
 	root.add_child(main)
 	for _i in 10:

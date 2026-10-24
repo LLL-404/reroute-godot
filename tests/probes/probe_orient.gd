@@ -6,7 +6,7 @@ extends ProbeKit
 # 判定：图中每个单位的大钳应朝各自的移动方向（右 / 下 / 左 / 上）。
 #       exit 0 + stdout 含 [ORIENT] PASS（机械部分：出帧成功）。
 
-const ModelsScript = preload("res://game/models.gd")
+const ModelsScript = preload("res://game/view/models.gd")
 const Z_YAW := PI / 2.0 # 同 view.Z_YAW
 
 

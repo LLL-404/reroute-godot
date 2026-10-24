@@ -7,7 +7,7 @@ extends CanvasLayer
 #   ③ 完整隐私政策可跳转浏览器查看（独立网页，非站内页）；
 #   ④ 同意结果由 main 持久化到 user://settings.cfg 的 privacy/agreed，下次启动不再弹。
 # 层级 40：高于开屏 intro(30) / 壳(20) / HUD(10)；未同意时 main 根本不建那三层。
-# 本文件不使用 class_name；调用方以 load("res://game/privacy_gate.gd") 引用。
+# 本文件不使用 class_name；调用方以 load("res://game/ui/privacy_gate.gd") 引用。
 
 signal agreed
 signal declined

@@ -3,10 +3,10 @@ extends ProbeKit
 # C1 判定：主场景 headless 加载 + 地形构建对拍。
 # 跑法（cwd=reroute-godot）：godot --headless -s res://tests/probes/probe_scene.gd
 # 判定：exit 0 + stdout 含 [SCENE] PASS + stderr 无 ERROR。
-const Blueprint = preload("res://game/blueprint.gd")
+const Blueprint = preload("res://game/core/blueprint.gd")
 func _initialize() -> void:
 	var t0 := Time.get_ticks_msec()
-	var packed: PackedScene = load("res://game/main.tscn")
+	var packed: PackedScene = load("res://game/app/main.tscn")
 	var main = packed.instantiate()
 	root.add_child(main)
 	for _i in 5:

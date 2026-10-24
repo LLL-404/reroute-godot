@@ -8,22 +8,22 @@ extends CanvasLayer
 # 口径说明：母版 Shell.resume 走 ScreenManager:Back()，而 Back 在"栈<=1 拒绝"的保护下
 # 无法弹出单元素栈（对局=空栈模型下的疑点）；本版按 Shell 自身注释"弹栈到空"语义实现 resume=close_all。
 
-const SaveIO = preload("res://game/save_io.gd")
-const UserSettings = preload("res://game/user_settings.gd")
+const SaveIO = preload("res://game/core/save_io.gd")
+const UserSettings = preload("res://game/core/user_settings.gd")
 # 隐私政策完整说明（独立托管页；合规要求玩家随时可查，Android/PC 均走系统浏览器）
 const PRIVACY_URL := "https://lll-404.github.io/reroute-privacy/privacy.html"
-const UiStyle = preload("res://game/ui_style.gd")
+const UiStyle = preload("res://game/ui/ui_style.gd")
 # 标题衬线字（Noto Serif SC Bold 子集 13.8KB，31 字形；许可与加工见 CREDITS.md §3.3）。
 # 子集只含屏标题用字（改道暂停读档存档设置防线守住…），正文/按钮仍走主题默认 Noto Sans SC。
 const F_SERIF: FontFile = preload("res://assets/fonts/NotoSerifSC-Bold-Sub.ttf")
 
 # 五页面场景路径（结构在 .tscn，样式/尺寸/回调由 _bind_* 注入）
 const PAGE_PATHS := {
-	"title": "res://game/pages/title.tscn",
-	"pause": "res://game/pages/pause.tscn",
-	"gameover": "res://game/pages/gameover.tscn",
-	"slots": "res://game/pages/slots.tscn",
-	"settings": "res://game/pages/settings.tscn",
+	"title": "res://game/ui/pages/title.tscn",
+	"pause": "res://game/ui/pages/pause.tscn",
+	"gameover": "res://game/ui/pages/gameover.tscn",
+	"slots": "res://game/ui/pages/slots.tscn",
+	"settings": "res://game/ui/pages/settings.tscn",
 }
 
 var S := 1.0

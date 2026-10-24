@@ -5,7 +5,7 @@ extends ProbeKit
 # 同时验证动画结束后确实落到 RunState.pick。
 
 func _initialize() -> void:
-	var packed: PackedScene = load("res://game/main.tscn")
+	var packed: PackedScene = load("res://game/app/main.tscn")
 	var main = packed.instantiate()
 	root.add_child(main)
 	for _i in 5:

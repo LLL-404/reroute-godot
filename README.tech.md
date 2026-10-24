@@ -44,7 +44,7 @@ game/  ←──  tests/probes/   探针驱动表现层与整机
 ```
 
 - `sim/`：**确定性**模拟核心，13 个模块，纯逻辑、**无浮点、无渲染**。唯一随机源是 `World.rng`。
-- `game/`：表现层，20 个 `.gd` + 8 个 `.tscn`（另有 `game/pages/` 5 个页面场景）。
+- `game/`：表现层，按职责分四层：`app/`（入口 `main` + 包内自证 `selfcheck`）、`core/`（蓝图/存档/用户设置）、`view/`（3D 视图、模型与地形着色器）、`ui/`（HUD、界面壳、三选一、开屏、隐私门；页面场景在 `ui/pages/`）。
 - `run/`：肉鸽模式编排层（`RunState` / `RewardPool` / `Threat`），不改 `sim/` 语义。
 - `tests/`：9 个单测模块 + 37 个验收探针。
 
@@ -109,7 +109,7 @@ P="<待补：本项目根目录绝对路径>"
 "$GODOT" --path "$P"
 ```
 
-主场景是 `res://game/main.tscn`（写在 `project.godot` 的 `run/main_scene`）。
+主场景是 `res://game/app/main.tscn`（写在 `project.godot` 的 `run/main_scene`）。
 
 ### 3.2 单测
 
@@ -245,7 +245,7 @@ python tools/convert_all.py
 
 | 键 | 值 | 为什么这么设 |
 |---|---|---|
-| `run/main_scene` | `res://game/main.tscn` | 唯一入口；隐私门与开屏都在它下面装配 |
+| `run/main_scene` | `res://game/app/main.tscn` | 唯一入口；隐私门与开屏都在它下面装配 |
 | `display/window/size` | 1280×720 | 基准视口 |
 | `display/window/stretch/mode` | `canvas_items` + `aspect=expand` | 宽高比不锁死，适配 16:9 / 16:10 / 20:9 / 4:3 |
 | `window/handheld/orientation` | `4` | Android 横屏 |

@@ -9,8 +9,8 @@ extends CanvasLayer
 # 只读 RunState 的 offers；一切动作经 on_pick / on_refresh / on_skip 交回 main。
 # 层级 12：压在 run_ui(11) 与 hud(10) 之上，低于 shell(20)。
 
-const UiStyle = preload("res://game/ui_style.gd")
-const HexCardScene = preload("res://game/hex_card.tscn") # 卡片骨架场景（结构在 tscn）
+const UiStyle = preload("res://game/ui/ui_style.gd")
+const HexCardScene = preload("res://game/ui/hex_card.tscn") # 卡片骨架场景（结构在 tscn）
 
 # 稀有度配色（银 / 金 / 棱彩），LOL 口径
 const RARITY := {

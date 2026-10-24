@@ -1,6 +1,6 @@
 [gd_scene load_steps=3 format=3]
 
-[ext_resource type="Script" path="res://game/ui_icon.gd" id="1_icon"]
+[ext_resource type="Script" path="res://game/ui/ui_icon.gd" id="1_icon"]
 
 [node name="hex_card" type="Control"]
 

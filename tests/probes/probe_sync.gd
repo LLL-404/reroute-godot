@@ -17,7 +17,7 @@ var alpha_checked := false
 
 
 func _initialize() -> void:
-	var packed: PackedScene = load("res://game/main.tscn")
+	var packed: PackedScene = load("res://game/app/main.tscn")
 	var main = packed.instantiate()
 	root.add_child(main)
 	main.set_process(false) # 探针独占推进，保证确定性

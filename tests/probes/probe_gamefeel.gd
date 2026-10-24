@@ -11,8 +11,8 @@ extends ProbeKit
 # 跑法（窗口模式）：godot -path <proj> -s res://tests/probes/probe_gamefeel.gd
 # 判定：exit 0 + `[GAMEFEEL] PASS`；证据图 shots/flash_off.png / shots/flash_on.png（同姿态对照）。
 
-const ModelsScript = preload("res://game/models.gd")
-const ViewEntitiesScript = preload("res://game/view_entities.gd") # 直接取游戏内常量，避免探针图与实际参数脱节
+const ModelsScript = preload("res://game/view/models.gd")
+const ViewEntitiesScript = preload("res://game/view/view_entities.gd") # 直接取游戏内常量，避免探针图与实际参数脱节
 
 var _meshes: Array = []
 
@@ -75,7 +75,7 @@ func _initialize() -> void:
 	we.free()
 
 	# ---- 第二段：真实对局里是否真的走上闪白路径（结构 + 状态，不靠目检）----
-	var main = load("res://game/main.tscn").instantiate()
+	var main = load("res://game/app/main.tscn").instantiate()
 	root.add_child(main)
 	for _i in 3:
 		await process_frame

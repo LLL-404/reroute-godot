@@ -3,16 +3,16 @@ extends Node3D
 # 《改道》Godot 版主循环：20Hz 固定步长模拟、世界到视图同步与输入分发。
 # 对局生命周期统一在这里管理；模拟规则归 sim/，绘制、HUD、页面、音频归 game/ 对应模块。
 
-const Blueprint = preload("res://game/blueprint.gd")
-const Selfcheck = preload("res://game/selfcheck.gd")
-const UserSettings = preload("res://game/user_settings.gd")
-const SaveIO = preload("res://game/save_io.gd")
-const PrivacyGateScene = preload("res://game/privacy_gate.tscn") # 隐私门场景（结构在 tscn）
-const IntroScene = preload("res://game/intro.tscn") # 开屏动画场景（结构在 tscn）
-const HudScene = preload("res://game/hud.tscn") # HUD 场景（结构在 tscn）
-const ScreensScene = preload("res://game/screens.tscn") # 界面壳场景（五页面 + 确认弹窗 + 过渡黑幕）
-const RunUiScene = preload("res://game/run_ui.tscn") # 肉鸽 HUD 场景（结构在 tscn）
-const HexPickerScene = preload("res://game/hex_picker.tscn") # 三选一面板场景（结构在 tscn）
+const Blueprint = preload("res://game/core/blueprint.gd")
+const Selfcheck = preload("res://game/app/selfcheck.gd")
+const UserSettings = preload("res://game/core/user_settings.gd")
+const SaveIO = preload("res://game/core/save_io.gd")
+const PrivacyGateScene = preload("res://game/ui/privacy_gate.tscn") # 隐私门场景（结构在 tscn）
+const IntroScene = preload("res://game/ui/intro.tscn") # 开屏动画场景（结构在 tscn）
+const HudScene = preload("res://game/ui/hud.tscn") # HUD 场景（结构在 tscn）
+const ScreensScene = preload("res://game/ui/screens.tscn") # 界面壳场景（五页面 + 确认弹窗 + 过渡黑幕）
+const RunUiScene = preload("res://game/ui/run_ui.tscn") # 肉鸽 HUD 场景（结构在 tscn）
+const HexPickerScene = preload("res://game/ui/hex_picker.tscn") # 三选一面板场景（结构在 tscn）
 
 const TICK_DT := 1.0 / 20.0
 const MAX_CATCHUP := 5 # 单帧最多补的 tick 数（追平上限，超出丢弃积压）
@@ -213,7 +213,7 @@ func _setup_hud() -> void:
 	})
 	hud_regions_provider = Callable(hud, "hit_regions")
 	view.on_float = Callable(hud, "float_bounty")
-	danger = preload("res://game/danger_vignette.gd").new()
+	danger = preload("res://game/ui/danger_vignette.gd").new()
 	danger.name = "DangerVignette"
 	add_child(danger)
 

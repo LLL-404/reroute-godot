@@ -1,7 +1,7 @@
 extends Control
 
-const UiStyle = preload("res://game/ui_style.gd")
-const UserSettings = preload("res://game/user_settings.gd")
+const UiStyle = preload("res://game/ui/ui_style.gd")
+const UserSettings = preload("res://game/core/user_settings.gd")
 
 # HUD（移植 reroute/scripts/hud.lua）：顶栏（核心血条/波次倒计时/供给/热层钮/暂停钮）
 # + 右下操作模式列 + 技能钮 + 波次横幅 + 击杀赏金浮字池。
@@ -169,24 +169,24 @@ func _dress_label(l: Label, fs: float, color: Color, glow: bool = false) -> void
 
 ## 绑定顶栏：核心血条（三道刻度线）+ 波次 + 供给 + 热层/暂停钮
 func _bind_top_bar() -> void:
-	top_bar = $top_bar
+	top_bar = $TopBar
 	var sb_bar := _flat(DARK["bar"], DARK["gold_lo"], 0, 1)
 	sb_bar.set_border_width_all(0)
 	sb_bar.border_width_bottom = 1 # 底缘 1px 古金线（文明 6 式分组界）
 	top_bar.add_theme_stylebox_override("panel", sb_bar)
 	_toplevel.append(top_bar)
 
-	core_icon = $top_bar/core_icon
+	core_icon = $TopBar/CoreIcon
 	core_icon.setup("shield", DARK["gold"])
-	supply_icon = $top_bar/supply_icon
+	supply_icon = $TopBar/SupplyIcon
 	supply_icon.setup("coin", DARK["supply"])
 
-	var lbl_core: Label = $top_bar/lbl_core
+	var lbl_core: Label = $TopBar/CoreCaption
 	_dress_label(lbl_core, 11.0 * S, DARK["muted"])
-	var lbl_wave: Label = $top_bar/lbl_wave
+	var lbl_wave: Label = $TopBar/WaveCaption
 	_dress_label(lbl_wave, 11.0 * S, DARK["muted"])
 
-	hp_bar = $top_bar/hp_bar
+	hp_bar = $TopBar/HpBar
 	hp_bar.custom_minimum_size = Vector2(180.0 * S, 10.0 * S)
 	hp_bar.size = Vector2(180.0 * S, 10.0 * S)
 	hp_bar.max_value = float(CORE_HP)
@@ -196,39 +196,40 @@ func _bind_top_bar() -> void:
 	hp_bar.add_theme_stylebox_override("fill", _flat(DARK["hp"], UiStyle.NO_BORDER, 2, 0))
 	# 25/50/75% 三道刻度线（纯装饰，随条缩放）
 	var fracs := [0.25, 0.5, 0.75]
+	var tick_names := ["Tick25", "Tick50", "Tick75"]
 	for i in 3:
-		var tick: ColorRect = hp_bar.get_node("Tick%d" % (i + 1))
+		var tick: ColorRect = hp_bar.get_node(tick_names[i])
 		tick.color = UiStyle.SHADOW_TICK
 		tick.anchor_left = fracs[i]
 		tick.anchor_right = fracs[i]
 		tick.offset_left = 0.0
 		tick.offset_right = 1.0
 
-	hp_text = $top_bar/hp_text
+	hp_text = $TopBar/HpText
 	hp_text.text = "%d/%d" % [CORE_HP, CORE_HP]
 	_dress_label(hp_text, 12.0 * S, DARK["text"])
 
-	var divider: ColorRect = $top_bar/divider
+	var divider: ColorRect = $TopBar/Divider
 	divider.color = DARK["border"]
 	divider.custom_minimum_size = Vector2(1, 26.0 * S)
 	divider.size = Vector2(1, 26.0 * S)
 
-	wave_text = $top_bar/wave_text
+	wave_text = $TopBar/WaveText
 	_dress_label(wave_text, 12.0 * S, DARK["text"])
 
-	supply_caption = $top_bar/supply_caption
+	supply_caption = $TopBar/SupplyCaption
 	_dress_label(supply_caption, 10.0 * S, DARK["muted"])
-	supply_text = $top_bar/supply_text
+	supply_text = $TopBar/SupplyText
 	_dress_label(supply_text, 17.0 * S, DARK["supply"], true)
 	supply_text.text = str(Sim.START_SUPPLY)
 
-	heat_btn = $top_bar/heat_btn
+	heat_btn = $TopBar/HeatButton
 	_style_button(heat_btn, 60.0 * S, 30.0 * S, 11.0 * S)
 	heat_btn.pressed.connect(func() -> void:
 		if callbacks.has("on_heat"):
 			callbacks["on_heat"].call())
 
-	pause_btn = $top_bar/pause_btn
+	pause_btn = $TopBar/PauseButton
 	_style_button(pause_btn, 60.0 * S, 30.0 * S, 11.0 * S)
 	pause_btn.pressed.connect(func() -> void:
 		if callbacks.has("on_pause"):
@@ -238,7 +239,7 @@ func _bind_top_bar() -> void:
 ## 绑定种子标签（Task 4）：右上角常驻小字；显隐并入 _toplevel，跟随 HUD 整体收起/复显。
 ## 位置在顶栏下沿（y ≥ TOP_STRIP_H·S）→ 不进 hit_regions，不影响战场点击。
 func _bind_seed() -> void:
-	seed_label = $seed_label
+	seed_label = $SeedLabel
 	_dress_label(seed_label, FS_SEED * S, DARK["muted"])
 	seed_label.text = ""
 	_toplevel.append(seed_label)
@@ -246,22 +247,22 @@ func _bind_seed() -> void:
 
 ## 绑定左上提示徽章（放墙改道提示；点击排除第三区）
 func _bind_hint() -> void:
-	hint_panel = $hint_panel
+	hint_panel = $HintPanel
 	hint_panel.add_theme_stylebox_override("panel", _flat(DARK["card"], DARK["gold_lo"], 2, 1))
-	var margin: MarginContainer = $hint_panel/Margin
+	var margin: MarginContainer = $HintPanel/Margin
 	margin.add_theme_constant_override("margin_left", int(9 * S))
 	margin.add_theme_constant_override("margin_right", int(11 * S))
 	margin.add_theme_constant_override("margin_top", int(5 * S))
 	margin.add_theme_constant_override("margin_bottom", int(5 * S))
-	var row: HBoxContainer = $hint_panel/Margin/row
+	var row: HBoxContainer = $HintPanel/Margin/Row
 	row.add_theme_constant_override("separation", int(8 * S))
-	var tag: Label = row.get_node("tag")
+	var tag: Label = row.get_node("Tag")
 	_dress_label(tag, 9.0 * S, DARK["gold"])
-	var sep: ColorRect = row.get_node("sep")
+	var sep: ColorRect = row.get_node("Separator")
 	sep.color = DARK["gold_lo"]
 	sep.custom_minimum_size = Vector2(1, 10)
 	sep.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	hint_label = row.get_node("hint_label")
+	hint_label = row.get_node("HintLabel")
 	_dress_label(hint_label, 10.0 * S, DARK["muted"])
 	_toplevel.append(hint_panel)
 
@@ -269,7 +270,7 @@ func _bind_hint() -> void:
 ## 绑定右下指挥盘（v2.5）：3 行 2/3/3 格（建造 / 地形 / 指令），格内 = 图标 + 名称 + 成本。
 ## Button 文本清空，图标/名称/成本均为子节点（随按钮三态由 _paint_rows 统一换色）。
 func _bind_dock() -> void:
-	dock = $dock
+	dock = $ActionLayer/DockPlate
 	dock.add_theme_stylebox_override("panel", _flat(DARK["bar"], DARK["gold_lo"], 3, 1))
 	UiStyle.corner_dress(dock, DARK["gold_lo"]) # 四角铜线托角（游戏面板感）
 	_toplevel.append(dock)
@@ -294,7 +295,7 @@ func _bind_dock() -> void:
 		var row: Array = []
 		for key in keys:
 			var spec: Dictionary = specs[key]
-			var btn: Button = get_node("btn_" + str(key))
+			var btn: Button = get_node("ActionLayer/Btn" + str(key).capitalize())
 			_style_button(btn, CELL_W * S, CELL_H * S, 10.0 * S)
 			if key == "skill":
 				btn.pressed.connect(func() -> void:
@@ -309,13 +310,13 @@ func _bind_dock() -> void:
 			_toplevel.append(btn)
 			btn.set_meta("cost", int(spec["cost"]))
 			btn.set_meta("icon", str(spec["icon"]))
-			var ic: Control = btn.get_node("icon")
+			var ic: Control = btn.get_node("Icon")
 			ic.setup(str(spec["icon"]), DARK["text"])
 			row_icon[key] = ic
-			var name_l: Label = btn.get_node("name")
+			var name_l: Label = btn.get_node("NameLabel")
 			_dress_label(name_l, 10.0 * S, DARK["text"])
 			row_name[key] = name_l
-			var cost_l: Label = btn.get_node("cost")
+			var cost_l: Label = btn.get_node("CostLabel")
 			_dress_label(cost_l, 9.0 * S, DARK["muted"])
 			if int(spec["cost"]) > 0:
 				cost_l.text = str(int(spec["cost"]))
@@ -331,7 +332,7 @@ func _bind_dock() -> void:
 ## 5s 撤销窗内由 main `set_undo_vis(true, 剩余秒)` 点亮；点按走 on_undo 回调
 ## （与 Ctrl+Z / 右键撤销同源命令链）。默认隐藏：不入 _toplevel（显隐归口见 set_undo_vis）。
 func _bind_undo() -> void:
-	undo_panel = $undo_panel
+	undo_panel = $ActionLayer/UndoPill
 	undo_panel.custom_minimum_size = Vector2(140.0 * S, 30.0 * S)
 	undo_panel.size = Vector2(140.0 * S, 30.0 * S)
 	undo_panel.focus_mode = Control.FOCUS_NONE
@@ -356,10 +357,10 @@ func set_undo_vis(on: bool, secs: int = 0) -> void:
 
 ## 绑定波次/暗门横幅（卡片 + 左金条强调 + 标题/副标题两行）
 func _bind_banner() -> void:
-	banner_root = $banner_root
+	banner_root = $BannerRoot
 	_toplevel.append(banner_root)
 
-	banner_card = $banner_root/card
+	banner_card = $BannerRoot/Card
 	var sb_ban := _flat(DARK["card"], DARK["gold_lo"], 2, 1)
 	sb_ban.border_width_left = 4 # 左侧 4px 金条强调（v2.1 组件规格）
 	banner_card.add_theme_stylebox_override("panel", sb_ban)
@@ -368,18 +369,18 @@ func _bind_banner() -> void:
 	margin.add_theme_constant_override("margin_right", int(14 * S))
 	margin.add_theme_constant_override("margin_top", int(7 * S))
 	margin.add_theme_constant_override("margin_bottom", int(7 * S))
-	var col: VBoxContainer = margin.get_node("col")
+	var col: VBoxContainer = margin.get_node("Col")
 	col.add_theme_constant_override("separation", int(2 * S))
-	banner_title = col.get_node("banner_title")
+	banner_title = col.get_node("BannerTitle")
 	_dress_label(banner_title, 16.0 * S, DARK["gold_hi"], true)
-	banner_sub = col.get_node("banner_sub")
+	banner_sub = col.get_node("BannerSub")
 	_dress_label(banner_sub, 10.0 * S, DARK["muted"])
 
 
 ## 绑定击杀赏金浮字池（FLOAT_N 个复用 Label，轮转取用）
 func _bind_floats() -> void:
 	floats = []
-	var box: Control = $floats
+	var box: Control = $Floats
 	for i in FLOAT_N:
 		var el: Label = box.get_node("Float%d" % i)
 		_dress_label(el, 13.0 * S, DARK["gold_hi"], true)
@@ -450,9 +451,9 @@ func _layout() -> void:
 	x += 20.0 * S
 	hp_bar.custom_minimum_size = Vector2(180.0 * S, 10.0 * S)
 	hp_bar.size = Vector2(180.0 * S, 10.0 * S)
-	var lbl_core: Label = top_bar.get_node("lbl_core")
-	var lbl_wave: Label = top_bar.get_node("lbl_wave")
-	var divider: ColorRect = top_bar.get_node("divider")
+	var lbl_core: Label = top_bar.get_node("CoreCaption")
+	var lbl_wave: Label = top_bar.get_node("WaveCaption")
+	var divider: ColorRect = top_bar.get_node("Divider")
 	lbl_core.add_theme_font_size_override("font_size", int(FS_TOP * S))
 	lbl_wave.add_theme_font_size_override("font_size", int(FS_TOP * S))
 	hp_text.add_theme_font_size_override("font_size", int(12.5 * S))

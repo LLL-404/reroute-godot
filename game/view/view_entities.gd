@@ -4,9 +4,9 @@ extends RefCounted
 # 英雄、单位同步（插值 + 动作状态机）、死亡消散、震荡环、幽灵预览、赏金浮字与统计。
 # 只读模拟状态；几何工具借 core，贴地/热层借 terrain，音效借 audio；节点挂点统一走 host。
 
-const ViewCoreScript = preload("res://game/view_core.gd")
-const ViewTerrainScript = preload("res://game/view_terrain.gd")
-const ViewAudioScript = preload("res://game/view_audio.gd")
+const ViewCoreScript = preload("res://game/view/view_core.gd")
+const ViewTerrainScript = preload("res://game/view/view_terrain.gd")
+const ViewAudioScript = preload("res://game/view/view_audio.gd")
 
 const RING_LIFE := 7 # 震荡波扩散环 0.35s
 # 模型路径动作时长（tick，照母版 Z_TICKS：Attack 0.9s / Hurt 0.5s / Death 1.4s）

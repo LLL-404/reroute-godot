@@ -5,7 +5,7 @@ extends ProbeKit
 # 拍2 视觉联动锚点面（岩野山体 ridge_pts / ridge_off / 2D 盆地 / 四侧出怪口 gate_pts）。
 # 判定：exit 0 + stdout 含 `[BLUEPRINT] PASS`。
 
-const Blueprint = preload("res://game/blueprint.gd")
+const Blueprint = preload("res://game/core/blueprint.gd")
 const SAMPLE_N := 17 # 世界坐标 -32..32 步长 4
 
 

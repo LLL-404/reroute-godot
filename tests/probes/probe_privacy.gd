@@ -4,7 +4,7 @@ extends ProbeKit
 # 合规要点：必须提供可真正退出的「不同意」路径（不能只有同意），因此拒绝链路单独断言。
 # 运行：godot --headless -s res://tests/probes/probe_privacy.gd
 
-const GATE_PATH := "res://game/privacy_gate.tscn"
+const GATE_PATH := "res://game/ui/privacy_gate.tscn"
 
 
 func _initialize() -> void:

@@ -8,8 +8,8 @@ extends CanvasLayer
 # 性能口径（2026-10-17 提速）：① 主世界停画（第 1 帧暖机后隐藏，T_P3 恢复）；
 # ② 子视口 0.7× 降分辨率拉伸；③ 首拍预热一帧（材质/泛光管线编译藏进黑场）。
 
-const ModelsScript = preload("res://game/models.gd")
-const UiStyle = preload("res://game/ui_style.gd")
+const ModelsScript = preload("res://game/view/models.gd")
+const UiStyle = preload("res://game/ui/ui_style.gd")
 const F_SERIF: FontFile = preload("res://assets/fonts/NotoSerifSC-Bold-Sub.ttf")
 const F_SANS: FontFile = preload("res://assets/fonts/NotoSansSC-Regular.otf")
 

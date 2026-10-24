@@ -24,6 +24,10 @@ except Exception:
 
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'game')
 
+# 扫描对象（相对 ROOT 的路径，按整理后的四层目录 app/core/view/ui 定位）
+SCAN_L1 = ('ui/hud.gd', 'ui/screens.gd', 'app/main.gd', 'view/view.gd', 'ui/ui_style.gd')
+SCAN_STYLE = ('ui/hud.gd', 'ui/screens.gd', 'app/main.gd', 'view/view.gd')
+
 # L3（变体名）先行的正则
 RE_DARK_START = re.compile(r'^\s*var DARK\s*:?=')
 VARIATION_LIT = re.compile(r'theme_type_variation\s*=\s*"')
@@ -85,9 +89,9 @@ def fail_lines():
             return [ln.split('#', 1)[0] for ln in f.read().splitlines()]  # 扫描剥注释
 
     # L1：裸 Color 构造，白名单=ui_style.gd 全文 + hud.gd 的 DARK 区
-    for fname in ('hud.gd', 'screens.gd', 'main.gd', 'view.gd', 'ui_style.gd'):
+    for fname in SCAN_L1:
         lines = read(fname)
-        zone = (1, 10 ** 6) if fname == 'ui_style.gd' else dark_zone(lines) if fname == 'hud.gd' else (1, 0)
+        zone = (1, 10 ** 6) if fname == 'ui/ui_style.gd' else dark_zone(lines) if fname == 'ui/hud.gd' else (1, 0)
         for i, ln in enumerate(lines, 1):
             raw8 = RE_COLOR8.search(ln)
             rawc = (not raw8) and RE_COLOR.search(ln)
@@ -100,7 +104,7 @@ def fail_lines():
                 fails.append(f'{fname}:{i} {msg} → {ln.strip()}')
 
     # L2：直接构造样式/纹理对象（工厂口唯一）
-    for fname in ('hud.gd', 'screens.gd', 'main.gd', 'view.gd'):
+    for fname in SCAN_STYLE:
         lines = read(fname)
         for i, ln in enumerate(lines, 1):
             for pat in ('StyleBoxFlat.new', 'Theme.new', 'GradientTexture2D.new', 'NoiseTexture2D.new', 'Gradient.new'):
@@ -108,7 +112,7 @@ def fail_lines():
                     fails.append(f'{fname}:{i} L2 违规 {pat}（应走 UiStyle 工厂）→ {ln.strip()}')
 
     # L3
-    for fname in ('hud.gd', 'screens.gd', 'main.gd', 'view.gd'):
+    for fname in SCAN_STYLE:
         lines = read(fname)
         for i, ln in enumerate(lines, 1):
             if VARIATION_LIT.search(ln):
@@ -123,7 +127,7 @@ def fail_lines():
 def main():
     fails = fail_lines()
     n = 0
-    print(f'[UI-LINT] scanned game/*.gd 与 game/**/*.tscn (L1 色常量区/ L2 工厂构造口/ L3 变体名/ L4 场景守规)')
+    print(f'[UI-LINT] scanned game/{", game/".join(SCAN_L1)} 与 game/**/*.tscn (L1 色常量区/ L2 工厂构造口/ L3 变体名/ L4 场景守规)')
     if fails:
         for f in fails:
             print('[UI-LINT] FAIL', f)

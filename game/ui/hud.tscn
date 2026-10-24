@@ -1,0 +1,281 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://game/ui/hud.gd" id="1_hud"]
+[ext_resource type="Script" path="res://game/ui/ui_icon.gd" id="2_icon"]
+
+[node name="HUD" type="Control"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("1_hud")
+
+[node name="TopBar" type="Panel" parent="."]
+mouse_filter = 0
+
+[node name="CoreIcon" type="Control" parent="TopBar"]
+mouse_filter = 2
+script = ExtResource("2_icon")
+
+[node name="SupplyIcon" type="Control" parent="TopBar"]
+mouse_filter = 2
+script = ExtResource("2_icon")
+
+[node name="CoreCaption" type="Label" parent="TopBar"]
+text = "核心"
+mouse_filter = 2
+
+[node name="WaveCaption" type="Label" parent="TopBar"]
+text = "波次"
+mouse_filter = 2
+
+[node name="HpBar" type="ProgressBar" parent="TopBar"]
+mouse_filter = 2
+
+[node name="Tick25" type="ColorRect" parent="TopBar/HpBar"]
+anchor_left = 0.25
+anchor_right = 0.25
+anchor_bottom = 1.0
+mouse_filter = 2
+
+[node name="Tick50" type="ColorRect" parent="TopBar/HpBar"]
+anchor_left = 0.5
+anchor_right = 0.5
+anchor_bottom = 1.0
+mouse_filter = 2
+
+[node name="Tick75" type="ColorRect" parent="TopBar/HpBar"]
+anchor_left = 0.75
+anchor_right = 0.75
+anchor_bottom = 1.0
+mouse_filter = 2
+
+[node name="HpText" type="Label" parent="TopBar"]
+mouse_filter = 2
+
+[node name="Divider" type="ColorRect" parent="TopBar"]
+mouse_filter = 2
+
+[node name="WaveText" type="Label" parent="TopBar"]
+text = "准备中"
+mouse_filter = 2
+
+[node name="SupplyCaption" type="Label" parent="TopBar"]
+text = "供给"
+mouse_filter = 2
+
+[node name="SupplyText" type="Label" parent="TopBar"]
+mouse_filter = 2
+
+[node name="HeatButton" type="Button" parent="TopBar"]
+text = "热层"
+
+[node name="PauseButton" type="Button" parent="TopBar"]
+text = "暂停"
+
+[node name="SeedLabel" type="Label" parent="."]
+mouse_filter = 2
+
+[node name="HintPanel" type="PanelContainer" parent="."]
+mouse_filter = 0
+
+[node name="Margin" type="MarginContainer" parent="HintPanel"]
+
+[node name="Row" type="HBoxContainer" parent="HintPanel/Margin"]
+
+[node name="Tag" type="Label" parent="HintPanel/Margin/Row"]
+text = "TIP"
+mouse_filter = 2
+
+[node name="Separator" type="ColorRect" parent="HintPanel/Margin/Row"]
+mouse_filter = 2
+
+[node name="HintLabel" type="Label" parent="HintPanel/Margin/Row"]
+text = "放墙改道 · 怪绕得越远死时赏金越高——修运河，别只堵路"
+mouse_filter = 2
+
+[node name="ActionLayer" type="Control" parent="."]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="DockPlate" type="Panel" parent="ActionLayer"]
+mouse_filter = 2
+
+[node name="BtnWall" type="Button" parent="ActionLayer"]
+
+[node name="Icon" type="Control" parent="ActionLayer/BtnWall"]
+mouse_filter = 2
+script = ExtResource("2_icon")
+
+[node name="NameLabel" type="Label" parent="ActionLayer/BtnWall"]
+text = "墙"
+mouse_filter = 2
+
+[node name="CostLabel" type="Label" parent="ActionLayer/BtnWall"]
+mouse_filter = 2
+
+[node name="BtnTower" type="Button" parent="ActionLayer"]
+
+[node name="Icon" type="Control" parent="ActionLayer/BtnTower"]
+mouse_filter = 2
+script = ExtResource("2_icon")
+
+[node name="NameLabel" type="Label" parent="ActionLayer/BtnTower"]
+text = "塔"
+mouse_filter = 2
+
+[node name="CostLabel" type="Label" parent="ActionLayer/BtnTower"]
+mouse_filter = 2
+
+[node name="BtnDig" type="Button" parent="ActionLayer"]
+
+[node name="Icon" type="Control" parent="ActionLayer/BtnDig"]
+mouse_filter = 2
+script = ExtResource("2_icon")
+
+[node name="NameLabel" type="Label" parent="ActionLayer/BtnDig"]
+text = "挖矿"
+mouse_filter = 2
+
+[node name="CostLabel" type="Label" parent="ActionLayer/BtnDig"]
+mouse_filter = 2
+
+[node name="BtnFill" type="Button" parent="ActionLayer"]
+
+[node name="Icon" type="Control" parent="ActionLayer/BtnFill"]
+mouse_filter = 2
+script = ExtResource("2_icon")
+
+[node name="NameLabel" type="Label" parent="ActionLayer/BtnFill"]
+text = "填高"
+mouse_filter = 2
+
+[node name="CostLabel" type="Label" parent="ActionLayer/BtnFill"]
+mouse_filter = 2
+
+[node name="BtnLower" type="Button" parent="ActionLayer"]
+
+[node name="Icon" type="Control" parent="ActionLayer/BtnLower"]
+mouse_filter = 2
+script = ExtResource("2_icon")
+
+[node name="NameLabel" type="Label" parent="ActionLayer/BtnLower"]
+text = "挖低"
+mouse_filter = 2
+
+[node name="CostLabel" type="Label" parent="ActionLayer/BtnLower"]
+mouse_filter = 2
+
+[node name="BtnSkill" type="Button" parent="ActionLayer"]
+
+[node name="Icon" type="Control" parent="ActionLayer/BtnSkill"]
+mouse_filter = 2
+script = ExtResource("2_icon")
+
+[node name="NameLabel" type="Label" parent="ActionLayer/BtnSkill"]
+text = "震荡波"
+mouse_filter = 2
+
+[node name="CostLabel" type="Label" parent="ActionLayer/BtnSkill"]
+mouse_filter = 2
+
+[node name="BtnRemove" type="Button" parent="ActionLayer"]
+
+[node name="Icon" type="Control" parent="ActionLayer/BtnRemove"]
+mouse_filter = 2
+script = ExtResource("2_icon")
+
+[node name="NameLabel" type="Label" parent="ActionLayer/BtnRemove"]
+text = "拆"
+mouse_filter = 2
+
+[node name="CostLabel" type="Label" parent="ActionLayer/BtnRemove"]
+mouse_filter = 2
+
+[node name="BtnHero" type="Button" parent="ActionLayer"]
+
+[node name="Icon" type="Control" parent="ActionLayer/BtnHero"]
+mouse_filter = 2
+script = ExtResource("2_icon")
+
+[node name="NameLabel" type="Label" parent="ActionLayer/BtnHero"]
+text = "英雄"
+mouse_filter = 2
+
+[node name="CostLabel" type="Label" parent="ActionLayer/BtnHero"]
+mouse_filter = 2
+
+[node name="UndoPill" type="Button" parent="ActionLayer"]
+visible = false
+text = "撤销"
+
+[node name="BannerRoot" type="Control" parent="."]
+visible = false
+mouse_filter = 2
+
+[node name="Card" type="PanelContainer" parent="BannerRoot"]
+mouse_filter = 2
+
+[node name="Margin" type="MarginContainer" parent="BannerRoot/Card"]
+
+[node name="Col" type="VBoxContainer" parent="BannerRoot/Card/Margin"]
+
+[node name="BannerTitle" type="Label" parent="BannerRoot/Card/Margin/Col"]
+mouse_filter = 2
+
+[node name="BannerSub" type="Label" parent="BannerRoot/Card/Margin/Col"]
+mouse_filter = 2
+
+[node name="Floats" type="Control" parent="."]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="Float0" type="Label" parent="Floats"]
+visible = false
+mouse_filter = 2
+
+[node name="Float1" type="Label" parent="Floats"]
+visible = false
+mouse_filter = 2
+
+[node name="Float2" type="Label" parent="Floats"]
+visible = false
+mouse_filter = 2
+
+[node name="Float3" type="Label" parent="Floats"]
+visible = false
+mouse_filter = 2
+
+[node name="Float4" type="Label" parent="Floats"]
+visible = false
+mouse_filter = 2
+
+[node name="Float5" type="Label" parent="Floats"]
+visible = false
+mouse_filter = 2
+
+[node name="Float6" type="Label" parent="Floats"]
+visible = false
+mouse_filter = 2
+
+[node name="Float7" type="Label" parent="Floats"]
+visible = false
+mouse_filter = 2
+
+[node name="Float8" type="Label" parent="Floats"]
+visible = false
+mouse_filter = 2
+
+[node name="Float9" type="Label" parent="Floats"]
+visible = false
+mouse_filter = 2

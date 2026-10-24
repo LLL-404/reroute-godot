@@ -9,8 +9,8 @@ extends ProbeKit
 # 跑法（cwd=reroute-godot）：godot -s res://tests/probes/probe_save.gd
 # 判定：exit 0 + stdout 含 `[SAVE] PASS`。
 
-const SaveIO = preload("res://game/save_io.gd")
-const UserSettings = preload("res://game/user_settings.gd")
+const SaveIO = preload("res://game/core/save_io.gd")
+const UserSettings = preload("res://game/core/user_settings.gd")
 
 
 func _initialize() -> void:
@@ -19,7 +19,7 @@ func _initialize() -> void:
 	UserSettings.save_cfg(UserSettings.default_cfg())
 	UserSettings.apply_all(UserSettings.default_cfg())
 
-	var packed: PackedScene = load("res://game/main.tscn")
+	var packed: PackedScene = load("res://game/app/main.tscn")
 	var main = packed.instantiate()
 	root.add_child(main)
 	for _i in 5:

@@ -4,14 +4,14 @@ extends ProbeKit
 ## + 性能口径（首拍预热帧 / 主世界停画与恢复 / 隐藏态退出安全网）。
 ## 判定：exit 0 + stdout 含 `[INTRO] PASS`。跑法：godot --path <P> -s res://tests/probes/probe_intro.gd
 
-const IntroScene = preload("res://game/intro.tscn")
+const IntroScene = preload("res://game/ui/intro.tscn")
 
 var main = null
 
 
 func _initialize() -> void:
 	# ---- A. 门控：探针模式下 main 不建 intro（21 闸既有探针的零影响证明）----
-	var packed: PackedScene = load("res://game/main.tscn")
+	var packed: PackedScene = load("res://game/app/main.tscn")
 	main = packed.instantiate()
 	get_root().add_child(main)
 	for _i in 5:
@@ -20,7 +20,7 @@ func _initialize() -> void:
 	check(main._intro == null, "探针模式下 main 无 intro 实例")
 	check(main._intro_enabled() == false, "探针模式 _intro_enabled()==false")
 	check(main.shell.current_page() == "title", "启动即标题（口经不变）")
-	var sh_dec: GDScript = load("res://game/intro.gd")
+	var sh_dec: GDScript = load("res://game/ui/intro.gd")
 	check(sh_dec != null, "intro.gd 装载成功")
 	main.free()
 
@@ -103,7 +103,7 @@ func _initialize() -> void:
 	intro3.free()
 
 	# ---- F. 主世界停画：第 1 拍可见（暖机帧）→ 第 2 拍隐藏 → 安全网/T_P3 恢复 ----
-	var main2: Node = load("res://game/main.tscn").instantiate()
+	var main2: Node = load("res://game/app/main.tscn").instantiate()
 	get_root().add_child(main2)
 	for _i in 5:
 		await process_frame

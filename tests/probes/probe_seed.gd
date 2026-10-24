@@ -6,14 +6,14 @@ extends ProbeKit
 # 跑法（cwd=reroute-godot）：godot -s res://tests/probes/probe_seed.gd
 # 判定：exit 0 + stdout 含 `[SEED] PASS`。
 
-const UserSettings = preload("res://game/user_settings.gd")
-const SaveIO = preload("res://game/save_io.gd")
+const UserSettings = preload("res://game/core/user_settings.gd")
+const SaveIO = preload("res://game/core/save_io.gd")
 const TEST_SLOT := 9 # 专用测试槽（1..3 是玩家可见槽位，用 9 避免污染存档页）
 
 
 func _initialize() -> void:
 	SaveIO.delete_slot(TEST_SLOT) # 清掉上次异常退出可能留下的测试档
-	var packed: PackedScene = load("res://game/main.tscn")
+	var packed: PackedScene = load("res://game/app/main.tscn")
 	var main = packed.instantiate()
 	root.add_child(main)
 	for _i in 5:

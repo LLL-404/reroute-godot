@@ -6,7 +6,7 @@ extends ProbeKit
 # 判定：exit 0 + `[ASSET] PASS`；stderr 无 ERROR（外层校验）。
 # 证据：shots/asset_game.png（对局全景）+ shots/asset_close.png（单位特写）。
 
-const ModelsScript = preload("res://game/models.gd")
+const ModelsScript = preload("res://game/view/models.gd")
 const Sim = preload("res://sim/sim.gd")
 const Grid = preload("res://sim/grid.gd")
 
@@ -44,7 +44,7 @@ func _initialize() -> void:
 
 	# ---- 2. 进对局（R6 起启动即标题屏）----
 	var root := get_root()
-	var main = load("res://game/main.tscn").instantiate()
+	var main = load("res://game/app/main.tscn").instantiate()
 	root.add_child(main)
 	for _i in 3:
 		await process_frame

@@ -5,7 +5,7 @@ extends RefCounted
 # 12 指纹逐位一致（含不变式看门狗与终局冻结自证）→ 确定性复跑 → 主场景构建完整
 # （地形/相机/HUD/壳/世界）→ 音频接口 → tick 推进冒烟 → UI 样式工厂预设一致（v2.2）。
 # 输出 `[SELFCHECK] PASS` + exit 0；任一失败 `[SELFCHECK] FAIL` + exit 1。
-const UiStyle = preload("res://game/ui_style.gd")
+const UiStyle = preload("res://game/ui/ui_style.gd")
 const ALL_MP3 := [
 	"bgm_reroute.mp3",
 	"build_stone_place.mp3",

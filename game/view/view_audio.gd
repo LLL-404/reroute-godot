@@ -6,7 +6,7 @@ extends RefCounted
 const SFX_POOL_N := 4 # 母版 4 个轮换源，避免同帧多音互相掐断
 const AUDIO_DIR := "res://assets/audio/sfx/"
 const PITCH_JITTER := 0.04 # ±4% 随机音高：同一音效反复播不机械（独立 RNG，不污染 sim 确定性）
-const UserSettings = preload("res://game/user_settings.gd") # bus 名 + 音量应用（设置页共用）
+const UserSettings = preload("res://game/core/user_settings.gd") # bus 名 + 音量应用（设置页共用）
 
 var host: Node3D
 

@@ -1,6 +1,6 @@
 [gd_scene load_steps=2 format=3]
 
-[ext_resource type="Script" path="res://game/privacy_gate.gd" id="1_gate"]
+[ext_resource type="Script" path="res://game/ui/privacy_gate.gd" id="1_gate"]
 
 [node name="PrivacyGate" type="CanvasLayer"]
 script = ExtResource("1_gate")

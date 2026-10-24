@@ -68,7 +68,7 @@ func _cast_skill(world) -> void:
 
 
 func _initialize() -> void:
-	var scene: PackedScene = load("res://game/main.tscn")
+	var scene: PackedScene = load("res://game/app/main.tscn")
 	var main = scene.instantiate()
 	get_root().add_child(main)
 	for _i in 3:
