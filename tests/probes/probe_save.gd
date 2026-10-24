@@ -31,11 +31,11 @@ func _initialize() -> void:
 
 	# ---- A. 接线与初始态 ----
 	check(shell.cb.has("quit") and shell.cb.has("load_slot") and shell.cb.has("save_slot"), "壳回调接线齐（quit/load_slot/save_slot）")
-	var btn_continue: Button = page_title.find_child("btn_continue", true, false)
+	var btn_continue: Button = page_title.find_child("BtnContinue", true, false)
 	check(btn_continue != null and btn_continue.disabled, "无存档时「继续对局」禁用")
 
 	# ---- B. 开局 → 暂停 → 保存 ----
-	await _click_btn(page_title, "btn_start")
+	await _click_btn(page_title, "BtnStart")
 	check(shell.current_page() == "" and main.paused == false, "开战运行态")
 	for _i in 3:
 		main._process(0.2)
@@ -47,46 +47,46 @@ func _initialize() -> void:
 	await _press_esc()
 	check(shell.current_page() == "pause", "ESC 进暂停")
 	var page_pause: Control = shell.pages["pause"]
-	await _click_btn(page_pause, "btn_save")
+	await _click_btn(page_pause, "BtnSave")
 	check(shell.current_page() == "slots" and shell.slots_mode == "save", "「保存进度」→ 存档页(save)")
 	var page_slots: Control = shell.pages["slots"]
-	var del1: Button = page_slots.find_child("btn_slot_del1", true, false)
+	var del1: Button = page_slots.find_child("BtnSlotDel1", true, false)
 	check(not del1.visible, "save 模式隐藏删除钮")
 	check(_row_text(shell, 1).contains("空"), "槽 1 初始为空（%s）" % _row_text(shell, 1))
-	await _click_btn(page_slots, "btn_slot1")
+	await _click_btn(page_slots, "BtnSlot1")
 	check(FileAccess.file_exists(SaveIO.slot_path(1)), "空槽点击直存（文件落盘）")
 	check(_status(shell) == "已保存到槽 1", "存后状态文案（%s）" % _status(shell))
 	check(_row_text(shell, 1).contains("槽 1") and _row_text(shell, 1).contains("开局"), "槽 1 行文案（%s）" % _row_text(shell, 1))
 	cmp_int(int(SaveIO.slot_meta(1).get("tick", -1)), tick0, "存档 meta.tick == 暂停时 tick")
 
 	# ---- C. 覆盖确认（取消不落盘 / 确定重写） ----
-	await _click_btn(page_slots, "btn_slot1")
+	await _click_btn(page_slots, "BtnSlot1")
 	check(shell.confirm_open(), "占用槽再存 → 弹覆盖确认")
 	check(shell.confirm_text.text.contains("覆盖"), "确认文案含「覆盖」（%s）" % shell.confirm_text.text)
-	await _click_btn(shell.confirm_layer, "btn_confirm_cancel")
+	await _click_btn(shell.confirm_layer, "BtnConfirmCancel")
 	check(not shell.confirm_open(), "取消关闭弹窗")
 	check(SaveIO.slot_info(1).get("ok", false), "取消后旧档仍在")
-	await _click_btn(page_slots, "btn_slot1")
+	await _click_btn(page_slots, "BtnSlot1")
 	check(shell.confirm_open(), "再次点击 → 确认再弹")
-	await _click_btn(shell.confirm_layer, "btn_confirm_ok")
+	await _click_btn(shell.confirm_layer, "BtnConfirmOk")
 	check(not shell.confirm_open() and _status(shell) == "已保存到槽 1", "确定覆盖 → 保存成功")
 
 	# ---- D. 回标题 → 继续对局 → 读档 ----
-	await _click_btn(page_slots, "btn_slots_back")
+	await _click_btn(page_slots, "BtnSlotsBack")
 	check(shell.current_page() == "pause", "存档页「返回」→ 暂停（from）")
-	await _click_btn(page_pause, "btn_to_title")
+	await _click_btn(page_pause, "BtnToTitle")
 	check(shell.current_page() == "title", "暂停「回标题」")
 	check(not btn_continue.disabled, "有档 → 「继续对局」启用")
-	await _click_btn(page_title, "btn_continue")
+	await _click_btn(page_title, "BtnContinue")
 	check(shell.current_page() == "slots" and shell.slots_mode == "load", "「继续对局」→ 读档页(load)")
 	check(del1.visible, "load 模式显示删除钮")
 	check(_row_text(shell, 1).contains("开局"), "槽 1 行含阶段（%s）" % _row_text(shell, 1))
 	for _i in 20:
 		await process_frame # 等淡入完成
 	root.get_texture().get_image().save_png("res://shots/slots.png")
-	await _click_btn(page_slots, "btn_slot2")
+	await _click_btn(page_slots, "BtnSlot2")
 	check(shell.current_page() == "slots", "空槽在 load 模式无响应")
-	await _click_btn(page_slots, "btn_slot1")
+	await _click_btn(page_slots, "BtnSlot1")
 	check(shell.current_page() == "" and main.paused == false, "读档成功 → 直接进对局")
 	cmp_int(main.world.tick_count, tick0, "读档恢复 tick")
 	cmp_int(main.run_index, run_saved, "读档恢复 run_index")
@@ -100,50 +100,50 @@ func _initialize() -> void:
 	var tick2: int = main.world.tick_count
 	check(tick2 > tick0, "续跑推进 tick（%d → %d）" % [tick0, tick2])
 	await _press_esc()
-	await _click_btn(page_pause, "btn_save")
-	await _click_btn(page_slots, "btn_slot1")
-	await _click_btn(shell.confirm_layer, "btn_confirm_ok")
+	await _click_btn(page_pause, "BtnSave")
+	await _click_btn(page_slots, "BtnSlot1")
+	await _click_btn(shell.confirm_layer, "BtnConfirmOk")
 	cmp_int(int(SaveIO.slot_meta(1).get("tick", -1)), tick2, "覆盖存新进度（meta.tick）")
-	await _click_btn(page_slots, "btn_slots_back")
-	await _click_btn(page_pause, "btn_to_title")
-	await _click_btn(page_title, "btn_continue")
-	await _click_btn(page_slots, "btn_slot_del1")
+	await _click_btn(page_slots, "BtnSlotsBack")
+	await _click_btn(page_pause, "BtnToTitle")
+	await _click_btn(page_title, "BtnContinue")
+	await _click_btn(page_slots, "BtnSlotDel1")
 	check(shell.confirm_open() and shell.confirm_text.text.contains("删除"), "删除 → 确认文案（%s）" % shell.confirm_text.text)
-	await _click_btn(shell.confirm_layer, "btn_confirm_cancel")
+	await _click_btn(shell.confirm_layer, "BtnConfirmCancel")
 	check(FileAccess.file_exists(SaveIO.slot_path(1)), "取消删除后文件仍在")
-	await _click_btn(page_slots, "btn_slot_del1")
-	await _click_btn(shell.confirm_layer, "btn_confirm_ok")
+	await _click_btn(page_slots, "BtnSlotDel1")
+	await _click_btn(shell.confirm_layer, "BtnConfirmOk")
 	check(SaveIO.slot_info(1).get("empty", false), "确定删除 → 槽 1 空")
 	check(_row_text(shell, 1).contains("空"), "删除后行文案（%s）" % _row_text(shell, 1))
 	check(_status(shell) == "已删除槽 1", "删除状态文案（%s）" % _status(shell))
-	await _click_btn(page_slots, "btn_slots_back")
+	await _click_btn(page_slots, "BtnSlotsBack")
 	check(shell.current_page() == "title" and btn_continue.disabled, "全空 → 返回标题且「继续对局」禁用")
 
 	# ---- F. 损坏档：计入非空可进列表，点选拒载可删 ----
 	_write_corrupt(2)
 	shell.open_title() # 刷「继续对局」态
 	check(not btn_continue.disabled, "损坏档也算非空 → 继续启用")
-	await _click_btn(page_title, "btn_continue")
+	await _click_btn(page_title, "BtnContinue")
 	check(_row_text(shell, 2).contains("损坏"), "损坏槽行文案（%s）" % _row_text(shell, 2))
-	await _click_btn(page_slots, "btn_slot2")
+	await _click_btn(page_slots, "BtnSlot2")
 	check(shell.current_page() == "slots", "损坏档点选不读档")
 	check(_status(shell) == "存档损坏", "损坏档状态文案（%s）" % _status(shell))
-	await _click_btn(page_slots, "btn_slot_del2")
-	await _click_btn(shell.confirm_layer, "btn_confirm_ok")
+	await _click_btn(page_slots, "BtnSlotDel2")
+	await _click_btn(shell.confirm_layer, "BtnConfirmOk")
 	check(_row_text(shell, 2).contains("空"), "损坏档可删除（行：%s）" % _row_text(shell, 2))
-	await _click_btn(page_slots, "btn_slots_back")
+	await _click_btn(page_slots, "BtnSlotsBack")
 	check(shell.current_page() == "title" and btn_continue.disabled, "清空后返回标题禁用")
 
 	# ---- G. 设置：音量落盘/bus/全屏/ESC 回退 ----
-	await _click_btn(page_title, "btn_settings")
+	await _click_btn(page_title, "BtnSettings")
 	check(shell.current_page() == "settings", "标题「设置」→ 设置页")
 	var page_set: Control = shell.pages["settings"]
-	var sld_music: HSlider = page_set.find_child("sld_music", true, false)
-	var sld_sfx: HSlider = page_set.find_child("sld_sfx", true, false)
-	var lbl_music: Label = page_set.find_child("lbl_music_val", true, false)
-	var sld_render: HSlider = page_set.find_child("sld_render_pct", true, false)
-	var sld_ui: HSlider = page_set.find_child("sld_ui_pct", true, false)
-	var sld_bright: HSlider = page_set.find_child("sld_bright_pct", true, false)
+	var sld_music: HSlider = page_set.find_child("SldMusic", true, false)
+	var sld_sfx: HSlider = page_set.find_child("SldSfx", true, false)
+	var lbl_music: Label = page_set.find_child("LblMusicVal", true, false)
+	var sld_render: HSlider = page_set.find_child("SldRenderPct", true, false)
+	var sld_ui: HSlider = page_set.find_child("SldUiPct", true, false)
+	var sld_bright: HSlider = page_set.find_child("SldBrightPct", true, false)
 	cmp_approx(sld_music.value, 100.0, "默认音乐音量 100")
 	check(lbl_music.text == "100", "音量读数标签（%s）" % lbl_music.text)
 	cmp_approx(sld_render.value, 100.0, "默认渲染缩放 100")
@@ -158,9 +158,9 @@ func _initialize() -> void:
 	sld_sfx.value = 0.0
 	cmp_approx(AudioServer.get_bus_volume_db(AudioServer.get_bus_index("SFX")), -80.0, "SFX bus 0 → 静音 -80dB")
 	check(int(UserSettings.load_cfg()["sfx"]) == 0, "音效 0 落盘")
-	await _click_btn(page_set, "btn_display_mode_1")
+	await _click_btn(page_set, "BtnDisplayMode1")
 	check(int(UserSettings.load_cfg()["display_mode"]) == 1, "无边框显示模式落盘")
-	await _click_btn(page_set, "btn_display_mode_0")
+	await _click_btn(page_set, "BtnDisplayMode0")
 	check(int(UserSettings.load_cfg()["display_mode"]) == 0, "窗口化显示模式落盘")
 	check(DisplayServer.window_get_mode() == DisplayServer.WINDOW_MODE_WINDOWED, "显示模式回窗口化")
 	for _i in 20:
@@ -170,16 +170,16 @@ func _initialize() -> void:
 	check(shell.current_page() == "title", "设置 ESC → 回标题（from）")
 
 	# ---- H. 退出确认（取消 / spy 确定） ----
-	await _click_btn(page_title, "btn_quit")
+	await _click_btn(page_title, "BtnQuit")
 	check(shell.confirm_open(), "「退出游戏」→ 确认弹窗")
 	check(shell.confirm_text.text.contains("退出"), "退出确认文案（%s）" % shell.confirm_text.text)
 	await _press_esc()
 	check(not shell.confirm_open() and shell.current_page() == "title", "ESC 取消退出确认")
-	await _click_btn(page_title, "btn_quit")
+	await _click_btn(page_title, "BtnQuit")
 	var called := [false]
 	var old_quit: Callable = shell.cb["quit"]
 	shell.cb["quit"] = func() -> void: called[0] = true # spy：防真退
-	await _click_btn(shell.confirm_layer, "btn_confirm_ok")
+	await _click_btn(shell.confirm_layer, "BtnConfirmOk")
 	check(called[0], "「确定」触发 quit 回调")
 	shell.cb["quit"] = old_quit
 
@@ -188,7 +188,7 @@ func _initialize() -> void:
 	main._android_back_handle()
 	check(shell.confirm_open(), "返回键@标题 → 退出确认")
 	shell.close_confirm()
-	await _click_btn(page_title, "btn_start")
+	await _click_btn(page_title, "BtnStart")
 	check(shell.current_page() == "" and main.paused == false, "再次开战")
 	main._last_back_ms = 0
 	main._android_back_handle()
@@ -247,12 +247,12 @@ func _write_corrupt(slot: int) -> void:
 
 
 func _row_text(shell, slot: int) -> String:
-	var b: Button = shell.pages["slots"].find_child("btn_slot%d" % slot, true, false)
+	var b: Button = shell.pages["slots"].find_child("BtnSlot%d" % slot, true, false)
 	return b.text if b != null else "<missing>"
 
 
 func _status(shell) -> String:
-	var l: Label = shell.pages["slots"].find_child("label_slot_status", true, false)
+	var l: Label = shell.pages["slots"].find_child("LabelSlotStatus", true, false)
 	return l.text if l != null else "<missing>"
 
 

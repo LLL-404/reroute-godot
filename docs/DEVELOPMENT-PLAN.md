@@ -3189,6 +3189,51 @@ save 77/0、touch 73/0、intro 36/0 全绿；`check_shots.py` 52/0；`check_ui_l
 ②`usable()` 对死种要跑满 64 盐才下结论（罕见；正常种子命中布局缓存，几乎零成本）；
 ③文字种子上限 24 字符，超长部分不参与哈希（在 `abcdefghijklmnopqrstuvwx` 后追加字符不改变结果）。
 
+### 11.41 资源卫生（.gdignore 补齐）+ UI 场景节点名 PascalCase 对齐（2026-10-25）
+
+**动因**：用户问「项目结构是否符合 Godot 官方规范」。对照官方 Project Organization /
+GDScript 风格指南逐条评估：目录分层本身合规（官方对组织方式无强制模板）；两处实测偏差——
+①资源卫生：`shots/`(188M/122PNG) 与 `docs/mockups` 无 `.gdignore`，全项目 91% 的 PNG 被
+编辑器当素材导入（136 个 `.import` sidecar 入库，`.godot/imported` 43%=140.5MB 是截图垃圾）；
+②命名：`pages/*.tscn` 根与子节点、`hex_card`、`privacy_gate`、`hex_picker`、`run_ui`、
+`screens.tscn` 的子节点仍是 snake_case，与 hud/intro/main（已 Pascal）两套混用。
+
+**卫生刀**（提交 9c3ad78，前置提交 a87afdc 为提审残留清理）：
+
+| 项 | 结果 |
+|---|---|
+| `.gdignore` | 补 `shots/`、`docs/`、`export/` 三处（`export` 在 .gitignore 内，单文件 `-f` 入库跨机同步）；对齐 `logs/` 已验证模式 |
+| sidecar | 136 个 `.git rm`（104 入库）+ 删除（32 未追踪） |
+| 导入缓存 | `.godot/imported` 重建 **343MB → 108MB**；shots/docs 下 sidecar 零再生 |
+| 验证 | golden 16 指纹零漂移 PASS；shots 窗口探针 14/0 PASS |
+
+**改名刀**：10 个场景 **204 处**节点名机械映射 snake→Pascal（`btn_to_title2→BtnToTitle2`、
+`sld_music→SldMusic`…），特例：页面根 `page_* → *Page`（避免与子节点 `Title` 同名混淆）、
+screens.tscn 确认层内 `veil → ConfirmVeil`（避免与根下 `Veil` 同名）。代码侧 9 文件同步：
+`screens.gd`（新增 `static func _pn()` 统一 snake 键→Pascal 节点名，动态拼接
+`row_/sld_/group_/lbl_` 与 `%d` 格式串共 18 处走此口）、`hex_picker/privacy_gate/run_ui`、
+`view_entities.gd`（运行时节点 `progress→Progress`，对齐 view_core 的 Sun/Fill/Camera 命名）、
+探针 save/touch/privacy/seed/ui_flow。
+
+**坑实录（迁移脚本三类正则盲区，均已被闸当场咬红）**：
+1. 通配替换的返回值引号叠加（`""BtnStart""` 语法错，63 行 7 文件；ui_flow 探针直接炸出）；
+2. `var base := "Center/card/Margin/col"` + `base + "/go_title"` 的前缀拼接与 `$` 多级路径
+   （首轮只匹配「查找调用的字面量第一参」；ui_flow 的 gameover 段 Node not found 连环暴露）；
+3. `"btn_slot%d" % i` 格式串（无引号包不住的动态名；save 探针 `Node not found:
+   "btn_slot1" (relative to "SlotRow1")` 暴露）。
+教训：**动态节点名一律走 `_pn()` 单一口**，不再散落格式串。
+
+**闸（2026-10-25 实跑，证据 `logs/gates-20261025-rename/`）**：
+- 单测 **126/0**；headless：golden 2/0（零漂移）、scene 27/0、blueprint 21/0、sim 5/0、
+  grid 40/0、flow 61/0、scenario 83/0（`fp=0x234abc91`）、world 20/0
+- 窗口 **15/15 绿**：sync/input/hud/ui_flow/smoke/shots/audio/asset/model/orient/save/touch/intro/seed
+- `check_shots.py` PASS；`check_ui_lint.py` PASS（4/0）
+
+**已知边界**：①view 层运行时 3D 节点名（`unit/gold/ore/rubble/buildfx` 等，`models.gd`、
+`view_entities.gd` 代码生成）仍为 snake——内部标记名、非场景文件，本刀未动；
+②类型默认名（`CenterContainer/VBoxContainer/ColorRect/Margin`）保留不重命名；
+③`btn_hover/btn_pressed` 等是 ui_style 色板键与主题覆盖名，非节点名，未动。
+
 ## 12. AI 任务卡模板（派活时照抄）
 
 ```markdown

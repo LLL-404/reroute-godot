@@ -20,17 +20,17 @@ func _initialize() -> void:
 	await process_frame
 	await process_frame
 
-	var btn_agree = g.find_child("btn_privacy_agree", true, false)
-	var btn_decline = g.find_child("btn_privacy_decline", true, false)
-	var btn_link = g.find_child("btn_privacy_link", true, false)
+	var btn_agree = g.find_child("BtnPrivacyAgree", true, false)
+	var btn_decline = g.find_child("BtnPrivacyDecline", true, false)
+	var btn_link = g.find_child("BtnPrivacyLink", true, false)
 	check(btn_agree != null, "同意按钮存在")
 	check(btn_decline != null, "拒绝按钮存在")
 	check(btn_link != null, "隐私政策链接按钮存在")
 
-	var title = g.find_child("title", true, false)
+	var title = g.find_child("Title", true, false)
 	check(title != null and String(title.text) == "隐私政策", "标题为「隐私政策」")
 
-	var body = g.find_child("body", true, false)
+	var body = g.find_child("Body", true, false)
 	check(body != null and String(body.text).length() >= 120, "正文非空且含实质说明")
 
 	# ---- 同意链路 ----
@@ -48,7 +48,7 @@ func _initialize() -> void:
 	await process_frame
 	var declined: Array = [false]
 	g2.declined.connect(func() -> void: declined[0] = true)
-	var d2 = g2.find_child("btn_privacy_decline", true, false)
+	var d2 = g2.find_child("BtnPrivacyDecline", true, false)
 	check(d2 != null, "重建后拒绝按钮仍存在")
 	if d2 != null:
 		d2.pressed.emit()

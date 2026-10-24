@@ -67,9 +67,9 @@ func init(callbacks: Dictionary, hud_ref) -> void:
 	host = $ScreenHost
 	host.theme = UiStyle.build_theme(C, S)
 	veil_root = $Veil
-	veil_label = $Veil/veil_label
+	veil_label = $Veil/VeilLabel
 	confirm_layer = $ConfirmLayer
-	confirm_text = $ConfirmLayer/Center/card/Margin/col/confirm_text
+	confirm_text = $ConfirmLayer/Center/Card/Margin/Col/ConfirmText
 	_bind_veil()
 	_bind_confirm()
 
@@ -77,7 +77,7 @@ func init(callbacks: Dictionary, hud_ref) -> void:
 ## 绑定开局过渡黑幕（结构在 screens.tscn；颜色/字号按 S 注入）；
 ## 独立于页栈，close_all 不会收起它。
 func _bind_veil() -> void:
-	var bg: ColorRect = veil_root.get_node("bg")
+	var bg: ColorRect = veil_root.get_node("Bg")
 	bg.color = Color(C["track"], 1.0)
 	_dress_label(veil_label, 16.0 * S, C["muted"]) # 正文用无衬线（衬线子集只含屏标题字，别用）
 	veil_root.modulate.a = 0.0
@@ -115,6 +115,15 @@ func veil_hide() -> void:
 
 func _hide_veil() -> void:
 	veil_root.visible = false
+
+
+## snake_case 键 → PascalCase 节点名（场景节点已对齐官方命名规范，动态拼接统一走此口）。
+static func _pn(s: String) -> String:
+	var out := ""
+	for part in s.split("_"):
+		if not part.is_empty():
+			out += part[0].to_upper() + part.substr(1)
+	return out
 
 
 # ---------------- UI 缩放（设置页「UI 缩放」滑块） ----------------
@@ -192,9 +201,9 @@ func open_slots(mode: String, from: String) -> void:
 	_ensure("slots")
 	slots_mode = mode
 	slots_from = from
-	var head: Label = pages["slots"].find_child("label_slot_head", true, false)
+	var head: Label = pages["slots"].find_child("LabelSlotHead", true, false)
 	head.text = "读档" if mode == "load" else "存档"
-	var status: Label = pages["slots"].find_child("label_slot_status", true, false)
+	var status: Label = pages["slots"].find_child("LabelSlotStatus", true, false)
 	status.text = "选择槽位开始对局" if mode == "load" else "选择槽位保存当前进度"
 	_refresh_slots()
 	_show("slots")
@@ -283,23 +292,23 @@ func _resolve_confirm(ok: bool) -> void:
 ## 绑定全局确认弹窗层（场景内 ConfirmLayer 晚于页面节点 → 永在最上）；
 ## 幕色/氛围层/卡片样式按 S 注入，弹窗文案与按钮顺序不变。
 func _bind_confirm() -> void:
-	var veil: ColorRect = confirm_layer.get_node("veil")
+	var veil: ColorRect = confirm_layer.get_node("ConfirmVeil")
 	veil.color = UiStyle.VEIL_HEAVY
-	UiStyle.overlay_fx(confirm_layer.get_node("fx")) # A5+A4（层级在卡片之下）
-	var card: PanelContainer = confirm_layer.get_node("Center/card")
+	UiStyle.overlay_fx(confirm_layer.get_node("Fx")) # A5+A4（层级在卡片之下）
+	var card: PanelContainer = confirm_layer.get_node("Center/Card")
 	card.custom_minimum_size = Vector2(300.0 * S, 0)
 	card.theme_type_variation = UiStyle.CARD_VAR
 	UiStyle.corner_dress(card, C["gold_lo"]) # C 饰线
-	_dress_margins(confirm_layer.get_node("Center/card/Margin"), 22.0)
-	var col: VBoxContainer = confirm_layer.get_node("Center/card/Margin/col")
+	_dress_margins(confirm_layer.get_node("Center/Card/Margin"), 22.0)
+	var col: VBoxContainer = confirm_layer.get_node("Center/Card/Margin/Col")
 	col.add_theme_constant_override("separation", int(16 * S))
 	_dress_label(confirm_text, 15.0 * S, C["text"])
 	confirm_text.custom_minimum_size = Vector2(256.0 * S, 0)
-	var row: HBoxContainer = confirm_layer.get_node("Center/card/Margin/col/row")
+	var row: HBoxContainer = confirm_layer.get_node("Center/Card/Margin/Col/Row")
 	row.add_theme_constant_override("separation", int(12 * S))
-	_dress_button(confirm_layer.get_node("Center/card/Margin/col/row/btn_confirm_ok"), true, 116.0 * S, 40.0 * S, 12.0 * S, func() -> void:
+	_dress_button(confirm_layer.get_node("Center/Card/Margin/Col/Row/BtnConfirmOk"), true, 116.0 * S, 40.0 * S, 12.0 * S, func() -> void:
 		_resolve_confirm(true))
-	_dress_button(confirm_layer.get_node("Center/card/Margin/col/row/btn_confirm_cancel"), false, 116.0 * S, 40.0 * S, 12.0 * S, func() -> void:
+	_dress_button(confirm_layer.get_node("Center/Card/Margin/Col/Row/BtnConfirmCancel"), false, 116.0 * S, 40.0 * S, 12.0 * S, func() -> void:
 		_resolve_confirm(false))
 
 
@@ -379,12 +388,12 @@ func _dress_menu_row(b: Button, idx: int, primary: bool, fn: Callable) -> void:
 	b.add_theme_font_size_override("font_size", int((16.0 if primary else 13.5) * S))
 	b.theme_type_variation = UiStyle.BTN_ROW_PRIMARY_VAR if primary else UiStyle.BTN_ROW_VAR
 	b.pressed.connect(fn)
-	var num: Label = b.get_node("num")
+	var num: Label = b.get_node("Num")
 	num.text = "%02d" % idx
 	_dress_label(num, 10.0 * S, C["gold_hi"] if primary else C["muted"])
 	num.reset_size()
 	num.position = Vector2(20.0 * S, (h - num.size.y) / 2.0)
-	var bar: ColorRect = b.get_node("bar")
+	var bar: ColorRect = b.get_node("Bar")
 	bar.color = C["gold_hi"] if primary else C["gold"]
 	bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	bar.position = Vector2.ZERO
@@ -407,15 +416,15 @@ func _dress_title_bar(bar: Panel, lbl: Label, bar_h: float) -> void:
 
 ## 卡片页底板绑定：幕色 + 氛围层（A5 暗角 + A4 噪粒）+ 卡片宽/边距/列距；返回列容器。
 func _dress_card_page(p: Control, veil: Color, card_w: float, margin_px: float, sep: float) -> VBoxContainer:
-	var bg: ColorRect = p.get_node("bg")
+	var bg: ColorRect = p.get_node("Bg")
 	bg.color = veil
-	UiStyle.overlay_fx(p.get_node("fx")) # A5 暗角 + A4 噪粒（在 bg 上、内容下）
-	var card: PanelContainer = p.get_node("Center/card")
+	UiStyle.overlay_fx(p.get_node("Fx")) # A5 暗角 + A4 噪粒（在 bg 上、内容下）
+	var card: PanelContainer = p.get_node("Center/Card")
 	card.custom_minimum_size = Vector2(card_w * S, 0)
 	card.theme_type_variation = UiStyle.CARD_VAR
 	UiStyle.corner_dress(card, C["gold_lo"]) # C 饰线
-	_dress_margins(p.get_node("Center/card/Margin"), margin_px)
-	var col: VBoxContainer = p.get_node("Center/card/Margin/col")
+	_dress_margins(p.get_node("Center/Card/Margin"), margin_px)
+	var col: VBoxContainer = p.get_node("Center/Card/Margin/Col")
 	col.add_theme_constant_override("separation", int(sep * S))
 	return col
 
@@ -428,14 +437,14 @@ func _style_slider(s: HSlider) -> void:
 ## 选项行绑定：96 宽标签 + 一排互斥钮（选中态由 _refresh_chips 切主题变体）；
 ## supported = 当前平台可选档，candidates = 场景内全部候选钮（其余隐藏）。
 func _dress_option_row(body: VBoxContainer, key: String, supported: Array, candidates: Array) -> HBoxContainer:
-	var row: HBoxContainer = body.get_node("row_" + key)
+	var row: HBoxContainer = body.get_node(_pn("row_" + key))
 	row.add_theme_constant_override("separation", int(8 * S))
-	var lbl: Label = row.get_node("lbl")
+	var lbl: Label = row.get_node("Lbl")
 	_dress_label(lbl, 12.5 * S, C["muted"])
 	lbl.custom_minimum_size = Vector2(96.0 * S, 0)
 	var map: Dictionary = {}
 	for v in candidates:
-		var b: Button = row.get_node("btn_%s_%d" % [key, v])
+		var b: Button = row.get_node(_pn("btn_%s_%d" % [key, v]))
 		_dress_button(b, false, 60.0 * S, 40.0 * S, 11.5 * S, _on_video_chip.bind(key, int(v)))
 		var on := supported.has(v)
 		b.visible = on
@@ -448,13 +457,13 @@ func _dress_option_row(body: VBoxContainer, key: String, supported: Array, candi
 ## 设置页分组标题绑定：左金标 + 组名 + 右侧通栏细线。
 func _dress_group_header(row: HBoxContainer) -> void:
 	row.add_theme_constant_override("separation", int(9 * S))
-	var tick: ColorRect = row.get_node("tick")
+	var tick: ColorRect = row.get_node("Tick")
 	tick.color = C["gold"]
 	tick.custom_minimum_size = Vector2(3.0 * S, 12.0 * S)
 	tick.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	tick.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_dress_label(row.get_node("title"), 12.0 * S, C["gold"])
-	var line: ColorRect = row.get_node("line")
+	_dress_label(row.get_node("Title"), 12.0 * S, C["gold"])
+	var line: ColorRect = row.get_node("Line")
 	_dress_rule(line)
 	line.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	line.size_flags_vertical = Control.SIZE_SHRINK_CENTER
@@ -462,12 +471,12 @@ func _dress_group_header(row: HBoxContainer) -> void:
 
 ## 设置页滑杆行绑定：96 宽标签 + 滑杆 + 读数（命名 sld_<key> / lbl_<key>_val）。
 func _dress_slider_row(body: VBoxContainer, key: String, vmin: int, vmax: int, fn: Callable) -> void:
-	var row: HBoxContainer = body.get_node("row_" + key)
+	var row: HBoxContainer = body.get_node(_pn("row_" + key))
 	row.add_theme_constant_override("separation", int(10 * S))
-	var lbl: Label = row.get_node("lbl")
+	var lbl: Label = row.get_node("Lbl")
 	_dress_label(lbl, 12.5 * S, C["muted"])
 	lbl.custom_minimum_size = Vector2(96.0 * S, 0)
-	var sld: HSlider = row.get_node("sld_" + key)
+	var sld: HSlider = row.get_node(_pn("sld_" + key))
 	sld.min_value = vmin
 	sld.max_value = vmax
 	sld.step = 1
@@ -475,7 +484,7 @@ func _dress_slider_row(body: VBoxContainer, key: String, vmin: int, vmax: int, f
 	sld.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	_style_slider(sld)
 	sld.value_changed.connect(fn)
-	var val: Label = row.get_node("lbl_%s_val" % key)
+	var val: Label = row.get_node(_pn("lbl_%s_val" % key))
 	_dress_label(val, 12.5 * S, C["gold_hi"])
 	val.custom_minimum_size = Vector2(40.0 * S, 0)
 	val.text = str(vmax)
@@ -483,69 +492,69 @@ func _dress_slider_row(body: VBoxContainer, key: String, vmin: int, vmax: int, f
 
 ## 绑定标题页：底部渐暗帷幕 + 左列式菜单 + 玩法说明浮层（结构在 pages/title.tscn）
 func _bind_title(p: Control) -> void:
-	var veil: TextureRect = p.get_node("title_veil")
+	var veil: TextureRect = p.get_node("TitleVeil")
 	veil.texture = UiStyle.title_veil_tex()
-	UiStyle.overlay_fx(p.get_node("fx")) # A5+A4
+	UiStyle.overlay_fx(p.get_node("Fx")) # A5+A4
 
 	# 左列：金条 + 衬线标题 + 菜单文字行（v2.5：去盒化，序号/下划线/左金条）
-	var col: VBoxContainer = p.get_node("col")
+	var col: VBoxContainer = p.get_node("Col")
 	col.add_theme_constant_override("separation", 0)
 	col.offset_left = 0
 	col.offset_right = int(300.0 * S)
 	col.offset_top = int(96.0 * S)
 	col.offset_bottom = int(-64.0 * S)
 
-	var head: HBoxContainer = p.get_node("col/head")
+	var head: HBoxContainer = p.get_node("Col/Head")
 	head.add_theme_constant_override("separation", int(14.0 * S))
-	var accent: ColorRect = p.get_node("col/head/accent")
+	var accent: ColorRect = p.get_node("Col/Head/Accent")
 	accent.color = C["gold"]
 	accent.custom_minimum_size = Vector2(3.0 * S, 0)
-	var hcol: VBoxContainer = p.get_node("col/head/hcol")
+	var hcol: VBoxContainer = p.get_node("Col/Head/Hcol")
 	hcol.add_theme_constant_override("separation", int(7.0 * S))
-	var title_row: HBoxContainer = p.get_node("col/head/hcol/title_row")
+	var title_row: HBoxContainer = p.get_node("Col/Head/Hcol/TitleRow")
 	title_row.add_theme_constant_override("separation", int(26.0 * S))
 	title_row.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 	for ch in title_row.get_children():
 		_dress_label(ch, 62.0 * S, C["gold_hi"], true, true)
-	_dress_label(p.get_node("col/head/hcol/tagline"), 13.0 * S, C["muted"])
-	_dress_gap(p.get_node("col/gap1"), 18.0 * S)
-	_dress_rule(p.get_node("col/rule"))
-	_dress_gap(p.get_node("col/gap2"), 12.0 * S)
+	_dress_label(p.get_node("Col/Head/Hcol/Tagline"), 13.0 * S, C["muted"])
+	_dress_gap(p.get_node("Col/Gap1"), 18.0 * S)
+	_dress_rule(p.get_node("Col/Rule"))
+	_dress_gap(p.get_node("Col/Gap2"), 12.0 * S)
 
 	# 种子行（Task 3）：留空 = 每局随机；改动即写设置，开局时把原文交给 main
-	_dress_gap(p.get_node("col/seed_gap"), 10.0 * S)
-	var seed_row: HBoxContainer = p.get_node("col/seed_row")
+	_dress_gap(p.get_node("Col/SeedGap"), 10.0 * S)
+	var seed_row: HBoxContainer = p.get_node("Col/SeedRow")
 	seed_row.add_theme_constant_override("separation", int(8.0 * S))
-	var seed_lbl: Label = seed_row.get_node("seed_lbl")
+	var seed_lbl: Label = seed_row.get_node("SeedLbl")
 	_dress_label(seed_lbl, 12.0 * S, C["muted"])
 	seed_lbl.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN # 左对齐（_dress_label 默认居中）
 	seed_lbl.custom_minimum_size = Vector2(40.0 * S, 0)
-	var seed_input: LineEdit = seed_row.get_node("seed_input")
+	var seed_input: LineEdit = seed_row.get_node("SeedInput")
 	_dress_seed_input(seed_input)
 	seed_input.text = String(cb["get_seed_text"].call()) # 回填上次保存的种子文本
 	seed_input.text_changed.connect(func(t: String) -> void:
 		cb["seed_changed"].call(t))
 
-	_dress_menu_row(p.get_node("col/btn_rogue"), 1, true, func() -> void:
+	_dress_menu_row(p.get_node("Col/BtnRogue"), 1, true, func() -> void:
 		cb["start_rogue"].call(seed_input.text))
-	_dress_menu_row(p.get_node("col/btn_start"), 2, false, func() -> void:
+	_dress_menu_row(p.get_node("Col/BtnStart"), 2, false, func() -> void:
 		cb["start_match"].call(seed_input.text))
-	_dress_menu_row(p.get_node("col/btn_continue"), 3, false, func() -> void:
+	_dress_menu_row(p.get_node("Col/BtnContinue"), 3, false, func() -> void:
 		open_slots("load", "title"))
-	_dress_menu_row(p.get_node("col/btn_settings"), 4, false, func() -> void:
+	_dress_menu_row(p.get_node("Col/BtnSettings"), 4, false, func() -> void:
 		open_settings("title"))
-	_dress_menu_row(p.get_node("col/btn_tips"), 5, false, func() -> void:
+	_dress_menu_row(p.get_node("Col/BtnTips"), 5, false, func() -> void:
 		tips_panel.visible = not tips_panel.visible)
-	_dress_menu_row(p.get_node("col/btn_quit"), 6, false, func() -> void:
+	_dress_menu_row(p.get_node("Col/BtnQuit"), 6, false, func() -> void:
 		open_quit_confirm())
 
 	# 玩法说明浮层（菜单列右侧；默认隐藏，切换不影响列布局）
-	tips_panel = p.get_node("panel_tips")
+	tips_panel = p.get_node("PanelTips")
 	tips_panel.custom_minimum_size = Vector2(360.0 * S, 0)
 	tips_panel.theme_type_variation = UiStyle.CARD_VAR
 	UiStyle.corner_dress(tips_panel, C["gold_lo"]) # C 饰线
 	_dress_margins(tips_panel.get_node("Margin"), 18.0)
-	var tips_col: VBoxContainer = tips_panel.get_node("Margin/tips_col")
+	var tips_col: VBoxContainer = tips_panel.get_node("Margin/TipsCol")
 	tips_col.add_theme_constant_override("separation", int(9.0 * S))
 	for line in tips_col.get_children():
 		_dress_label(line, 11.0 * S, C["muted"])
@@ -554,7 +563,7 @@ func _bind_title(p: Control) -> void:
 	tips_panel.position = Vector2(vw * 0.18 + 324.0 * S, 96.0 * S)
 
 	# 版本 / 赛事行（左下角）
-	var jam: Label = p.get_node("jam")
+	var jam: Label = p.get_node("Jam")
 	_dress_label(jam, 10.0 * S, C["muted"])
 	jam.offset_left = int(24.0 * S)
 	jam.offset_right = int(380.0 * S)
@@ -568,81 +577,81 @@ func _bind_title(p: Control) -> void:
 ## 绑定暂停页（继续 / 保存进度 / 设置 / 重开本局 / 回标题；结构在 pages/pause.tscn）
 func _bind_pause(p: Control) -> void:
 	_dress_card_page(p, UiStyle.VEIL_SOFT, 340.0, 28.0, 12.0)
-	var base := "Center/card/Margin/col"
-	_dress_title_bar(p.get_node(base + "/title_bar"), p.get_node(base + "/title_bar/title"), 44.0)
-	_dress_rule(p.get_node(base + "/rule"))
-	_dress_button(p.get_node(base + "/btn_resume"), true, 260.0 * S, 46.0 * S, 14.0 * S, func() -> void:
+	var base := "Center/Card/Margin/Col"
+	_dress_title_bar(p.get_node(base + "/TitleBar"), p.get_node(base + "/TitleBar/Title"), 44.0)
+	_dress_rule(p.get_node(base + "/Rule"))
+	_dress_button(p.get_node(base + "/BtnResume"), true, 260.0 * S, 46.0 * S, 14.0 * S, func() -> void:
 		cb["resume"].call())
-	_dress_button(p.get_node(base + "/btn_save"), false, 260.0 * S, 44.0 * S, 12.5 * S, func() -> void:
+	_dress_button(p.get_node(base + "/BtnSave"), false, 260.0 * S, 44.0 * S, 12.5 * S, func() -> void:
 		open_slots("save", "pause"))
-	_dress_button(p.get_node(base + "/btn_settings_pause"), false, 260.0 * S, 44.0 * S, 12.5 * S, func() -> void:
+	_dress_button(p.get_node(base + "/BtnSettingsPause"), false, 260.0 * S, 44.0 * S, 12.5 * S, func() -> void:
 		open_settings("pause"))
-	_dress_button(p.get_node(base + "/btn_restart"), false, 260.0 * S, 44.0 * S, 12.5 * S, func() -> void:
+	_dress_button(p.get_node(base + "/BtnRestart"), false, 260.0 * S, 44.0 * S, 12.5 * S, func() -> void:
 		cb["restart"].call())
-	_dress_button(p.get_node(base + "/btn_to_title"), false, 260.0 * S, 44.0 * S, 12.5 * S, func() -> void:
+	_dress_button(p.get_node(base + "/BtnToTitle"), false, 260.0 * S, 44.0 * S, 12.5 * S, func() -> void:
 		cb["to_title"].call())
 
 
 ## 绑定结算页（胜负标题 + 统计文案 + 再来一局 / 回标题；结构在 pages/gameover.tscn）
 func _bind_gameover(p: Control) -> void:
 	_dress_card_page(p, UiStyle.VEIL_HEAVY, 440.0, 30.0, 16.0)
-	var base := "Center/card/Margin/col"
+	var base := "Center/Card/Margin/Col"
 	# 胜负标题：文本/颜色由 open_gameover 注入（探针断言 色=hp|danger）；衬线字形已进子集
-	go_title = p.get_node(base + "/go_title")
+	go_title = p.get_node(base + "/GoTitle")
 	_dress_label(go_title, 36.0 * S, C["danger"], true, true)
-	go_body = p.get_node(base + "/go_body")
+	go_body = p.get_node(base + "/GoBody")
 	_dress_label(go_body, 13.5 * S, C["text"])
 	go_body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	go_body.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	go_body.custom_minimum_size = Vector2(380.0 * S, 0)
-	_dress_button(p.get_node(base + "/btn_again"), true, 240.0 * S, 46.0 * S, 14.0 * S, func() -> void:
+	_dress_button(p.get_node(base + "/BtnAgain"), true, 240.0 * S, 46.0 * S, 14.0 * S, func() -> void:
 		cb["restart"].call())
-	_dress_button(p.get_node(base + "/btn_to_title2"), false, 240.0 * S, 44.0 * S, 12.5 * S, func() -> void:
+	_dress_button(p.get_node(base + "/BtnToTitle2"), false, 240.0 * S, 44.0 * S, 12.5 * S, func() -> void:
 		cb["to_title"].call())
 
 
 ## 绑定存档页（3 槽：读档|存档双模式 + 删除 + 状态行；结构在 pages/slots.tscn）
 func _bind_slots(p: Control) -> void:
 	_dress_card_page(p, UiStyle.VEIL_PAGE, 520.0, 26.0, 10.0)
-	var base := "Center/card/Margin/col"
+	var base := "Center/Card/Margin/Col"
 	# 动态标题（读档/存档）：open_slots 改 text，衬线字体常驻
-	_dress_title_bar(p.get_node(base + "/title_bar"), p.get_node(base + "/title_bar/label_slot_head"), 44.0)
-	_dress_rule(p.get_node(base + "/rule"))
+	_dress_title_bar(p.get_node(base + "/TitleBar"), p.get_node(base + "/TitleBar/LabelSlotHead"), 44.0)
+	_dress_rule(p.get_node(base + "/Rule"))
 	for i in range(1, SaveIO.SLOT_N + 1):
-		var row: HBoxContainer = p.get_node(base + "/slot_row%d" % i)
+		var row: HBoxContainer = p.get_node(base + "/SlotRow%d" % i)
 		row.add_theme_constant_override("separation", int(8 * S))
-		var b: Button = row.get_node("btn_slot%d" % i)
+		var b: Button = row.get_node(_pn("btn_slot%d" % i))
 		_dress_button(b, false, 380.0 * S, 52.0 * S, 12.5 * S, _on_slot_pressed.bind(i), 16.0 * S)
 		b.alignment = HORIZONTAL_ALIGNMENT_LEFT
 		# 删除钮位（v2.4）：同宽占位块与删除钮互斥显示，隐藏时栅格不塌（槽条横向对齐恒定）
-		_dress_button(row.get_node("btn_slot_del%d" % i), false, 64.0 * S, 52.0 * S, 10.0 * S, _on_slot_delete.bind(i))
-		var pad: Control = row.get_node("pad_slot_del%d" % i)
+		_dress_button(row.get_node(_pn("btn_slot_del%d" % i)), false, 64.0 * S, 52.0 * S, 10.0 * S, _on_slot_delete.bind(i))
+		var pad: Control = row.get_node(_pn("pad_slot_del%d" % i))
 		pad.custom_minimum_size = Vector2(64.0 * S, 52.0 * S)
 		pad.visible = false
-	_dress_label(p.get_node(base + "/label_slot_status"), 11.0 * S, C["muted"])
-	_dress_button(p.get_node(base + "/btn_slots_back"), false, 240.0 * S, 44.0 * S, 12.5 * S, func() -> void:
+	_dress_label(p.get_node(base + "/LabelSlotStatus"), 11.0 * S, C["muted"])
+	_dress_button(p.get_node(base + "/BtnSlotsBack"), false, 240.0 * S, 44.0 * S, 12.5 * S, func() -> void:
 		_show(slots_from))
 
 
 ## 绑定设置页（音频 / 显示 / 画质 / 性能 四组 + 关于；结构在 pages/settings.tscn）
 func _bind_settings(p: Control) -> void:
 	_dress_card_page(p, UiStyle.VEIL_PAGE, 540.0, 24.0, 10.0)
-	var base := "Center/card/Margin/col"
-	_dress_title_bar(p.get_node(base + "/title_bar"), p.get_node(base + "/title_bar/title"), 44.0)
-	_dress_rule(p.get_node(base + "/rule1"))
+	var base := "Center/Card/Margin/Col"
+	_dress_title_bar(p.get_node(base + "/TitleBar"), p.get_node(base + "/TitleBar/Title"), 44.0)
+	_dress_rule(p.get_node(base + "/Rule1"))
 
 	# 滚动体（v2.4）：外层 Control 承载「底缘渐隐」，行被裁切时给出可滚动暗示；
 	# 滚动区与底部「返回」用 1px 金线分隔，避免旧版内容像被按钮压住。
-	var wrap: Control = p.get_node(base + "/settings_scroll_wrap")
+	var wrap: Control = p.get_node(base + "/SettingsScrollWrap")
 	wrap.custom_minimum_size = Vector2(0, minf(get_viewport().get_visible_rect().size.y * 0.66, 640.0 * S))
 	wrap.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	var scroll: ScrollContainer = p.get_node(base + "/settings_scroll_wrap/settings_scroll")
+	var scroll: ScrollContainer = p.get_node(base + "/SettingsScrollWrap/SettingsScroll")
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	UiStyle.scrollbar(scroll, C, S)
-	var body: VBoxContainer = p.get_node(base + "/settings_scroll_wrap/settings_scroll/settings_body")
+	var body: VBoxContainer = p.get_node(base + "/SettingsScrollWrap/SettingsScroll/SettingsBody")
 	body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	body.add_theme_constant_override("separation", int(12 * S))
-	var fade: TextureRect = p.get_node(base + "/settings_scroll_wrap/scroll_fade")
+	var fade: TextureRect = p.get_node(base + "/SettingsScrollWrap/ScrollFade")
 	fade.texture = UiStyle.fade_tex(C["card"])
 	fade.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	fade.stretch_mode = TextureRect.STRETCH_SCALE
@@ -651,7 +660,7 @@ func _bind_settings(p: Control) -> void:
 
 	var android := OS.get_name() == "Android"
 	for g in ["audio", "display", "quality", "perf", "about"]:
-		_dress_group_header(body.get_node("group_" + g))
+		_dress_group_header(body.get_node(_pn("group_" + g)))
 
 	# —— 音频 ——
 	_dress_slider_row(body, "music", UserSettings.VOL_MIN, UserSettings.VOL_MAX, _on_music_changed)
@@ -683,17 +692,17 @@ func _bind_settings(p: Control) -> void:
 	_dress_slider_row(body, "bright_pct", 70, 130, _on_bright_changed)
 
 	# —— 关于 ——（隐私政策入口：合规要求玩家随时可查；Android/PC 均走系统浏览器）
-	var prow: HBoxContainer = body.get_node("row_privacy")
+	var prow: HBoxContainer = body.get_node("RowPrivacy")
 	prow.add_theme_constant_override("separation", int(8 * S))
-	var plbl: Label = prow.get_node("lbl")
+	var plbl: Label = prow.get_node("Lbl")
 	_dress_label(plbl, 12.5 * S, C["muted"])
 	plbl.custom_minimum_size = Vector2(96.0 * S, 0)
-	_dress_button(prow.get_node("btn_privacy_policy"), false, 132.0 * S, 40.0 * S, 11.5 * S, func() -> void:
+	_dress_button(prow.get_node("BtnPrivacyPolicy"), false, 132.0 * S, 40.0 * S, 11.5 * S, func() -> void:
 		OS.shell_open(PRIVACY_URL))
 
-	_dress_gap(p.get_node(base + "/gap"), 4.0 * S)
-	_dress_rule(p.get_node(base + "/rule2"))
-	_dress_button(p.get_node(base + "/btn_settings_back"), false, 240.0 * S, 44.0 * S, 12.5 * S, func() -> void:
+	_dress_gap(p.get_node(base + "/Gap"), 4.0 * S)
+	_dress_rule(p.get_node(base + "/Rule2"))
+	_dress_button(p.get_node(base + "/BtnSettingsBack"), false, 240.0 * S, 44.0 * S, 12.5 * S, func() -> void:
 		_show(settings_from))
 
 
@@ -701,7 +710,7 @@ func _bind_settings(p: Control) -> void:
 
 ## 标题「继续对局」可用性：有任何非空槽位（含损坏档——进列表可删）即亮。
 func _refresh_title() -> void:
-	var btn: Button = pages["title"].find_child("btn_continue", true, false)
+	var btn: Button = pages["title"].find_child("BtnContinue", true, false)
 	btn.disabled = not SaveIO.has_any()
 
 
@@ -710,13 +719,13 @@ func _refresh_slots() -> void:
 	var page: Control = pages["slots"]
 	for info in SaveIO.list_slots():
 		var slot: int = info["slot"]
-		var row: Button = page.find_child("btn_slot%d" % slot, true, false)
+		var row: Button = page.find_child(_pn("btn_slot%d" % slot), true, false)
 		row.text = _slot_row_text(info)
 		var empty: bool = info.get("empty", true)
 		row.disabled = empty if slots_mode == "load" else false
-		var del: Button = page.find_child("btn_slot_del%d" % slot, true, false)
+		var del: Button = page.find_child(_pn("btn_slot_del%d" % slot), true, false)
 		del.visible = slots_mode == "load" and not empty
-		var pad: Control = page.find_child("pad_slot_del%d" % slot, true, false)
+		var pad: Control = page.find_child(_pn("pad_slot_del%d" % slot), true, false)
 		if pad != null:
 			pad.visible = not del.visible
 
@@ -739,7 +748,7 @@ func _slot_row_text(info: Dictionary) -> String:
 
 ## 更新存档页状态行（操作反馈）
 func _set_slot_status(text: String) -> void:
-	var status: Label = pages["slots"].find_child("label_slot_status", true, false)
+	var status: Label = pages["slots"].find_child("LabelSlotStatus", true, false)
 	status.text = text
 
 
@@ -786,8 +795,8 @@ func _load_settings_into_ui() -> void:
 	_cfg = UserSettings.load_cfg()
 	var page: Control = pages["settings"]
 	for key in ["music", "sfx", "render_pct", "ui_pct", "bright_pct"]:
-		var sld: HSlider = page.find_child("sld_" + key, true, false)
-		var lbl: Label = page.find_child("lbl_%s_val" % key, true, false)
+		var sld: HSlider = page.find_child(_pn("sld_" + key), true, false)
+		var lbl: Label = page.find_child(_pn("lbl_%s_val" % key), true, false)
 		if sld != null:
 			sld.set_value_no_signal(int(_cfg.get(key, 100)))
 		if lbl != null:
@@ -797,7 +806,7 @@ func _load_settings_into_ui() -> void:
 
 ## 滑杆读数刷新（lbl_<key>_val）
 func _set_val_label(key: String, v: int) -> void:
-	var lbl: Label = pages["settings"].find_child("lbl_%s_val" % key, true, false)
+	var lbl: Label = pages["settings"].find_child(_pn("lbl_%s_val" % key), true, false)
 	if lbl != null:
 		lbl.text = str(v)
 
@@ -856,8 +865,8 @@ func _commit_video() -> void:
 func _sync_video_sliders() -> void:
 	var page: Control = pages["settings"]
 	for key in ["render_pct", "ui_pct", "bright_pct"]:
-		var sld: HSlider = page.find_child("sld_" + key, true, false)
-		var lbl: Label = page.find_child("lbl_%s_val" % key, true, false)
+		var sld: HSlider = page.find_child(_pn("sld_" + key), true, false)
+		var lbl: Label = page.find_child(_pn("lbl_%s_val" % key), true, false)
 		if sld != null:
 			sld.set_value_no_signal(int(_cfg.get(key, 100)))
 		if lbl != null:

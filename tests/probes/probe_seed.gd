@@ -76,7 +76,7 @@ func _initialize() -> void:
 	main.shell.open_title()
 	await process_frame
 	var page_title: Control = main.shell.pages["title"]
-	var seed_input: LineEdit = page_title.get_node("col/seed_row/seed_input")
+	var seed_input: LineEdit = page_title.get_node("Col/SeedRow/SeedInput")
 	check(seed_input != null, "标题屏种子输入框存在")
 	if seed_input != null:
 		cmp_int(seed_input.max_length, 24, "种子框 max_length = 24（得 %d）" % seed_input.max_length)

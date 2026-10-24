@@ -32,7 +32,7 @@ func _initialize() -> void:
 	# ---- 2. 开始对局 ----
 	var old_world = main.world
 	var run0: int = main.run_index
-	await _click_btn(page_title, "btn_start")
+	await _click_btn(page_title, "BtnStart")
 	check(shell.current_page() == "", "开战后空屏态")
 	check(main.paused == false, "开战后运行态")
 	check(hud.top_bar.visible == true, "开战后 HUD 显示")
@@ -61,13 +61,13 @@ func _initialize() -> void:
 	# ---- 6. ESC → 暂停；「继续」按钮 → 恢复 ----
 	await _press_esc()
 	check(shell.current_page() == "pause", "ESC 进暂停")
-	await _click_btn(page_pause, "btn_resume")
+	await _click_btn(page_pause, "BtnResume")
 	check(shell.current_page() == "" and main.paused == false, "「继续」按钮恢复")
 
 	# ---- 7. ESC → 暂停；「重开本局」→ 对局(新局) ----
 	await _press_esc()
 	var run1: int = main.run_index
-	await _click_btn(page_pause, "btn_restart")
+	await _click_btn(page_pause, "BtnRestart")
 	check(shell.current_page() == "" and main.paused == false, "重开后回对局")
 	cmp_int(main.run_index, run1 + 1, "重开 run_index+1")
 	check(main.world != old_world, "重开换新世界")
@@ -107,7 +107,7 @@ func _initialize() -> void:
 	core._zoom = 1.5
 	core.focus = Vector3(20.0, 0.0, 20.0)
 	core._apply_cam()
-	await _click_btn(page_go, "btn_to_title2")
+	await _click_btn(page_go, "BtnToTitle2")
 	check(shell.current_page() == "title", "回标题")
 	check(main.paused == true and hud.top_bar.visible == false, "标题态复位")
 	cmp_int(main.run_index, run2 + 1, "回标题备新局 run_index+1")
@@ -122,7 +122,7 @@ func _initialize() -> void:
 	check(shell.current_page() == "title", "标题屏 ESC 不响应")
 
 	# ---- 12. 再开一局 → 终局（负）→ 结算 ----
-	await _click_btn(page_title, "btn_start")
+	await _click_btn(page_title, "BtnStart")
 	check(shell.current_page() == "" and main.paused == false, "二次开战")
 	w = main.world
 	main.over_shown = false
@@ -134,7 +134,7 @@ func _initialize() -> void:
 
 	# ---- 13.「再来一局」→ 对局 ----
 	var run3: int = main.run_index
-	await _click_btn(page_go, "btn_again")
+	await _click_btn(page_go, "BtnAgain")
 	check(shell.current_page() == "" and main.paused == false, "再来一局回对局")
 	cmp_int(main.run_index, run3 + 1, "再来一局 run_index+1")
 

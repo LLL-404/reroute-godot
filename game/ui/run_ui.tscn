@@ -13,11 +13,11 @@ grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
 
-[node name="top" type="PanelContainer" parent="RunRoot"]
+[node name="Top" type="PanelContainer" parent="RunRoot"]
 
-[node name="Margin" type="MarginContainer" parent="RunRoot/top"]
+[node name="Margin" type="MarginContainer" parent="RunRoot/Top"]
 
-[node name="head" type="Label" parent="RunRoot/top/Margin"]
+[node name="Head" type="Label" parent="RunRoot/Top/Margin"]
 
 [node name="BottomHolder" type="VBoxContainer" parent="RunRoot"]
 anchors_preset = 15
@@ -28,27 +28,27 @@ grow_vertical = 2
 mouse_filter = 2
 alignment = 2
 
-[node name="hand_pad" type="MarginContainer" parent="RunRoot/BottomHolder"]
+[node name="HandPad" type="MarginContainer" parent="RunRoot/BottomHolder"]
 mouse_filter = 2
 
-[node name="hand_row" type="HBoxContainer" parent="RunRoot/BottomHolder/hand_pad"]
+[node name="HandRow" type="HBoxContainer" parent="RunRoot/BottomHolder/HandPad"]
 alignment = 0
 
-[node name="bar_wrap" type="HBoxContainer" parent="RunRoot/BottomHolder"]
+[node name="BarWrap" type="HBoxContainer" parent="RunRoot/BottomHolder"]
 mouse_filter = 2
 alignment = 1
 
-[node name="bar" type="PanelContainer" parent="RunRoot/BottomHolder/bar_wrap"]
+[node name="Bar" type="PanelContainer" parent="RunRoot/BottomHolder/BarWrap"]
 size_flags_horizontal = 4
 
-[node name="bm" type="MarginContainer" parent="RunRoot/BottomHolder/bar_wrap/bar"]
+[node name="Bm" type="MarginContainer" parent="RunRoot/BottomHolder/BarWrap/Bar"]
 
-[node name="bar_body" type="VBoxContainer" parent="RunRoot/BottomHolder/bar_wrap/bar/bm"]
+[node name="BarBody" type="VBoxContainer" parent="RunRoot/BottomHolder/BarWrap/Bar/Bm"]
 alignment = 1
 
-[node name="pad_bottom" type="Control" parent="RunRoot/BottomHolder"]
+[node name="PadBottom" type="Control" parent="RunRoot/BottomHolder"]
 mouse_filter = 2
 
-[node name="toast" type="Label" parent="RunRoot"]
+[node name="Toast" type="Label" parent="RunRoot"]
 visible = false
 mouse_filter = 2

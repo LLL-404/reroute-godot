@@ -37,7 +37,7 @@ func _bind() -> void:
 	root = $RunRoot
 
 	# 顶部层/波条（位置按 S 运行时注入，场景只保证节点层级）
-	var top: PanelContainer = root.get_node("top")
+	var top: PanelContainer = root.get_node("Top")
 	top.theme_type_variation = UiStyle.CARD_VAR
 	top.position = Vector2(int(24.0 * S), int(18.0 * S))
 	top.custom_minimum_size = Vector2(int(360.0 * S), int(34.0 * S))
@@ -46,32 +46,32 @@ func _bind() -> void:
 	m.add_theme_constant_override("margin_right", int(14 * S))
 	m.add_theme_constant_override("margin_top", int(6 * S))
 	m.add_theme_constant_override("margin_bottom", int(6 * S))
-	head = m.get_node("head")
+	head = m.get_node("Head")
 	head.add_theme_font_size_override("font_size", int(13.0 * S))
 	head.add_theme_color_override("font_color", C["gold_hi"])
 
 	# 底部容器：全屏 VBox 贴底对齐，bar 与手牌都在里面按内容高度排
 	var holder: VBoxContainer = root.get_node("BottomHolder")
 	holder.add_theme_constant_override("separation", int(8 * S))
-	var hand_pad: MarginContainer = holder.get_node("hand_pad")
+	var hand_pad: MarginContainer = holder.get_node("HandPad")
 	hand_pad.add_theme_constant_override("margin_left", int(24 * S))
-	hand_row = hand_pad.get_node("hand_row")
+	hand_row = hand_pad.get_node("HandRow")
 	hand_row.add_theme_constant_override("separation", int(8 * S))
 
 	# 阶段条：居中 + 按内容撑高
-	var bar_wrap: HBoxContainer = holder.get_node("bar_wrap")
-	bar = bar_wrap.get_node("bar")
+	var bar_wrap: HBoxContainer = holder.get_node("BarWrap")
+	bar = bar_wrap.get_node("Bar")
 	bar.theme_type_variation = UiStyle.CARD_VAR
-	var bm: MarginContainer = bar.get_node("bm")
+	var bm: MarginContainer = bar.get_node("Bm")
 	for side in ["left", "right", "top", "bottom"]:
 		bm.add_theme_constant_override("margin_" + side, int(18 * S))
-	bar_body = bm.get_node("bar_body")
+	bar_body = bm.get_node("BarBody")
 	bar_body.add_theme_constant_override("separation", int(10 * S))
-	var pad: Control = holder.get_node("pad_bottom")
+	var pad: Control = holder.get_node("PadBottom")
 	pad.custom_minimum_size = Vector2(0, int(24 * S))
 
 	# 浮字提示
-	toast = root.get_node("toast")
+	toast = root.get_node("Toast")
 	toast.add_theme_font_size_override("font_size", int(12.0 * S))
 	toast.add_theme_color_override("font_color", C["muted"])
 	toast.set_anchors_preset(Control.PRESET_CENTER_TOP)

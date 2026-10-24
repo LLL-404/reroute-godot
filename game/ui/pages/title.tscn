@@ -1,6 +1,6 @@
 [gd_scene format=3]
 
-[node name="page_title" type="Control"]
+[node name="TitlePage" type="Control"]
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
@@ -8,7 +8,7 @@ grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 0
 
-[node name="title_veil" type="TextureRect" parent="."]
+[node name="TitleVeil" type="TextureRect" parent="."]
 anchor_left = 0.0
 anchor_right = 1.0
 anchor_top = 0.45
@@ -16,7 +16,7 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 mouse_filter = 2
 
-[node name="fx" type="Control" parent="."]
+[node name="Fx" type="Control" parent="."]
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
@@ -24,147 +24,147 @@ grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
 
-[node name="col" type="VBoxContainer" parent="."]
+[node name="Col" type="VBoxContainer" parent="."]
 anchor_left = 0.18
 anchor_right = 0.18
 anchor_top = 0.0
 anchor_bottom = 1.0
 mouse_filter = 2
 
-[node name="head" type="HBoxContainer" parent="col"]
+[node name="Head" type="HBoxContainer" parent="Col"]
 mouse_filter = 2
 
-[node name="accent" type="ColorRect" parent="col/head"]
+[node name="Accent" type="ColorRect" parent="Col/Head"]
 mouse_filter = 2
 
-[node name="hcol" type="VBoxContainer" parent="col/head"]
+[node name="Hcol" type="VBoxContainer" parent="Col/Head"]
 mouse_filter = 2
 
-[node name="title_row" type="HBoxContainer" parent="col/head/hcol"]
+[node name="TitleRow" type="HBoxContainer" parent="Col/Head/Hcol"]
 mouse_filter = 2
 alignment = 1
 
-[node name="char1" type="Label" parent="col/head/hcol/title_row"]
+[node name="Char1" type="Label" parent="Col/Head/Hcol/TitleRow"]
 text = "改"
 
-[node name="char2" type="Label" parent="col/head/hcol/title_row"]
+[node name="Char2" type="Label" parent="Col/Head/Hcol/TitleRow"]
 text = "道"
 
-[node name="tagline" type="Label" parent="col/head/hcol"]
+[node name="Tagline" type="Label" parent="Col/Head/Hcol"]
 text = "放墙改道 · 修运河，别只堵路"
 
-[node name="gap1" type="Control" parent="col"]
+[node name="Gap1" type="Control" parent="Col"]
 mouse_filter = 2
 
-[node name="rule" type="ColorRect" parent="col"]
+[node name="Rule" type="ColorRect" parent="Col"]
 mouse_filter = 2
 
-[node name="gap2" type="Control" parent="col"]
+[node name="Gap2" type="Control" parent="Col"]
 mouse_filter = 2
 
-[node name="seed_gap" type="Control" parent="col"]
+[node name="SeedGap" type="Control" parent="Col"]
 mouse_filter = 2
 
-[node name="seed_row" type="HBoxContainer" parent="col"]
+[node name="SeedRow" type="HBoxContainer" parent="Col"]
 mouse_filter = 2
 
-[node name="seed_lbl" type="Label" parent="col/seed_row"]
+[node name="SeedLbl" type="Label" parent="Col/SeedRow"]
 text = "种子"
 
-[node name="seed_input" type="LineEdit" parent="col/seed_row"]
+[node name="SeedInput" type="LineEdit" parent="Col/SeedRow"]
 placeholder_text = "留空 = 随机种子"
 max_length = 24
 
-[node name="btn_rogue" type="Button" parent="col"]
+[node name="BtnRogue" type="Button" parent="Col"]
 text = "肉鸽模式"
 alignment = 0
 focus_mode = 0
 
-[node name="num" type="Label" parent="col/btn_rogue"]
+[node name="Num" type="Label" parent="Col/BtnRogue"]
 text = "01"
 
-[node name="bar" type="ColorRect" parent="col/btn_rogue"]
+[node name="Bar" type="ColorRect" parent="Col/BtnRogue"]
 mouse_filter = 2
 
-[node name="btn_start" type="Button" parent="col"]
+[node name="BtnStart" type="Button" parent="Col"]
 text = "经典对局"
 alignment = 0
 focus_mode = 0
 
-[node name="num" type="Label" parent="col/btn_start"]
+[node name="Num" type="Label" parent="Col/BtnStart"]
 text = "02"
 
-[node name="bar" type="ColorRect" parent="col/btn_start"]
+[node name="Bar" type="ColorRect" parent="Col/BtnStart"]
 mouse_filter = 2
 
-[node name="btn_continue" type="Button" parent="col"]
+[node name="BtnContinue" type="Button" parent="Col"]
 text = "读档存档"
 alignment = 0
 focus_mode = 0
 
-[node name="num" type="Label" parent="col/btn_continue"]
+[node name="Num" type="Label" parent="Col/BtnContinue"]
 text = "03"
 
-[node name="bar" type="ColorRect" parent="col/btn_continue"]
+[node name="Bar" type="ColorRect" parent="Col/BtnContinue"]
 mouse_filter = 2
 
-[node name="btn_settings" type="Button" parent="col"]
+[node name="BtnSettings" type="Button" parent="Col"]
 text = "设置"
 alignment = 0
 focus_mode = 0
 
-[node name="num" type="Label" parent="col/btn_settings"]
+[node name="Num" type="Label" parent="Col/BtnSettings"]
 text = "04"
 
-[node name="bar" type="ColorRect" parent="col/btn_settings"]
+[node name="Bar" type="ColorRect" parent="Col/BtnSettings"]
 mouse_filter = 2
 
-[node name="btn_tips" type="Button" parent="col"]
+[node name="BtnTips" type="Button" parent="Col"]
 text = "玩法说明"
 alignment = 0
 focus_mode = 0
 
-[node name="num" type="Label" parent="col/btn_tips"]
+[node name="Num" type="Label" parent="Col/BtnTips"]
 text = "05"
 
-[node name="bar" type="ColorRect" parent="col/btn_tips"]
+[node name="Bar" type="ColorRect" parent="Col/BtnTips"]
 mouse_filter = 2
 
-[node name="btn_quit" type="Button" parent="col"]
+[node name="BtnQuit" type="Button" parent="Col"]
 text = "退出游戏"
 alignment = 0
 focus_mode = 0
 
-[node name="num" type="Label" parent="col/btn_quit"]
+[node name="Num" type="Label" parent="Col/BtnQuit"]
 text = "06"
 
-[node name="bar" type="ColorRect" parent="col/btn_quit"]
+[node name="Bar" type="ColorRect" parent="Col/BtnQuit"]
 mouse_filter = 2
 
-[node name="panel_tips" type="PanelContainer" parent="."]
+[node name="PanelTips" type="PanelContainer" parent="."]
 visible = false
 mouse_filter = 2
 
-[node name="Margin" type="MarginContainer" parent="panel_tips"]
+[node name="Margin" type="MarginContainer" parent="PanelTips"]
 
-[node name="tips_col" type="VBoxContainer" parent="panel_tips/Margin"]
+[node name="TipsCol" type="VBoxContainer" parent="PanelTips/Margin"]
 
-[node name="tip1" type="Label" parent="panel_tips/Margin/tips_col"]
+[node name="Tip1" type="Label" parent="PanelTips/Margin/TipsCol"]
 text = "守住核心，撑到终局哨响即胜利"
 
-[node name="tip2" type="Label" parent="panel_tips/Margin/tips_col"]
+[node name="Tip2" type="Label" parent="PanelTips/Margin/TipsCol"]
 text = "放墙改道：怪绕得越远，死时赏金越高"
 
-[node name="tip3" type="Label" parent="panel_tips/Margin/tips_col"]
+[node name="Tip3" type="Label" parent="PanelTips/Margin/TipsCol"]
 text = "挖矿得供给；填高 / 挖低能改地形"
 
-[node name="tip4" type="Label" parent="panel_tips/Margin/tips_col"]
+[node name="Tip4" type="Label" parent="PanelTips/Margin/TipsCol"]
 text = "蛮兽皮糙，先清虫群，别让它贴脸"
 
-[node name="tip5" type="Label" parent="panel_tips/Margin/tips_col"]
+[node name="Tip5" type="Label" parent="PanelTips/Margin/TipsCol"]
 text = "英雄的震荡波是保命技，冷却长别空放"
 
-[node name="jam" type="Label" parent="."]
+[node name="Jam" type="Label" parent="."]
 anchor_top = 1.0
 anchor_bottom = 1.0
 mouse_filter = 2

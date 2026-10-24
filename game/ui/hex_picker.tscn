@@ -13,7 +13,7 @@ grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
 
-[node name="dim" type="ColorRect" parent="HexRoot"]
+[node name="Dim" type="ColorRect" parent="HexRoot"]
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
@@ -21,7 +21,7 @@ grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 0
 
-[node name="vignette" type="TextureRect" parent="HexRoot"]
+[node name="Vignette" type="TextureRect" parent="HexRoot"]
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
@@ -29,11 +29,11 @@ grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
 
-[node name="title" type="Label" parent="HexRoot"]
+[node name="Title" type="Label" parent="HexRoot"]
 mouse_filter = 2
 horizontal_alignment = 1
 
-[node name="card_layer" type="Control" parent="HexRoot"]
+[node name="CardLayer" type="Control" parent="HexRoot"]
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
@@ -41,7 +41,7 @@ grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
 
-[node name="foot" type="HBoxContainer" parent="HexRoot"]
+[node name="Foot" type="HBoxContainer" parent="HexRoot"]
 anchor_left = 0.5
 anchor_right = 0.5
 anchor_top = 1.0

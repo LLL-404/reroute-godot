@@ -440,7 +440,7 @@ func _make_build_fx(x: int, y: int) -> Node3D:
 		band.scale = Vector3(0.90, 1.0, 0.90)
 		root.add_child(band)
 	var prog := MeshInstance3D.new()
-	prog.name = "progress"
+	prog.name = "Progress"
 	prog.mesh = core.hex_ring_mesh
 	prog.material_override = core.mats["ring_tower"]
 	prog.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
@@ -462,7 +462,7 @@ func _update_build_fx(entry: Dictionary, build_left: int, total: int) -> void:
 		return
 	node.visible = true
 	var k := 1.0 - float(build_left) / float(maxi(total, 1))
-	var prog = node.get_node_or_null("progress")
+	var prog = node.get_node_or_null("Progress")
 	if prog != null:
 		(prog as Node3D).position.y = 0.15 + 2.30 * clampf(k, 0.0, 1.0)
 

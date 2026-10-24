@@ -1,6 +1,6 @@
 [gd_scene format=3]
 
-[node name="page_pause" type="Control"]
+[node name="PausePage" type="Control"]
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
@@ -8,7 +8,7 @@ grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 0
 
-[node name="bg" type="ColorRect" parent="."]
+[node name="Bg" type="ColorRect" parent="."]
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
@@ -16,7 +16,7 @@ grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
 
-[node name="fx" type="Control" parent="."]
+[node name="Fx" type="Control" parent="."]
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
@@ -32,16 +32,16 @@ grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
 
-[node name="card" type="PanelContainer" parent="Center"]
+[node name="Card" type="PanelContainer" parent="Center"]
 
-[node name="Margin" type="MarginContainer" parent="Center/card"]
+[node name="Margin" type="MarginContainer" parent="Center/Card"]
 
-[node name="col" type="VBoxContainer" parent="Center/card/Margin"]
+[node name="Col" type="VBoxContainer" parent="Center/Card/Margin"]
 alignment = 1
 
-[node name="title_bar" type="Panel" parent="Center/card/Margin/col"]
+[node name="TitleBar" type="Panel" parent="Center/Card/Margin/Col"]
 
-[node name="title" type="Label" parent="Center/card/Margin/col/title_bar"]
+[node name="Title" type="Label" parent="Center/Card/Margin/Col/TitleBar"]
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
@@ -51,25 +51,25 @@ text = "暂停"
 horizontal_alignment = 1
 vertical_alignment = 1
 
-[node name="rule" type="ColorRect" parent="Center/card/Margin/col"]
+[node name="Rule" type="ColorRect" parent="Center/Card/Margin/Col"]
 mouse_filter = 2
 
-[node name="btn_resume" type="Button" parent="Center/card/Margin/col"]
+[node name="BtnResume" type="Button" parent="Center/Card/Margin/Col"]
 text = "继续"
 focus_mode = 0
 
-[node name="btn_save" type="Button" parent="Center/card/Margin/col"]
+[node name="BtnSave" type="Button" parent="Center/Card/Margin/Col"]
 text = "保存进度"
 focus_mode = 0
 
-[node name="btn_settings_pause" type="Button" parent="Center/card/Margin/col"]
+[node name="BtnSettingsPause" type="Button" parent="Center/Card/Margin/Col"]
 text = "设置"
 focus_mode = 0
 
-[node name="btn_restart" type="Button" parent="Center/card/Margin/col"]
+[node name="BtnRestart" type="Button" parent="Center/Card/Margin/Col"]
 text = "重开本局"
 focus_mode = 0
 
-[node name="btn_to_title" type="Button" parent="Center/card/Margin/col"]
+[node name="BtnToTitle" type="Button" parent="Center/Card/Margin/Col"]
 text = "回标题"
 focus_mode = 0

@@ -1,6 +1,6 @@
 [gd_scene format=3]
 
-[node name="page_gameover" type="Control"]
+[node name="GameoverPage" type="Control"]
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
@@ -8,7 +8,7 @@ grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 0
 
-[node name="bg" type="ColorRect" parent="."]
+[node name="Bg" type="ColorRect" parent="."]
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
@@ -16,7 +16,7 @@ grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
 
-[node name="fx" type="Control" parent="."]
+[node name="Fx" type="Control" parent="."]
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
@@ -32,24 +32,24 @@ grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
 
-[node name="card" type="PanelContainer" parent="Center"]
+[node name="Card" type="PanelContainer" parent="Center"]
 
-[node name="Margin" type="MarginContainer" parent="Center/card"]
+[node name="Margin" type="MarginContainer" parent="Center/Card"]
 
-[node name="col" type="VBoxContainer" parent="Center/card/Margin"]
+[node name="Col" type="VBoxContainer" parent="Center/Card/Margin"]
 alignment = 1
 
-[node name="go_title" type="Label" parent="Center/card/Margin/col"]
+[node name="GoTitle" type="Label" parent="Center/Card/Margin/Col"]
 horizontal_alignment = 1
 
-[node name="go_body" type="Label" parent="Center/card/Margin/col"]
+[node name="GoBody" type="Label" parent="Center/Card/Margin/Col"]
 autowrap_mode = 3
 horizontal_alignment = 1
 
-[node name="btn_again" type="Button" parent="Center/card/Margin/col"]
+[node name="BtnAgain" type="Button" parent="Center/Card/Margin/Col"]
 text = "再来一局"
 focus_mode = 0
 
-[node name="btn_to_title2" type="Button" parent="Center/card/Margin/col"]
+[node name="BtnToTitle2" type="Button" parent="Center/Card/Margin/Col"]
 text = "回标题"
 focus_mode = 0

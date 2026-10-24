@@ -1,6 +1,6 @@
 [gd_scene format=3]
 
-[node name="page_slots" type="Control"]
+[node name="SlotsPage" type="Control"]
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
@@ -8,7 +8,7 @@ grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 0
 
-[node name="bg" type="ColorRect" parent="."]
+[node name="Bg" type="ColorRect" parent="."]
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
@@ -16,7 +16,7 @@ grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
 
-[node name="fx" type="Control" parent="."]
+[node name="Fx" type="Control" parent="."]
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
@@ -32,16 +32,16 @@ grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
 
-[node name="card" type="PanelContainer" parent="Center"]
+[node name="Card" type="PanelContainer" parent="Center"]
 
-[node name="Margin" type="MarginContainer" parent="Center/card"]
+[node name="Margin" type="MarginContainer" parent="Center/Card"]
 
-[node name="col" type="VBoxContainer" parent="Center/card/Margin"]
+[node name="Col" type="VBoxContainer" parent="Center/Card/Margin"]
 alignment = 1
 
-[node name="title_bar" type="Panel" parent="Center/card/Margin/col"]
+[node name="TitleBar" type="Panel" parent="Center/Card/Margin/Col"]
 
-[node name="label_slot_head" type="Label" parent="Center/card/Margin/col/title_bar"]
+[node name="LabelSlotHead" type="Label" parent="Center/Card/Margin/Col/TitleBar"]
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
@@ -51,59 +51,59 @@ text = "读档"
 horizontal_alignment = 1
 vertical_alignment = 1
 
-[node name="rule" type="ColorRect" parent="Center/card/Margin/col"]
+[node name="Rule" type="ColorRect" parent="Center/Card/Margin/Col"]
 mouse_filter = 2
 
-[node name="slot_row1" type="HBoxContainer" parent="Center/card/Margin/col"]
+[node name="SlotRow1" type="HBoxContainer" parent="Center/Card/Margin/Col"]
 alignment = 1
 
-[node name="btn_slot1" type="Button" parent="Center/card/Margin/col/slot_row1"]
+[node name="BtnSlot1" type="Button" parent="Center/Card/Margin/Col/SlotRow1"]
 text = "槽 1 · 空"
 alignment = 0
 focus_mode = 0
 
-[node name="btn_slot_del1" type="Button" parent="Center/card/Margin/col/slot_row1"]
+[node name="BtnSlotDel1" type="Button" parent="Center/Card/Margin/Col/SlotRow1"]
 text = "删除"
 focus_mode = 0
 
-[node name="pad_slot_del1" type="Control" parent="Center/card/Margin/col/slot_row1"]
+[node name="PadSlotDel1" type="Control" parent="Center/Card/Margin/Col/SlotRow1"]
 visible = false
 mouse_filter = 2
 
-[node name="slot_row2" type="HBoxContainer" parent="Center/card/Margin/col"]
+[node name="SlotRow2" type="HBoxContainer" parent="Center/Card/Margin/Col"]
 alignment = 1
 
-[node name="btn_slot2" type="Button" parent="Center/card/Margin/col/slot_row2"]
+[node name="BtnSlot2" type="Button" parent="Center/Card/Margin/Col/SlotRow2"]
 text = "槽 2 · 空"
 alignment = 0
 focus_mode = 0
 
-[node name="btn_slot_del2" type="Button" parent="Center/card/Margin/col/slot_row2"]
+[node name="BtnSlotDel2" type="Button" parent="Center/Card/Margin/Col/SlotRow2"]
 text = "删除"
 focus_mode = 0
 
-[node name="pad_slot_del2" type="Control" parent="Center/card/Margin/col/slot_row2"]
+[node name="PadSlotDel2" type="Control" parent="Center/Card/Margin/Col/SlotRow2"]
 visible = false
 mouse_filter = 2
 
-[node name="slot_row3" type="HBoxContainer" parent="Center/card/Margin/col"]
+[node name="SlotRow3" type="HBoxContainer" parent="Center/Card/Margin/Col"]
 alignment = 1
 
-[node name="btn_slot3" type="Button" parent="Center/card/Margin/col/slot_row3"]
+[node name="BtnSlot3" type="Button" parent="Center/Card/Margin/Col/SlotRow3"]
 text = "槽 3 · 空"
 alignment = 0
 focus_mode = 0
 
-[node name="btn_slot_del3" type="Button" parent="Center/card/Margin/col/slot_row3"]
+[node name="BtnSlotDel3" type="Button" parent="Center/Card/Margin/Col/SlotRow3"]
 text = "删除"
 focus_mode = 0
 
-[node name="pad_slot_del3" type="Control" parent="Center/card/Margin/col/slot_row3"]
+[node name="PadSlotDel3" type="Control" parent="Center/Card/Margin/Col/SlotRow3"]
 visible = false
 mouse_filter = 2
 
-[node name="label_slot_status" type="Label" parent="Center/card/Margin/col"]
+[node name="LabelSlotStatus" type="Label" parent="Center/Card/Margin/Col"]
 
-[node name="btn_slots_back" type="Button" parent="Center/card/Margin/col"]
+[node name="BtnSlotsBack" type="Button" parent="Center/Card/Margin/Col"]
 text = "返回"
 focus_mode = 0

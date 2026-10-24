@@ -32,7 +32,7 @@ func _initialize() -> void:
 	check(shell.current_page() == "title", "启动即标题")
 
 	# ---- 1. 触屏开战 ----
-	await _tap_btn(page_title, "btn_start")
+	await _tap_btn(page_title, "BtnStart")
 	check(shell.current_page() == "" and main.paused == false, "触屏点「开始对局」→ 对局")
 
 	# ---- 2. 触屏 HUD 暂停 ----
@@ -41,13 +41,13 @@ func _initialize() -> void:
 	page_pause = shell.pages["pause"]
 
 	# ---- 3. 触屏「继续」 ----
-	await _tap_btn(page_pause, "btn_resume")
+	await _tap_btn(page_pause, "BtnResume")
 	check(shell.current_page() == "" and main.paused == false, "触屏点「继续」→ 对局")
 
 	# ---- 4. 触屏「重开本局」 ----
 	await _tap_ctl(hud.pause_btn)
 	var run0: int = main.run_index
-	await _tap_btn(page_pause, "btn_restart")
+	await _tap_btn(page_pause, "BtnRestart")
 	check(shell.current_page() == "" and main.run_index == run0 + 1, "触屏点「重开本局」→ 新局")
 
 	# ---- 5. 全页按钮尺寸矩阵（触达下限，S 随视口） ----

@@ -22,7 +22,7 @@ grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
 
-[node name="bg" type="ColorRect" parent="Veil"]
+[node name="Bg" type="ColorRect" parent="Veil"]
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
@@ -30,7 +30,7 @@ grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
 
-[node name="veil_label" type="Label" parent="Veil"]
+[node name="VeilLabel" type="Label" parent="Veil"]
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
@@ -49,7 +49,7 @@ grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 0
 
-[node name="veil" type="ColorRect" parent="ConfirmLayer"]
+[node name="ConfirmVeil" type="ColorRect" parent="ConfirmLayer"]
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
@@ -57,7 +57,7 @@ grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
 
-[node name="fx" type="Control" parent="ConfirmLayer"]
+[node name="Fx" type="Control" parent="ConfirmLayer"]
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
@@ -73,24 +73,24 @@ grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
 
-[node name="card" type="PanelContainer" parent="ConfirmLayer/Center"]
+[node name="Card" type="PanelContainer" parent="ConfirmLayer/Center"]
 
-[node name="Margin" type="MarginContainer" parent="ConfirmLayer/Center/card"]
+[node name="Margin" type="MarginContainer" parent="ConfirmLayer/Center/Card"]
 
-[node name="col" type="VBoxContainer" parent="ConfirmLayer/Center/card/Margin"]
+[node name="Col" type="VBoxContainer" parent="ConfirmLayer/Center/Card/Margin"]
 alignment = 1
 
-[node name="confirm_text" type="Label" parent="ConfirmLayer/Center/card/Margin/col"]
+[node name="ConfirmText" type="Label" parent="ConfirmLayer/Center/Card/Margin/Col"]
 autowrap_mode = 3
 horizontal_alignment = 1
 
-[node name="row" type="HBoxContainer" parent="ConfirmLayer/Center/card/Margin/col"]
+[node name="Row" type="HBoxContainer" parent="ConfirmLayer/Center/Card/Margin/Col"]
 alignment = 1
 
-[node name="btn_confirm_ok" type="Button" parent="ConfirmLayer/Center/card/Margin/col/row"]
+[node name="BtnConfirmOk" type="Button" parent="ConfirmLayer/Center/Card/Margin/Col/Row"]
 text = "确定"
 focus_mode = 0
 
-[node name="btn_confirm_cancel" type="Button" parent="ConfirmLayer/Center/card/Margin/col/row"]
+[node name="BtnConfirmCancel" type="Button" parent="ConfirmLayer/Center/Card/Margin/Col/Row"]
 text = "取消"
 focus_mode = 0

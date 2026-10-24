@@ -55,10 +55,10 @@ func _ready() -> void:
 ## 绑定场景骨架（privacy_gate.tscn）：只取引用、注入样式与尺寸、接线，不再建结构
 func _bind() -> void:
 	_root = $PrivacyRoot
-	var bg: ColorRect = _root.get_node("bg")
+	var bg: ColorRect = _root.get_node("Bg")
 	bg.color = COL_BG
 
-	var card: PanelContainer = _root.get_node("CenterContainer/card")
+	var card: PanelContainer = _root.get_node("CenterContainer/Card")
 	var sb := StyleBoxFlat.new()
 	sb.bg_color = COL_CARD
 	sb.border_color = COL_EDGE
@@ -72,27 +72,27 @@ func _bind() -> void:
 	var box: VBoxContainer = card.get_node("VBoxContainer")
 	box.add_theme_constant_override("separation", 14)
 
-	var title: Label = box.get_node("title")
+	var title: Label = box.get_node("Title")
 	_style_label(title, 26, COL_GOLD)
 
 	var rule: ColorRect = box.get_node("ColorRect")
 	rule.color = COL_EDGE
 	rule.custom_minimum_size = Vector2(0, 1)
 
-	var body: Label = box.get_node("body")
+	var body: Label = box.get_node("Body")
 	body.text = BODY # 长正文属内容数据，留脚本常量，避免与场景双源漂移
 	body.custom_minimum_size = Vector2(_card_w - 56.0, 0)
 	_style_label(body, 14, COL_TEXT)
 
-	var link: Button = box.get_node("btn_privacy_link")
+	var link: Button = box.get_node("BtnPrivacyLink")
 	_style_button(link, false)
 	link.pressed.connect(_on_open_link)
 
-	var agree: Button = box.get_node("btn_privacy_agree")
+	var agree: Button = box.get_node("BtnPrivacyAgree")
 	_style_button(agree, true)
 	agree.pressed.connect(_on_agree)
 
-	var decline: Button = box.get_node("btn_privacy_decline")
+	var decline: Button = box.get_node("BtnPrivacyDecline")
 	_style_button(decline, false)
 	decline.pressed.connect(_on_decline)
 

@@ -79,25 +79,25 @@ func _recalc_s() -> void:
 func _bind() -> void:
 	root = $HexRoot
 
-	dim = root.get_node("dim")
+	dim = root.get_node("Dim")
 	dim.color = Color(0.03, 0.025, 0.015, 0.0) # 压暗层起始全透，动画拉到 0.72
 	dim.mouse_filter = Control.MOUSE_FILTER_STOP # 吃掉点击，防穿透到战场
 
-	vignette = root.get_node("vignette")
+	vignette = root.get_node("Vignette")
 	vignette.texture = UiStyle.vignette_tex()
 	vignette.stretch_mode = TextureRect.STRETCH_SCALE
 
-	title = root.get_node("title")
+	title = root.get_node("Title")
 	title.add_theme_font_size_override("font_size", int(13.0 * S))
 	title.add_theme_color_override("font_color", C["muted"])
 	title.set_anchors_preset(Control.PRESET_CENTER_TOP)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.position = Vector2(0, int(54.0 * S))
 
-	card_layer = root.get_node("card_layer")
+	card_layer = root.get_node("CardLayer")
 	card_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
-	foot = root.get_node("foot")
+	foot = root.get_node("Foot")
 	foot.add_theme_constant_override("separation", int(14 * S))
 	foot.anchor_left = 0.5
 	foot.anchor_right = 0.5
@@ -206,7 +206,7 @@ func _hover_on(i: int) -> void:
 	var t := create_tween().set_parallel(true)
 	t.tween_property(c, "scale", Vector2(1.07, 1.07), T_HOVER).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
 	t.tween_property(c, "position", _base[i] + Vector2(0, -16.0 * S), 0.16).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
-	var g: CanvasItem = c.get_node("glow")
+	var g: CanvasItem = c.get_node("Glow")
 	t.tween_property(g, "modulate:a", 0.95, T_HOVER)
 	c.set_meta("tw", t)
 	if sfx.is_valid():
@@ -222,7 +222,7 @@ func _hover_off(i: int) -> void:
 	var t := create_tween().set_parallel(true)
 	t.tween_property(c, "scale", Vector2.ONE, T_HOVER)
 	t.tween_property(c, "position", _base[i], 0.16)
-	var g: CanvasItem = c.get_node("glow")
+	var g: CanvasItem = c.get_node("Glow")
 	t.tween_property(g, "modulate:a", 0.45, T_HOVER)
 	c.set_meta("tw", t)
 
@@ -245,7 +245,7 @@ func _select(i: int) -> void:
 	t.tween_property(c, "position", center, T_PICK).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
 	t.tween_property(c, "scale", Vector2(1.22, 1.22), T_PICK).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
 	t.tween_property(c, "modulate:a", 0.0, 0.18).set_delay(T_PICK - 0.12)
-	var g: CanvasItem = c.get_node("glow")
+	var g: CanvasItem = c.get_node("Glow")
 	t.tween_property(g, "modulate:a", 1.0, 0.14)
 	c.set_meta("tw", t)
 	for j in _cards.size():
@@ -310,7 +310,7 @@ func _make_card(i: int, def: Dictionary, cw: float, ch: float) -> Control:
 
 	# 稀有度光晕（比卡大一圈，悬停点亮）
 	var gc: Color = rc["glow"]
-	var glow: Panel = holder.get_node("glow")
+	var glow: Panel = holder.get_node("Glow")
 	glow.position = Vector2(-12.0 * S, -12.0 * S)
 	glow.size = Vector2(cw + 24.0 * S, ch + 24.0 * S)
 	glow.add_theme_stylebox_override("panel", UiStyle.flat(Color(gc.r, gc.g, gc.b, 0.26), Color(0, 0, 0, 0), int(10 * S), 0))
@@ -318,7 +318,7 @@ func _make_card(i: int, def: Dictionary, cw: float, ch: float) -> Control:
 
 	# 卡面
 	var ec: Color = rc["edge"]
-	var card: PanelContainer = holder.get_node("face")
+	var card: PanelContainer = holder.get_node("Face")
 	card.add_theme_stylebox_override("panel", UiStyle.flat(Color(0.075, 0.06, 0.035, 0.97), ec, int(6 * S), 2))
 
 	var m: MarginContainer = card.get_node("Margin")
@@ -326,19 +326,19 @@ func _make_card(i: int, def: Dictionary, cw: float, ch: float) -> Control:
 		m.add_theme_constant_override("margin_" + side, int(16 * S))
 	m.add_theme_constant_override("margin_top", int(14 * S))
 	m.add_theme_constant_override("margin_bottom", int(14 * S))
-	var v: VBoxContainer = m.get_node("col")
+	var v: VBoxContainer = m.get_node("Col")
 	v.add_theme_constant_override("separation", int(9 * S))
 
-	var bar: ColorRect = v.get_node("bar")
+	var bar: ColorRect = v.get_node("Bar")
 	bar.color = ec
 	bar.custom_minimum_size = Vector2(0, int(3 * S))
 
-	var kind_l: Label = v.get_node("kind")
+	var kind_l: Label = v.get_node("Kind")
 	kind_l.text = String(KIND_NAME.get(String(def.get("kind", "")), ""))
 	kind_l.add_theme_font_size_override("font_size", int(10.0 * S))
 	kind_l.add_theme_color_override("font_color", C["muted"])
 
-	var name_l: Label = v.get_node("card_name")
+	var name_l: Label = v.get_node("CardName")
 	name_l.text = String(def.get("name", ""))
 	name_l.add_theme_font_size_override("font_size", int(22.0 * S))
 	name_l.add_theme_color_override("font_color", ec)
@@ -346,22 +346,22 @@ func _make_card(i: int, def: Dictionary, cw: float, ch: float) -> Control:
 	name_l.add_theme_constant_override("shadow_offset_x", 0)
 	name_l.add_theme_constant_override("shadow_offset_y", 1)
 
-	var ic = v.get_node("icon") # 挂 ui_icon.gd 脚本：无静态类型才能调 setup
+	var ic = v.get_node("Icon") # 挂 ui_icon.gd 脚本：无静态类型才能调 setup
 	ic.custom_minimum_size = Vector2(int(84.0 * S), int(84.0 * S))
 	ic.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	ic.setup(String(KIND_ICON.get(String(def.get("kind", "")), "skill")), Color(ec.r, ec.g, ec.b, 0.88))
 
-	var d: Label = v.get_node("desc")
+	var d: Label = v.get_node("Desc")
 	d.text = String(def.get("desc", ""))
 	d.add_theme_font_size_override("font_size", int(13.0 * S))
 	d.add_theme_color_override("font_color", C["text"])
 	d.custom_minimum_size = Vector2(cw - 34.0 * S, 0)
 
-	var rule: ColorRect = v.get_node("rule")
+	var rule: ColorRect = v.get_node("Rule")
 	rule.color = Color(ec.r, ec.g, ec.b, 0.35)
 	rule.custom_minimum_size = Vector2(0, 1)
 
-	var rar_l: Label = v.get_node("rarity")
+	var rar_l: Label = v.get_node("Rarity")
 	rar_l.text = String(rc["name"])
 	rar_l.add_theme_font_size_override("font_size", int(10.0 * S))
 	rar_l.add_theme_color_override("font_color", ec)
