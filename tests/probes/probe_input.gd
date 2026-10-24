@@ -307,12 +307,16 @@ func _initialize() -> void:
 	# 相机/输入路径不经 _process，冻结不影响 §15 滚轮断言。
 	main.set_process(false)
 	var flat_cells: Array = []
-	for yy in range(22, 42):
-		for xx in range(22, 42):
+	for yy in range(24, 41):
+		for xx in range(24, 41):
 			var g0: float = view.ground_y(xx, yy)
 			var mx := 0.0
-			for k in 6:
-				mx = maxf(mx, absf(view.ground_y(Grid.nx(xx, yy, k), Grid.ny(xx, yy, k)) - g0))
+			# 2026-10-24 重标定：地形有真实高台后，半径 2 内的 1 级台地会挡住投影射线
+			# （实测 (27,24) 被 (27,22) 的 h1 顶面截获）→ 平坦判定扩到半径 2。
+			for dy in range(-2, 3):
+				for dx in range(-2, 3):
+					if Grid.hex_dist(xx, yy, xx + dx, yy + dy) <= 2:
+						mx = maxf(mx, absf(view.ground_y(xx + dx, yy + dy) - g0))
 			if mx <= 0.10:
 				flat_cells.append(Vector2i(xx, yy))
 	check(flat_cells.size() >= 20, "存在平坦格群（%d 格）" % flat_cells.size())
@@ -580,6 +584,10 @@ func _clickable(view, world, x: int, y: int) -> bool:
 	var sp := _sp_of(view, Vector2i(x, y))
 	if sp.x < 0.0 or sp.y < 0.0 or sp.x >= vp_size.x or sp.y >= vp_size.y:
 		return false
+	# 取景拉近后地图边缘会压到 HUD 下：被 HUD 覆盖的格真实输入会被 main.in_hud_region 排除，不算可点击
+	var mn = view.get_parent()
+	if mn != null and mn.has_method("in_hud_region") and mn.in_hud_region(sp.x, sp.y):
+		return false
 	var back: Vector2i = view.pick_cell(sp.x, sp.y)
 	return back.x == x and back.y == y
 
@@ -624,15 +632,19 @@ func _find_ore(view, world) -> Vector2i:
 	for y in 64:
 		for x in 64:
 			if world.grid.at(x, y) == Grid.COVER and world.sc.is_ore(x, y):
-				if _clickable_cover(view, world, x, y):
+				if _clickable_cover(view, x, y):
 					return Vector2i(x, y)
 	return Vector2i(-1, -1)
 
 
 ## 矿格是 COVER（不可通行）——单独的回环检查（不走 _clickable 的 passable 前置）。
-func _clickable_cover(view, world, x: int, y: int) -> bool:
+func _clickable_cover(view, x: int, y: int) -> bool:
 	var sp := _sp_of(view, Vector2i(x, y))
 	if sp.x < 0.0 or sp.y < 0.0 or sp.x >= vp_size.x or sp.y >= vp_size.y:
+		return false
+	# 取景拉近后地图边缘会压到 HUD 下：被 HUD 覆盖的格真实输入会被 main.in_hud_region 排除，不算可点击
+	var mn = view.get_parent()
+	if mn != null and mn.has_method("in_hud_region") and mn.in_hud_region(sp.x, sp.y):
 		return false
 	var back: Vector2i = view.pick_cell(sp.x, sp.y)
 	return back.x == x and back.y == y
@@ -647,6 +659,6 @@ func _find_solid_block(view, world) -> Vector2i:
 				continue
 			if world.grid.at(x, y + 1) != Grid.SOLID or world.grid.at(x, y - 1) != Grid.SOLID or world.grid.at(x + 1, y) != Grid.SOLID or world.grid.at(x - 1, y) != Grid.SOLID:
 				continue
-			if _clickable_cover(view, world, x, y):
+			if _clickable_cover(view, x, y):
 				return Vector2i(x, y)
 	return Vector2i(-1, -1)

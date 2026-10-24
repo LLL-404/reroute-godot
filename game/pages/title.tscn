@@ -1,0 +1,172 @@
+[gd_scene format=3]
+
+[node name="page_title" type="Control"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 0
+
+[node name="title_veil" type="TextureRect" parent="."]
+anchor_left = 0.0
+anchor_right = 1.0
+anchor_top = 0.45
+anchor_bottom = 1.0
+grow_horizontal = 2
+mouse_filter = 2
+
+[node name="fx" type="Control" parent="."]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="col" type="VBoxContainer" parent="."]
+anchor_left = 0.18
+anchor_right = 0.18
+anchor_top = 0.0
+anchor_bottom = 1.0
+mouse_filter = 2
+
+[node name="head" type="HBoxContainer" parent="col"]
+mouse_filter = 2
+
+[node name="accent" type="ColorRect" parent="col/head"]
+mouse_filter = 2
+
+[node name="hcol" type="VBoxContainer" parent="col/head"]
+mouse_filter = 2
+
+[node name="title_row" type="HBoxContainer" parent="col/head/hcol"]
+mouse_filter = 2
+alignment = 1
+
+[node name="char1" type="Label" parent="col/head/hcol/title_row"]
+text = "改"
+
+[node name="char2" type="Label" parent="col/head/hcol/title_row"]
+text = "道"
+
+[node name="tagline" type="Label" parent="col/head/hcol"]
+text = "放墙改道 · 修运河，别只堵路"
+
+[node name="gap1" type="Control" parent="col"]
+mouse_filter = 2
+
+[node name="rule" type="ColorRect" parent="col"]
+mouse_filter = 2
+
+[node name="gap2" type="Control" parent="col"]
+mouse_filter = 2
+
+[node name="seed_gap" type="Control" parent="col"]
+mouse_filter = 2
+
+[node name="seed_row" type="HBoxContainer" parent="col"]
+mouse_filter = 2
+
+[node name="seed_lbl" type="Label" parent="col/seed_row"]
+text = "种子"
+
+[node name="seed_input" type="LineEdit" parent="col/seed_row"]
+placeholder_text = "留空 = 随机种子"
+max_length = 24
+
+[node name="btn_rogue" type="Button" parent="col"]
+text = "肉鸽模式"
+alignment = 0
+focus_mode = 0
+
+[node name="num" type="Label" parent="col/btn_rogue"]
+text = "01"
+
+[node name="bar" type="ColorRect" parent="col/btn_rogue"]
+mouse_filter = 2
+
+[node name="btn_start" type="Button" parent="col"]
+text = "经典对局"
+alignment = 0
+focus_mode = 0
+
+[node name="num" type="Label" parent="col/btn_start"]
+text = "02"
+
+[node name="bar" type="ColorRect" parent="col/btn_start"]
+mouse_filter = 2
+
+[node name="btn_continue" type="Button" parent="col"]
+text = "读档存档"
+alignment = 0
+focus_mode = 0
+
+[node name="num" type="Label" parent="col/btn_continue"]
+text = "03"
+
+[node name="bar" type="ColorRect" parent="col/btn_continue"]
+mouse_filter = 2
+
+[node name="btn_settings" type="Button" parent="col"]
+text = "设置"
+alignment = 0
+focus_mode = 0
+
+[node name="num" type="Label" parent="col/btn_settings"]
+text = "04"
+
+[node name="bar" type="ColorRect" parent="col/btn_settings"]
+mouse_filter = 2
+
+[node name="btn_tips" type="Button" parent="col"]
+text = "玩法说明"
+alignment = 0
+focus_mode = 0
+
+[node name="num" type="Label" parent="col/btn_tips"]
+text = "05"
+
+[node name="bar" type="ColorRect" parent="col/btn_tips"]
+mouse_filter = 2
+
+[node name="btn_quit" type="Button" parent="col"]
+text = "退出游戏"
+alignment = 0
+focus_mode = 0
+
+[node name="num" type="Label" parent="col/btn_quit"]
+text = "06"
+
+[node name="bar" type="ColorRect" parent="col/btn_quit"]
+mouse_filter = 2
+
+[node name="panel_tips" type="PanelContainer" parent="."]
+visible = false
+mouse_filter = 2
+
+[node name="Margin" type="MarginContainer" parent="panel_tips"]
+
+[node name="tips_col" type="VBoxContainer" parent="panel_tips/Margin"]
+
+[node name="tip1" type="Label" parent="panel_tips/Margin/tips_col"]
+text = "守住核心，撑到终局哨响即胜利"
+
+[node name="tip2" type="Label" parent="panel_tips/Margin/tips_col"]
+text = "放墙改道：怪绕得越远，死时赏金越高"
+
+[node name="tip3" type="Label" parent="panel_tips/Margin/tips_col"]
+text = "挖矿得供给；填高 / 挖低能改地形"
+
+[node name="tip4" type="Label" parent="panel_tips/Margin/tips_col"]
+text = "蛮兽皮糙，先清虫群，别让它贴脸"
+
+[node name="tip5" type="Label" parent="panel_tips/Margin/tips_col"]
+text = "英雄的震荡波是保命技，冷却长别空放"
+
+[node name="jam" type="Label" parent="."]
+anchor_top = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
+text = "GameJam 2026 · 聚光灯主题「涌现」"
+vertical_alignment = 2

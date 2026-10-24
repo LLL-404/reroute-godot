@@ -1,0 +1,63 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://game/intro.gd" id="1_intro"]
+
+[node name="Intro" type="CanvasLayer"]
+script = ExtResource("1_intro")
+
+[node name="IntroRoot" type="Control" parent="."]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 0
+
+[node name="IntroTex" type="TextureRect" parent="IntroRoot"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="IntroBlack" type="ColorRect" parent="IntroRoot"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="IntroWorld" type="SubViewport" parent="IntroRoot"]
+own_world_3d = true
+handle_input_locally = false
+render_target_update_mode = 0
+
+[node name="IntroUi" type="Control" parent="IntroRoot"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="GoldRule" type="ColorRect" parent="IntroRoot/IntroUi"]
+visible = false
+mouse_filter = 2
+
+[node name="Tagline" type="Label" parent="IntroRoot/IntroUi"]
+visible = false
+text = "放墙改道 · 修运河，别只堵路"
+horizontal_alignment = 1
+mouse_filter = 2
+
+[node name="Char1" type="Label" parent="IntroRoot/IntroUi"]
+visible = false
+text = "改"
+mouse_filter = 2
+
+[node name="Char2" type="Label" parent="IntroRoot/IntroUi"]
+visible = false
+text = "道"
+mouse_filter = 2

@@ -225,7 +225,7 @@ func _initialize() -> void:
 	check(view.heat_enabled() == false and int(view.debug_stats()["heat"]) == 0, "热层关闭清空")
 
 	# ---- 落差边自然化（T1：分级 / 剖面形状 / 顶点账目 / 重建确定性）----
-	_terrain_edge_check(view, world)
+	_terrain_edge_check(view, world, main)
 
 	# ---- 视觉虫群（纯表现层）：同格 3 只必须错开，且偏移不越出格心安全半径 ----
 	var swarm_cell := _find_free(world, 0, 0, 63, 63, [], Vector2i(32, 32), 400)
@@ -428,15 +428,15 @@ func _verify(view, world) -> void:
 
 
 ## 幽灵逐格断言：盒数 = 格数，且逐格世界位/缩放/染色对拍（直连与斜线共用）。
-func _ghost_cells_check(view, cells: Array, bad: bool) -> void:
-	view.show_ghost(cells, bad)
+func _ghost_cells_check(view, cells: Array, is_bad: bool) -> void:
+	view.show_ghost(cells, is_bad)
 	check(view.ghost_alive == true, "幽灵出现")
 	if not view.ghost_alive:
 		return
 	cmp_int(view.ghost.get_child_count(), cells.size(), "虚空盒数=格数（%d 格）" % cells.size())
 	if view.ghost.get_child_count() != cells.size():
 		return
-	var mat: Material = view.mats["ghost_bad"] if bad else view.mats["ghost_ok"]
+	var mat: Material = view.mats["ghost_bad"] if is_bad else view.mats["ghost_ok"]
 	for i in cells.size():
 		var c: Vector2i = cells[i]
 		var w: Vector3 = view.cell_to_world(c.x, c.y)
@@ -477,31 +477,38 @@ func _find_free(world, x0: int, y0: int, x1: int, y1: int, exclude: Array, far_f
 	return Vector2i(-1, -1)
 
 
-## 落差边自然化断言（2026-10-17 T1）：分级以**模拟高度差**为真值（Δ1=可爬坡/Δ≥2=崖壁/
-## 同层=石阶/实心邻=崖壁）；剖面 P0 恒在顶面边框线（无顶缝）且高度单调不增；网格顶点账目
-## 独立重算逐点吻合；同状态重建两次逐位一致。旧实现无 edge_kind_at → 本段干净 FAIL（负对照）。
-func _terrain_edge_check(view, world) -> void:
+## 落差边自然化断言（2026-10-17 T1；2026-10-23 高度域 -2..5 更新）：分级以**模拟高度差**为真值
+## （Δ1..2=可爬坡 / Δ≥3=崖壁 / 同层=石阶 / 实心邻=崖壁）；剖面 P0 恒在顶面边框线（无顶缝）且
+## 高度单调不增；网格顶点账目独立重算逐点吻合；同状态重建两次逐位一致；负高度坑见 _pit_check。
+## 旧实现无 edge_kind_at → 本段干净 FAIL（负对照）。
+func _terrain_edge_check(view, world, main) -> void:
 	var T = view.terrain
 	if not (T.has_method("edge_kind_at") and T.has_method("edge_profile")):
 		fail("地形自然化接口缺失（edge_kind_at/edge_profile；负对照=旧实现）")
 		return
 	var core_cmap: Dictionary = view.core.get_script().get_script_constant_map()
 	var CELL_N: int = int(core_cmap["CELL_N"])
+	var hstep: float = float(core_cmap["H_STEP"])
 
-	# 平整格（六邻同层且空置）→ 填两级验证分级真值
+	# 平整 h0 格（六邻同层且空置）→ 填三级验证分级真值（1..2 级可爬 / 3 级崖壁）
 	var c := _find_flat(world, CELL_N, 8, 24, 20, 34)
-	check(c.x >= 0, "平整格扫描（六邻同层 + 空置 + 邻界内）")
+	check(c.x >= 0, "平整格扫描（六邻同层 h0 + 空置 + 邻界内）")
 	if c.x < 0:
 		return
 	var h0: int = world.grid.get_h(c.x, c.y)
+	cmp_int(h0, 0, "平整格基准高度 = 0（三级填高留余量）")
 	world.apply_command({ "kind": "fill", "x": c.x, "y": c.y })
 	cmp_int(world.grid.get_h(c.x, c.y), h0 + 1, "填一级成功")
 	var kinds1 := _edge_kinds6(T, c)
-	check(_all_eq(kinds1, 1), "填一级后 6 边全为可爬坡 EDGE_RAMP（kinds=%s）" % str(kinds1))
+	check(_all_eq(kinds1, 1), "填一级（dh=1）6 边全为可爬坡 EDGE_RAMP（kinds=%s）" % str(kinds1))
 	world.apply_command({ "kind": "fill", "x": c.x, "y": c.y })
 	cmp_int(world.grid.get_h(c.x, c.y), h0 + 2, "填二级成功")
 	var kinds2 := _edge_kinds6(T, c)
-	check(_all_eq(kinds2, 2), "填二级后 6 边全为崖壁 EDGE_CLIFF（kinds=%s）" % str(kinds2))
+	check(_all_eq(kinds2, 1), "填二级（dh=2）仍为可爬坡 EDGE_RAMP（kinds=%s）" % str(kinds2))
+	world.apply_command({ "kind": "fill", "x": c.x, "y": c.y })
+	cmp_int(world.grid.get_h(c.x, c.y), h0 + 3, "填三级成功")
+	var kinds3 := _edge_kinds6(T, c)
+	check(_all_eq(kinds3, 2), "填三级（dh=3）6 边全为崖壁 EDGE_CLIFF（kinds=%s）" % str(kinds3))
 
 	# 重建后拿网格 → 顶点账目独立重算 + 确定性
 	view.sync(world)
@@ -510,7 +517,7 @@ func _terrain_edge_check(view, world) -> void:
 	var v1: PackedVector3Array = arr1[Mesh.ARRAY_VERTEX]
 	var i1: PackedInt32Array = arr1[Mesh.ARRAY_INDEX]
 	var expect := _edge_verts_expect(T, CELL_N)
-	cmp_int(v1.size(), expect, "顶点账目（独立重算：顶面 7×4096 + 逐边 strip×4×(双面×2)）")
+	cmp_int(v1.size(), expect, "顶点账目（独立重算：顶面 13×4096（A8 中心+内环+角环）+ 逐边 strip×4×(双面×2)）")
 	check(v1.size() > 4096 * 7 and v1.size() < 4096 * 64, "顶点数量级可控（%d）" % v1.size())
 	T._rebuild_field()
 	var arr2: Array = T._hex.mesh.surface_get_arrays(0)
@@ -518,14 +525,14 @@ func _terrain_edge_check(view, world) -> void:
 	var i2: PackedInt32Array = arr2[Mesh.ARRAY_INDEX]
 	check(v2 == v1 and i2 == i1, "同状态重建逐位一致（顶点 %d/索引 %d）" % [v1.size(), i1.size()])
 
-	# 剖面形状（当前 = 二级高格 vs 邻格：崖壁）
+	# 剖面形状（当前 = 三级高格 vs 邻格：崖壁）
 	_profile_shape_check(T, CELL_N, c.x, c.y, 0, 2)
-	# 降一级 → 可爬坡剖面
+	# 降一级（dh=2）→ 可爬坡剖面（新口径：落差 2 仍是可爬坡）
 	world.apply_command({ "kind": "lower", "x": c.x, "y": c.y })
 	var hd: int = world.grid.get_h(c.x, c.y)
-	cmp_int(hd, h0 + 1, "降一级成功")
+	cmp_int(hd, h0 + 2, "降一级成功")
 	var kinds_l := _edge_kinds6(T, c)
-	check(_all_eq(kinds_l, 1), "降一级后 6 边回可爬坡（kinds=%s）" % str(kinds_l))
+	check(_all_eq(kinds_l, 1), "降一级后（dh=2）6 边回可爬坡（kinds=%s）" % str(kinds_l))
 	view.sync(world)
 	_profile_shape_check(T, CELL_N, c.x, c.y, 0, 1)
 
@@ -539,6 +546,86 @@ func _terrain_edge_check(view, world) -> void:
 	if me.x >= 0:
 		cmp_int(T.edge_kind_at(me.x, me.y, me.z), 0, "同层高差边 = 石阶（微差）")
 	_plate_merge_check(T, world, CELL_N)
+	_pit_check(view, world, CELL_N, hstep, main)
+
+
+## 负高度坑（2026-10-23 Task6）：连挖两级到 -2 → 顶面/贴地下沉 2×H_STEP；
+## 6 条坑壁由**高邻**按 dh=2 生成 RAMP（低侧不叠反向剖面，顶点账目逐点吻合）；
+## 邻格抬到 +1 后 dh=3 → 崖壁剖面（端点贴坑底、高度单调）。
+func _pit_check(view, world, CELL_N: int, hstep: float, main) -> void:
+	var T = view.terrain
+	var p := _find_flat(world, CELL_N, 8, 24, 20, 34)
+	check(p.x >= 0, "坑底格扫描（六邻同层 h0）")
+	if p.x < 0:
+		return
+	var n := CELL_N
+	var top0: float = T._cell_top[p.y * n + p.x]
+	var gy0: float = T.ground_y(p.x, p.y)
+	world.apply_command({ "kind": "lower", "x": p.x, "y": p.y })
+	world.apply_command({ "kind": "lower", "x": p.x, "y": p.y })
+	cmp_int(world.grid.get_h(p.x, p.y), -2, "连挖两级到 -2 坑底")
+	view.sync(world)
+	var top1: float = T._cell_top[p.y * n + p.x]
+	var gy1: float = T.ground_y(p.x, p.y)
+	check(absf((top0 - top1) - 2.0 * hstep) <= 0.5, "坑底顶面下沉 ≈2×H_STEP（%.3f→%.3f）" % [top0, top1])
+	check(absf((gy0 - gy1) - 2.0 * hstep) <= 1e-6, "贴地 ground_y 同步下沉 2×H_STEP（%.3f→%.3f）" % [gy0, gy1])
+	# -2 已到底：模式判定无效（幽灵红板）+ 模拟层拒绝且不扣费
+	check(not main.mode_valid("lower", p.x, p.y), "坑底 -2 挖低模式判无效")
+	var sup0: int = world.supply
+	world.apply_command({ "kind": "lower", "x": p.x, "y": p.y })
+	cmp_int(world.grid.get_h(p.x, p.y), -2, "坑底 -2 挖低被模拟层拒绝")
+	cmp_int(world.supply, sup0, "-2 拒绝不扣供给")
+	# 低侧闭合：坑底必须低于周围 6 邻顶（无反向剖面可画）
+	var below := true
+	var ramp_n := 0
+	var wrong_n := 0
+	var nb0 := Vector3i(-1, -1, -1) # 第一条可用的高邻边（供剖面断言）
+	for k in 6:
+		var nx := Grid.nx(p.x, p.y, k)
+		var ny := Grid.ny(p.x, p.y, k)
+		if nx < 0 or ny < 0 or nx >= CELL_N or ny >= CELL_N:
+			continue
+		if T._cell_top[ny * n + nx] <= top1:
+			below = false
+		var k2 := _opp_dir(nx, ny, p.x, p.y)
+		if k2 < 0:
+			continue
+		if T.edge_kind_at(nx, ny, k2) == T.EDGE_RAMP:
+			ramp_n += 1
+		else:
+			wrong_n += 1
+		if nb0.x < 0:
+			nb0 = Vector3i(nx, ny, k2)
+	check(below, "坑底低于全部邻顶（低侧跳过完整剖面，由高侧闭合）")
+	cmp_int(ramp_n, 6, "坑壁 6 边由高邻按 dh=2 生成 RAMP")
+	cmp_int(wrong_n, 0, "坑壁无误分崖壁/石阶")
+	# 坑底色：负高度按低洼沙色处理（坡度岩权压低，不刷成深色岩面块）
+	var c_pit: Color = T._field_color_at(0.0, 0.0, 0.0, false, 5.0, true)
+	var c_top: Color = T._field_color_at(0.0, 0.0, 0.0, false, 5.0)
+	check(c_pit.a <= 0.19 and c_pit.a < c_top.a, "坑底岩权压低（低洼沙色 a=%.2f/%.2f）" % [c_pit.a, c_top.a])
+	if nb0.x >= 0:
+		_profile_shape_check(T, CELL_N, nb0.x, nb0.y, nb0.z, 1)
+	var m2: ArrayMesh = T._hex.mesh
+	var vm: PackedVector3Array = m2.surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
+	cmp_int(vm.size(), _edge_verts_expect(T, CELL_N), "坑态顶点账目逐点吻合（低侧不叠反向剖面）")
+	# 坑底对 +1（dh=3）→ 崖壁（白盒改高；探针专用，之后还原）
+	if nb0.x >= 0:
+		var hnb: int = world.grid.get_h(nb0.x, nb0.y)
+		world.grid.set_h(nb0.x, nb0.y, 1)
+		view.sync(world)
+		cmp_int(T.edge_kind_at(nb0.x, nb0.y, nb0.z), 2, "坑底对 +1 高台（dh=3）= 崖壁 EDGE_CLIFF")
+		_profile_shape_check(T, CELL_N, nb0.x, nb0.y, nb0.z, 2)
+		world.grid.set_h(nb0.x, nb0.y, hnb)
+	world.grid.set_h(p.x, p.y, 0)
+	view.sync(world)
+
+
+## 六向反号：从 (nx,ny) 看回 (x,y) 的邻向（越界/非邻返回 -1）。
+func _opp_dir(nx: int, ny: int, x: int, y: int) -> int:
+	for k in 6:
+		if Grid.nx(nx, ny, k) == x and Grid.ny(nx, ny, k) == y:
+			return k
+	return -1
 
 
 ## 自然地形并台（2026-10-20 B）：场内 SOLID 岩顶应全部落在 PLATE_STEP 整倍上、内部以共面为主、
@@ -600,6 +687,7 @@ func _profile_shape_check(T, CELL_N: int, x: int, y: int, k: int, kind: int) -> 
 	var ny := Grid.ny(x, y, k)
 	var t_lo: float = T._cell_top[ny * CELL_N + nx]
 	var p: PackedFloat64Array = T.edge_profile(x, y, k, t, t_lo, kind)
+	@warning_ignore("integer_division")
 	var pts: int = p.size() / 2
 	check(pts >= 4, "剖面点数 ≥4（kind=%d pts=%d）" % [kind, pts])
 	check(p[0] == 0.0 and p[1] == t, "剖面 P0 在顶面边框线（kind=%d）" % kind)
@@ -614,32 +702,44 @@ func _profile_shape_check(T, CELL_N: int, x: int, y: int, k: int, kind: int) -> 
 	check(desc, "剖面高度单调不增（kind=%d）" % kind)
 
 
-## 顶点账目独立重算：顶面恒 7 顶点/格；界外边（崖壁·双面）按崖壁剖面 strip×4×2；
+## 顶点账目独立重算：顶面恒 13 顶点/格；界外边（崖壁·双面）按崖壁剖面 strip×4×2；
 ## 内侧画出边按 kind 剖面点数（函数内自调 edge_profile 取点数，跟随实现演进）× 4 顶点；被跳过边 0。
 ## 等高阈值取 T.EDGE_MIN_DH（2026-10-20 由 0.02 降到 0.001：旧阈值会漏画 0~2cm 高差边，
 ## 平顶缝透出背景成「边缘发光」；探针与渲染共用同一常量，防止再次分叉）。
+## 2026-10-23：界外边同渲染口径——界外地面高于本格顶（负高度低侧）时不画剖面（wall=0）。
 func _edge_verts_expect(T, CELL_N: int) -> int:
-	var min_dh: float = float(T.get_script().get_script_constant_map().get("EDGE_MIN_DH", 0.001))
+	var cmap: Dictionary = T.get_script().get_script_constant_map()
+	var min_dh: float = float(cmap.get("EDGE_MIN_DH", 0.001))
+	var embed: float = float(cmap.get("WALL_EMBED", 0.5))
 	var total := 0
 	for y in CELL_N:
 		for x in CELL_N:
-			total += 7
+			total += 13 # A8 顶面：中心 + 内环 6 + 角环 6
 			var t: float = T._cell_top[y * CELL_N + x]
 			for k in 6:
 				var nx := Grid.nx(x, y, k)
 				var ny := Grid.ny(x, y, k)
 				if nx < 0 or ny < 0 or nx >= CELL_N or ny >= CELL_N:
-					var po: int = T.edge_profile(x, y, k, t, t - 1.0, T.EDGE_CLIFF).size() / 2
+					var w: Vector3 = T.core.cell_to_world(x, y)
+					var ca: Vector2 = T.core.HEX_CORNERS[T.HEX_EDGE_A[k]]
+					var cb: Vector2 = T.core.HEX_CORNERS[T.HEX_EDGE_B[k]]
+					var tlo_rim: float = minf(T.ground_h(w.x + ca.x, w.z + ca.y), T.ground_h(w.x + cb.x, w.z + cb.y)) - embed
+					if t <= tlo_rim + min_dh:
+						continue # 本格是低侧：不画反向剖面
+					@warning_ignore("integer_division")
+					var po: int = T.edge_profile(x, y, k, t, tlo_rim, T.EDGE_CLIFF).size() / 2
 					total += (po - 1) * 4 * 2
 					continue
 				var t2: float = T._cell_top[ny * CELL_N + nx]
 				if t <= t2 + min_dh:
 					continue
+				@warning_ignore("integer_division")
 				var pts: int = T.edge_profile(x, y, k, t, t2, T.edge_kind_at(x, y, k)).size() / 2
 				total += (pts - 1) * 4
 	return total
 
 
+## 平整格扫描：通行 + 空置 + 六邻同层且高度 = 0（填三级/挖两级用例的基准格）。
 func _find_flat(world, CELL_N: int, x0: int, y0: int, x1: int, y1: int) -> Vector2i:
 	for y in range(y0, y1 + 1):
 		for x in range(x0, x1 + 1):
@@ -647,6 +747,8 @@ func _find_flat(world, CELL_N: int, x0: int, y0: int, x1: int, y1: int) -> Vecto
 				continue
 			var hr: Dictionary = world.hero
 			if x == int(hr["x"]) and y == int(hr["y"]):
+				continue
+			if world.grid.get_h(x, y) != 0:
 				continue
 			var h: int = world.grid.get_h(x, y)
 			var ok := true

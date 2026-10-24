@@ -11,22 +11,27 @@ extends RefCounted
 #   · 本模块零行为变化：不触碰既有模拟路径，probe_golden 指纹不受影响。
 
 # v2（2026-10-16 世界生成）：state 增 sc_seed（布局种子），读档按种子重建校验；旧档自然拒载。
-const FORMAT_VERSION := 2
+# v3（2026-10-23 挖坑/爬坡）：高度改 u8 偏移编码（支持 -2..5），单位行增 climb_wait（11 字段）。
+const FORMAT_VERSION := 3
 
 
 ## 世界 → 存档字典。run_index 供读档还原蓝图视觉（Blueprint.pick(run_index) 派生）。
 ## 存档前把摊销补场的欠账同步补完（仅派生态，不进 canonical）：否则「暂停瞬间存档」
 ## 落在补场窗口内时，原世界后续几 tick 的 dir_at 与读档即完成的场不一致，续跑会漂。
 static func encode(world: World, run_index: int) -> Dictionary:
-	if world.rebuilding or world.field_rev != world.grid.rev:
+	if world.rebuilding or world.rebuilding_heavy or world.field_rev != world.grid.rev or world.field_heavy_rev != world.grid.rev:
 		world._rebuild_field_sync()
 	var cells := PackedByteArray(world.grid.cells)
-	var hgt := PackedByteArray(world.grid.hgt)
+	# 高度逐元素偏移编码（PackedByteArray(Array) 会把负值截断成 0..255 的非预期值）
+	var hgt := PackedByteArray()
+	for i in world.grid.w * world.grid.h:
+		hgt.append(Grid.h_to_u8(world.grid.hgt[i]))
 	var units: Array = []
 	for u in world.units:
 		units.append([
 			u["id"], u["x"], u["y"], u["speed_ticks"], u["stuck_ticks"],
 			u["kind"], u["hp"], u["atk_cd"], u["atk_target"], u["traveled"],
+			u["climb_wait"],
 		])
 	var builds: Array = []
 	for b in world.buildings:
@@ -109,7 +114,7 @@ static func decode(d) -> World:
 	# 格子状态整写 + padded 镜像重建（pmap/hp 为派生热副本）
 	for i in sc.w * sc.h:
 		world.grid.cells[i] = cells[i]
-		world.grid.hgt[i] = hgt[i]
+		world.grid.hgt[i] = Grid.u8_to_h(hgt[i])
 	for y in sc.h:
 		for x in sc.w:
 			var p := world.grid.pad_idx(x, y)
@@ -120,13 +125,14 @@ static func decode(d) -> World:
 
 	world.units = []
 	for row in st["units"]:
-		if typeof(row) != TYPE_ARRAY or row.size() != 10:
+		if typeof(row) != TYPE_ARRAY or row.size() != 11:
 			return null
 		world.units.append({
 			"id": int(row[0]), "x": int(row[1]), "y": int(row[2]),
 			"speed_ticks": int(row[3]), "stuck_ticks": int(row[4]),
 			"kind": int(row[5]), "hp": int(row[6]), "atk_cd": int(row[7]),
 			"atk_target": int(row[8]), "traveled": int(row[9]),
+			"climb_wait": int(row[10]),
 		})
 	world.buildings = []
 	world.by_cell = {}
@@ -153,9 +159,13 @@ static func decode(d) -> World:
 
 	# 派生态复位：主场同步重建；围攻场 / 英雄场惰性（rev=-1 触发下次重建）
 	world.rebuilding = false
+	world.rebuilding_heavy = false
 	world.siege = null
 	world.siege_rev = -1
 	world.siege_stamp = -1
+	world.siege_heavy = null
+	world.siege_heavy_rev = -1
+	world.siege_heavy_stamp = -1
 	world.hero_field_rev = -1
 	world.hero_goal_tx = -1
 	world.hero_goal_ty = -1

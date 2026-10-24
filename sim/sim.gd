@@ -7,11 +7,16 @@ const TICK_HZ := 20
 const ORE_YIELD := 25 # 挖开一个矿格 +供给
 const START_SUPPLY := 300
 
-# 高度层（单向崖）：0..5 整数；单位边可走 ⇔ h(目标)−h(当前) ≤ 1（下崖任意、爬 ≤1）；英雄无视高度。
-const H_MIN := 0
+# 高度层（单向崖）：-2..5 整数（可挖出两层坑）；单位边可走 ⇔ 爬升 ≤ 兵种 climb_max
+# （下崖任意）；英雄无视高度。
+const H_MIN := -2
 const H_MAX := 5
 const FILL_COST := 15 # 填高 +1
 const LOWER_COST := 10 # 挖低 −1
+
+# 爬坡：每爬升一级，流场边权额外 +CLIMB_COST；跨过爬坡边后额外等待若干 tick。
+const CLIMB_COST := 10
+const CLIMB_EXTRA_TICKS := 2
 
 # 建筑：墙 / 箭塔 / 核心（工坊砍掉：不做经济运营）
 const BUILDINGS := [
@@ -25,8 +30,8 @@ const B_CORE := 3
 
 # 敌军 2 原型：啃墙的（蛮兽）+ 跑快的（虫群）。speed = 走一格要几 tick（越大越慢）。
 const ENEMIES := [
-	{ "name": "swarm", "hp": 30, "speed_ticks": 4, "damage": 8, "cooldown": 12, "reward": 3 },
-	{ "name": "behemoth", "hp": 240, "speed_ticks": 8, "damage": 60, "cooldown": 24, "reward": 14 },
+	{ "name": "swarm", "hp": 30, "speed_ticks": 4, "damage": 8, "cooldown": 12, "reward": 3, "climb_max": 2 },
+	{ "name": "behemoth", "hp": 240, "speed_ticks": 8, "damage": 60, "cooldown": 24, "reward": 14, "climb_max": 1 },
 ]
 const E_SWARM := 1
 const E_BEHEMOTH := 2

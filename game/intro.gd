@@ -30,7 +30,6 @@ const COL_GOLD := Color8(200, 168, 108)
 const COL_MUTED := Color8(176, 164, 132)
 const CRYSTAL_H := 1.8 # 取景目标高（世界单位；相机 fov45 距 3.3 时占屏高约 68%）
 const YAW_SPEED := 0.32 # rad/s
-const TAGLINE := "放墙改道 · 修运河，别只堵路"
 
 var t := 0.0 # 状态机累计时间（探针可读/手动推进）
 var skipping := false # 已触发跳过
@@ -76,39 +75,19 @@ func begin(sfx_cb: Callable = Callable(), dark: Dictionary = {}) -> void:
 		if w is Node3D:
 			_world = w
 
-	_root = Control.new()
-	_root.name = "IntroRoot"
-	_root.set_anchors_preset(Control.PRESET_FULL_RECT)
-	_root.mouse_filter = Control.MOUSE_FILTER_STOP # 吞鼠标：intro 期间点不到标题按钮
-	add_child(_root)
-
-	# 叠序（自下而上）：子视口画面 → 黑幕 → 金字层；P0 黑幕=1，P1 起渐退至纯露出
-	_tex = TextureRect.new()
-	_tex.name = "IntroTex"
-	_tex.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_root = $IntroRoot
+	_tex = _root.get_node("IntroTex")
 	_tex.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	_tex.stretch_mode = TextureRect.STRETCH_SCALE # 子视口 0.7× 拉伸回全屏（默认线性过滤）
-	_tex.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_root.add_child(_tex)
-
-	_black = ColorRect.new()
-	_black.name = "IntroBlack"
+	_black = _root.get_node("IntroBlack")
 	_black.color = Color(0.0, 0.0, 0.0, 1.0)
-	_black.set_anchors_preset(Control.PRESET_FULL_RECT)
-	_black.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_root.add_child(_black)
-
-	_sub = SubViewport.new()
-	_sub.name = "IntroWorld"
-	_sub.own_world_3d = true
+	_sub = _root.get_node("IntroWorld")
 	_sub.size = Vector2i(maxi(1, int(float(_vp_w) * SUB_SCALE)), maxi(1, int(float(_vp_h) * SUB_SCALE)))
 	_sub.render_target_update_mode = SubViewport.UPDATE_DISABLED # 首拍 _process 预热一帧后回关，P1 起常开
-	_sub.handle_input_locally = false
-	_root.add_child(_sub)
 	_build_3d()
 	_tex.texture = _sub.get_texture()
 
-	_build_ui()
+	_bind_ui()
 
 	if not sfx_cb.is_null():
 		sfx_cb.call("intro_stinger.mp3", 0.9)
@@ -225,22 +204,15 @@ func _build_3d() -> void:
 	_sub.set_meta("dust", dust)
 
 
-## 2D 叠字：衬线逐字（方案同 screens._serif_title：子集无空格字形 → 布局字距）。
+## 绑定场景骨架（intro.tscn）：只取引用、注入色/字体/字号（S 缩放）与锚点，不建结构。
 ## 逐字用绝对定位（不用容器——容器每帧重排会顶掉位置动画）。
-func _build_ui() -> void:
-	var ui := Control.new()
-	ui.name = "IntroUi"
-	ui.set_anchors_preset(Control.PRESET_FULL_RECT)
-	ui.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_root.add_child(ui)
-
+func _bind_ui() -> void:
+	var ui: Control = _root.get_node("IntroUi")
 	var s := _S()
 
-	# 金线（先建，_layout_chars 要摆它）
-	_rule = ColorRect.new()
-	_rule.name = "GoldRule"
+	# 金线（先绑，_layout_chars 要摆它）
+	_rule = ui.get_node("GoldRule")
 	_rule.color = UiStyle.RULE
-	_rule.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_rule.anchor_left = 0.5
 	_rule.anchor_right = 0.5
 	_rule.anchor_top = 0.655
@@ -250,18 +222,12 @@ func _build_ui() -> void:
 	_rule.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	_rule.offset_left = 0.0
 	_rule.offset_right = 0.0
-	_rule.visible = false
-	ui.add_child(_rule)
 
-	# 副标语（先建，_layout_chars 要摆它）
-	_tagline = Label.new()
-	_tagline.name = "Tagline"
-	_tagline.text = TAGLINE
+	# 副标语（静态文案在场景里）
+	_tagline = ui.get_node("Tagline")
 	_tagline.add_theme_font_override("font", F_SANS)
 	_tagline.add_theme_font_size_override("font_size", int(13.0 * s))
 	_tagline.add_theme_color_override("font_color", _col("muted"))
-	_tagline.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_tagline.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_tagline.anchor_left = 0.5
 	_tagline.anchor_right = 0.5
 	_tagline.anchor_top = 0.70
@@ -269,20 +235,14 @@ func _build_ui() -> void:
 	_tagline.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	_tagline.grow_vertical = Control.GROW_DIRECTION_BOTH
 	_tagline.modulate.a = 0.0
-	_tagline.visible = false
-	ui.add_child(_tagline)
 
-	# 衬线逐字（后建，layout 前字体/字号已定）
-	for ch in "改道":
-		var lbl := Label.new()
-		lbl.text = ch
+	# 衬线逐字（场景只存两个静态字，字号随 S 运行时注入）
+	for i in 2:
+		var lbl: Label = ui.get_node("Char%d" % (i + 1))
 		lbl.add_theme_font_override("font", F_SERIF)
 		lbl.add_theme_font_size_override("font_size", int(76.0 * s))
 		lbl.add_theme_color_override("font_color", _col("gold_hi"))
-		lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		lbl.modulate.a = 0.0
-		lbl.visible = false
-		ui.add_child(lbl)
 		_char_labels.append(lbl)
 	_layout_chars()
 	for i in _char_labels.size():

@@ -22,6 +22,7 @@ func _initialize() -> void:
 		kit.eq(fb.fingerprint(), 3214735720, "FNV foobar 锚点"))
 
 	preload("res://tests/test_rng.gd").new().register(kit)
+	preload("res://tests/test_seed_codec.gd").new().register(kit)
 	preload("res://tests/test_canon.gd").new().register(kit)
 	preload("res://tests/test_grid.gd").new().register(kit)
 	preload("res://tests/test_flowfield.gd").new().register(kit)

@@ -192,7 +192,11 @@ func play(player: AnimationPlayer, clip: String, looped: bool) -> void:
 	var anim := player.get_animation(clip)
 	if anim != null:
 		anim.loop_mode = Animation.LOOP_LINEAR if looped else Animation.LOOP_NONE
-	player.play(clip)
+	# 同一动作仍在播时要从头重播（塔连射 / 核心连续受击）
+	if player.current_animation == clip and player.is_playing():
+		player.seek(0.0, true)
+	else:
+		player.play(clip)
 
 
 ## 单位模型：wrapper（外部控制位置/朝向/脉冲缩放）+ 内部 glb 实例（缩放与底部中心校准）。

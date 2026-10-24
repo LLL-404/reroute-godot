@@ -7,7 +7,6 @@ extends Node3D
 # 本文件只做两件事：_ready 组装；把组件公共面原样转发为 view.xxx（外部访问零变化）。
 # 视图层只读模拟状态，绝不回写；插值用的 prev 格存组件里，不进指纹。
 
-const Blueprint = preload("res://game/blueprint.gd")
 const ModelsScript = preload("res://game/models.gd")
 
 const ViewCoreScript = preload("res://game/view_core.gd")
@@ -37,8 +36,8 @@ func _ready() -> void:
 	core.setup()
 	terrain.setup_roots()
 	entities.is_ore = func(_x: int, _y: int) -> bool: return false
-	# 首次地貌：canyon（同母版 View.init；逐局由 main.new_game 换装）
-	terrain.apply_blueprint(Blueprint.get_preset("canyon"), 0)
+	# 首帧不铺地貌：main._boot 紧接着就会 new_game 应用当局蓝图；预铺 canyon 纯属重复构建
+	# （实测多花约 2s 冷启动，且一帧都看不到）。隐私门分支不建世界，显示为空白背景可接受。
 	core._ensure_camera()
 	core.fit_camera()
 	audio._setup_audio()
@@ -107,8 +106,8 @@ func update_shake(dt: float) -> void:
 
 
 ## 应用蓝图（→ view_terrain）；anchor 可选：地标对齐当局 Scenario（见 blueprint.compose）
-func apply_blueprint(bp: Dictionary, seed: int, anchor: Dictionary = {}) -> void:
-	terrain.apply_blueprint(bp, seed, anchor)
+func apply_blueprint(bp: Dictionary, bp_seed: int, anchor: Dictionary = {}) -> void:
+	terrain.apply_blueprint(bp, bp_seed, anchor)
 
 
 ## 视频/画质应用（渲染缩放/抗锯齿/阴影/雾/景深/亮度 + 特效质量；→ view_core / view_entities）

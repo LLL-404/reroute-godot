@@ -62,7 +62,14 @@ static func default_cfg() -> Dictionary:
 		"bright_pct": 100,
 		"runs": 0,
 		"privacy_agreed": false,
+		"seed_text": "", # 世界种子输入原样（空串 = 每局随机；文字由 SeedCode 哈希）
 	}
+
+
+## 种子文本清洗：去首尾空白 + 截到 SeedCode.MAX_LEN（读档 / 写盘 / 输入三处同一口径）
+static func clean_seed_text(text: String) -> String:
+	var s := text.strip_edges()
+	return s.substr(0, SeedCode.MAX_LEN) if s.length() > SeedCode.MAX_LEN else s
 
 
 ## 平台抗锯齿候选（安卓 Mobile 渲染器无 TAA）
@@ -108,6 +115,7 @@ static func load_cfg() -> Dictionary:
 		cfg["bright_pct"] = clampi(int(cf.get_value("video", "bright_pct", cfg["bright_pct"])), 70, 130)
 		cfg["runs"] = maxi(0, int(cf.get_value("progress", "runs", cfg["runs"])))
 		cfg["privacy_agreed"] = bool(cf.get_value("privacy", "agreed", cfg["privacy_agreed"]))
+		cfg["seed_text"] = clean_seed_text(str(cf.get_value("game", "seed_text", cfg["seed_text"])))
 	return cfg
 
 
@@ -138,6 +146,7 @@ static func save_cfg(cfg: Dictionary) -> void:
 	cf.set_value("video", "bright_pct", clampi(int(cfg.get("bright_pct", def["bright_pct"])), 70, 130))
 	cf.set_value("progress", "runs", maxi(0, int(cfg.get("runs", prev_runs))))
 	cf.set_value("privacy", "agreed", bool(cfg.get("privacy_agreed", prev_agreed)))
+	cf.set_value("game", "seed_text", clean_seed_text(str(cfg.get("seed_text", "")))) # 写盘前统一清洗
 	cf.save(CFG_PATH)
 
 

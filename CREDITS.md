@@ -194,7 +194,7 @@ Android `launcher_icons` 主图 + 自适应前后景）。D1-7 产。
   - 来源：本机 `C:\Windows\Fonts\Noto Sans SC (TrueType).otf` → `assets/fonts/NotoSansSC-Regular.otf`
   - 许可自证：字体自身 name 表写明 `SIL Open Font License, Version 1.1`
   - 许可文本随包：`assets/fonts/OFL.txt` + 根目录 `THIRD-PARTY-NOTICES.txt`，
-    两者均已加入 `export_presets.cfg` 的 `include_filter`（Godot 默认不打包 `.txt`）
+	两者均已加入 `export_presets.cfg` 的 `include_filter`（Godot 默认不打包 `.txt`）
   - 代码：`game/hud.gd` 主题字体路径、`game/selfcheck.gd` 断言均已更新
   - 旧字体、其 `.import` 与 `.godot/imported/` 陈旧缓存已删除
 - **回归验证**（全部通过，无基线变更）：

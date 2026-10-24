@@ -7,11 +7,20 @@ extends RefCounted
 const CELL_N := 64
 const HALF := 32.0
 const H_STEP := 1.2 # sim 高度层 1.2m/级
+const MAP_MIN_VISIBLE := 0.75 # 平移时地图至少占屏幕面积的比例（场外最多露 1/4）
 
 # 取景留边（px 基准）：上让顶栏（实高 56）、右让按钮带（列宽 160）、下让提示余量（同母版口径）
+# 2026-10-22：左留白归零 —— 原按左右对称各留 160px 推导，左侧纯属对称留白，画面左缘露出
+# 一大片场外沙地（即玩家说的「太远、能看到地图外面空旷的地方」）。改为地图左缘贴屏幕左缘、
+# 水平中心压到可交互区中心：镜头前进约 10%，地图占屏 +17%，顶部/底部场外同时收窄。
 const RESERVE_TOP := 56.0
 const RESERVE_RIGHT := 160.0
 const RESERVE_BOTTOM := 22.0
+const RESERVE_LEFT := 0.0
+# 2026-10-23：俯角固定 42°（原 36..52 二分贴边）。FOV 45→30 后近大远小减半，
+# 不再靠抬高俯角去撑满纵向——52° 会把高度差压平却没有消掉透视缩短。
+const PITCH_DEG := 42.0
+const CAM_FOV := 30.0
 
 # 色板（albedo）。ground_lo/ground/ground_hi/rock 每局被蓝图 palette 覆盖；
 # gold/rubble 为占位块色（真实资产后续轮替换）。
@@ -45,6 +54,7 @@ var sun: DirectionalLight3D
 var _dof_attrs: CameraAttributesPractical = null # 景深属性（懒建；关闭时不挂相机）
 var _post_q := 2 # 后期处理档（雾距倍率：低 1.6× / 中 1.25× / 高 1.0×）
 var _fog_base := Vector2(55.0, 170.0) # 当前地图视觉动机的雾起止基准（view_terrain 应用调色板时写入）
+var _fog_fit_mult := 1.0 # 取景视距外推系数：雾基准按横屏 ~76m 取景调；竖屏/小窗视距被推远时同步外推，否则地图被雾吞成纯背景色
 
 var camera: Camera3D
 var focus := Vector3.ZERO # 相机注视的地面点（y=0；平移/旋转围绕它）
@@ -52,6 +62,7 @@ var yaw := 0.0 # 水平旋转（绕 Y，正 = 左旋；QE 修改）
 var _pitch := 0.0 # 基准俯角（rad，取景时定；操控不改）
 var _dist := 0.0 # 相机到 focus 的基准距离（取景时定；滚轮缩放叠乘 _zoom）
 var _zoom := 1.0 # 滚轮缩放倍率（0.6–1.8；取景重置 1.0）
+var _fit_pull := 0.90 # 取景后的额外拉近系数（<1 = 更近）：0.90 = 地图四边各溢出约半格~一格，画面几乎全是地图
 # 震屏（B3）：只做平移抖动，不旋转相机 —— 旋转会让 world_to_screen 缓存与 HUD 对位漂移。
 var shake_on := true # 探针运行时关闭（截图不能被抖偏，像素校验口径）
 var shake_t := 0.0 # 剩余时间（秒）
@@ -77,8 +88,8 @@ func setup() -> void:
 	env.background_mode = Environment.BG_COLOR
 	env.background_color = Color(0.55, 0.44, 0.33)
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	env.ambient_light_color = Color(0.22, 0.36, 0.78) # 冷调天光（落日暖阳 + 冷影对比）：红压到 0.22、蓝抬到 0.78，才能透过暖砂 albedo 显出冷影
-	env.ambient_light_energy = 0.34 # 2026-10-21 法线修复后重平衡：0.50 → 0.24 → 0.34（补冷量）
+	env.ambient_light_color = Color(0.34, 0.42, 0.64) # 冷调天光：A8 减低饱和，暗部从蓝黑回到冷棕
+	env.ambient_light_energy = 0.48
 	env.tonemap_mode = Environment.TONE_MAPPER_ACES # 2026-10-21：线性 tonemap 下 1.45 的主光会削顶，换 ACES 收高光
 	env.fog_enabled = true
 	env.fog_mode = Environment.FOG_MODE_DEPTH
@@ -105,12 +116,12 @@ func setup() -> void:
 	sun.shadow_normal_bias = 0.35
 	host.add_child(sun)
 
-	# 冷补光（2026-10-21）：从主光背面低角度补一道冷光，不投影。
-	# 作用是把背光面/阴影面从「暖棕压暗」拉成冷调，和暖阳形成冷暖对比；能量低，不夺主光。
+	# 暖补光（A8 改造）：原先是从背侧补的冷光，背光崖壁仍被压成蓝黑；改为暖琥珀色侧补，
+	# 让镜头可见的背光岩面读出「暗棕岩石」而不是黑洞。不投影，能量低于主光。
 	var fill := DirectionalLight3D.new()
 	fill.name = "Fill"
-	fill.light_color = Color(0.46, 0.62, 0.95)
-	fill.light_energy = 0.22
+	fill.light_color = Color(1.0, 0.78, 0.55)
+	fill.light_energy = 0.42
 	fill.shadow_enabled = false
 	fill.rotation_degrees = Vector3(-24.0, 152.0, 0.0)
 	host.add_child(fill)
@@ -150,7 +161,7 @@ func _apply_fog() -> void:
 	if env == null:
 		return
 	var mults: Array = [1.6, 1.25, 1.0]
-	var m := float(mults[clampi(_post_q, 0, 2)])
+	var m := float(mults[clampi(_post_q, 0, 2)]) * _fog_fit_mult
 	env.fog_depth_begin = _fog_base.x * m
 	env.fog_depth_end = _fog_base.y * m
 
@@ -396,15 +407,15 @@ func _ensure_camera() -> void:
 		return
 	camera = Camera3D.new()
 	camera.name = "Camera"
-	camera.fov = 45.0
+	camera.fov = CAM_FOV
 	camera.near = 1.0
 	camera.far = 400.0
 	camera.keep_aspect = Camera3D.KEEP_HEIGHT
 	host.add_child(camera)
 
 
-## 取景：把 64² 地图撑满可交互区（上让顶栏、右让按钮带、下让余量；口径同母版闭式推导）。
-## 二分俯角找"宽、深同时贴边"的平衡点（夹在 [35°,50°]），再解视距与竖向平移。
+## 取景：把 64² 地图横向撑满可交互区（上让顶栏、右让按钮带、下让余量）。
+## 2026-10-23：俯角固定 42°（不再二分贴边），FOV 30° 收窄透视；纵向由竖直偏移平衡留白。
 ## 注意：取景会重置平移/旋转/缩放（窗口尺寸变化时由 sync 触发，回到默认北向全图视角）。
 func fit_camera() -> void:
 	_ensure_camera()
@@ -415,43 +426,24 @@ func fit_camera() -> void:
 		W = 1280.0
 		H = 720.0
 	var S := clampf(H / 816.0, 1.0, 1.6)
-	var t45 := tan(deg_to_rad(45.0) / 2.0)
+	var t45 := tan(deg_to_rad(camera.fov) / 2.0) # 跟随相机 FOV（原写死 45°，改 FOV 后取景必须同步，否则构图与本缓存口径分叉）
 	var aspect := W / H
-	var half_w := maxf(1.0 - 2.0 * RESERVE_RIGHT * S / W, 0.3)
+	# 水平不加对称留白：左缘贴屏、右缘贴按钮带。nl/nr 为可交互区左右归一化坐标，
+	# hw 为其半宽（决定地图横向投影大小），nc 为其中心（决定相机横向偏移）。
+	var nl := -1.0 + 2.0 * RESERVE_LEFT * S / W
+	var nr := 1.0 - 2.0 * RESERVE_RIGHT * S / W
+	var hw := maxf((nr - nl) * 0.5, 0.3)
 	var y_b := -1.0 + 2.0 * RESERVE_BOTTOM * S / H
 	var y_t := 1.0 - 2.0 * RESERVE_TOP * S / H
 	var bc := (y_b + y_t) / 2.0
 	var R := HALF
 
-	var p_lo := deg_to_rad(36.0)
-	var p_hi := deg_to_rad(44.0)
-	for _i in 12:
-		var pm := (p_lo + p_hi) / 2.0
-		var zc := R * cos(pm)
-		var yc := R * sin(pm)
-		var s_w := R / (half_w * t45 * aspect) + zc
-		var lo := zc + 0.5
-		var hi := 600.0
-		for _j in 40:
-			var mid := (lo + hi) / 2.0
-			var zn := mid - zc
-			var zf := mid + zc
-			var hval := (-yc / (zn * t45) - y_b) * zn - (yc / (zf * t45) - y_t) * zf
-			if hval >= 0.0:
-				hi = mid
-			else:
-				lo = mid
-		if s_w >= hi:
-			p_lo = pm
-		else:
-			p_hi = pm
-
-	var p := p_lo
+	var p := deg_to_rad(PITCH_DEG)
 	var sr := sin(p)
 	var cr := cos(p)
 	var zc2 := R * cr
 	var yc2 := R * sr
-	var s := R / (half_w * t45 * aspect) + zc2
+	var s := R / (hw * t45 * aspect) + zc2
 	var zn2 := s - zc2
 	var zf2 := s + zc2
 	var yn := -yc2 / (zn2 * t45)
@@ -460,14 +452,23 @@ func fit_camera() -> void:
 
 	var cam_y := s * sr + off * cr
 	var cam_z := s * cr - off * sr
+	# 横向偏移：把地图水平中心（x=0）压到可交互区中心 nc。用近边深度 zn2 换算（近边透视最宽，
+	# 贴边约束在这里成立）；yaw=0 时焦点与相机同向平移，视线仍平行 -Z，构图整体左移。
+	var off_x := -(nl + nr) * 0.5 * zn2 * t45 * aspect
 	_pitch = p
-	_dist = cam_y / sr
-	focus = Vector3(0.0, 0.0, cam_z - cr * _dist)
+	# 焦点按标准取景求解后固定，再单独缩短相机距离（_fit_pull）→ 画面中心不跑，地图以焦点为中心均匀放大
+	var d0 := cam_y / sr
+	focus = Vector3(off_x, 0.0, cam_z - cr * d0)
+	_dist = d0 * _fit_pull
 	yaw = 0.0
 	_zoom = 1.0
 	_apply_cam()
 	_fit_w = W
 	_fit_h = H
+	# 雾距按取景视距外推（只在取景时算，不进逐帧 _apply_cam：Environment 属性逐帧写会在移动端造成微卡顿）。
+	# 基准雾 55..170m 按横屏约 76m 视距调；竖屏/小窗视距 250m 时不外推会把地图整片吞成背景色。
+	_fog_fit_mult = clampf(_dist / 76.0, 1.0, 4.0)
+	_apply_fog()
 
 
 ## 触发震屏（amp 单位米，dur 秒）。同帧多次触发取「更强 + 更久」各一项，幅值不叠加：
@@ -502,6 +503,9 @@ func _apply_cam() -> void:
 	var u := Vector3(0.0, cr, -sr).rotated(Vector3.UP, yaw)
 	var d := _dist * _zoom
 	camera.position = focus - f * d
+	# 远裁面跟随视距（2026-10-22）：竖屏/窄窗口取景会算到 500m+ 视距，固定 far=400 会把整张地图裁掉只剩背景色。
+	# 横屏正常取景约 76m，far 保持 400 不变；只在需要时放宽，避免无谓的深度精度损失。
+	camera.far = maxf(400.0, d * 2.2)
 	if shake_t > 0.0 and shake_amp > 0.0:
 		var k := shake_t / maxf(shake_dur, 0.001)
 		var a := shake_amp * k * k # 二次衰减：收尾干脆，不留尾巴
@@ -552,12 +556,57 @@ func _flat_forward() -> Vector3:
 	return Vector3(f.x, 0.0, f.z).normalized()
 
 
+## 地图在屏幕上的可见面积占比（0..1）：地图四角投影 → 轴对齐包围盒 ∩ 屏幕 / 屏幕面积。
+## 四角必须在相机前方；任一角在后方时包围盒无意义，返回 0.0。
+func _map_visible_ratio() -> float:
+	var vp := host.get_viewport().get_visible_rect().size
+	if vp.x <= 0.0 or vp.y <= 0.0:
+		vp = Vector2(1280.0, 720.0)
+	var screen := Rect2(Vector2.ZERO, vp)
+	var mn := Vector2(INF, INF)
+	var mx := Vector2(-INF, -INF)
+	for p in [Vector3(-HALF, 0.0, -HALF), Vector3(HALF, 0.0, -HALF), Vector3(HALF, 0.0, HALF), Vector3(-HALF, 0.0, HALF)]:
+		if camera.is_position_behind(p):
+			return 0.0
+		var sp := camera.unproject_position(p)
+		mn = Vector2(minf(mn.x, sp.x), minf(mn.y, sp.y))
+		mx = Vector2(maxf(mx.x, sp.x), maxf(mx.y, sp.y))
+	var box := Rect2(mn, mx - mn)
+	return clampf(box.intersection(screen).get_area() / screen.get_area(), 0.0, 1.0)
+
+
 ## 平移焦点并夹在地图邻域内（防止把地图推出视野找不回来；缩放后允许的外圈更大）。
+## 粗夹取后若地图占屏不足阈值，沿「当前焦点 → 地图中心」回退最小比例（二分 6 次逼近）。
+## 阈值分两档：居中占比 ≥ MAP_MIN_VISIBLE 时用 MAP_MIN_VISIBLE（0.75）；
+## 拉远到地图小于屏幕时退化为「居中占比的 90%」，保证居中仍达标、平移不被锁死。
 func _move_focus(v: Vector3) -> void:
 	var limit := HALF + 24.0
 	focus += v
 	focus.x = clampf(focus.x, -limit, limit)
 	focus.z = clampf(focus.z, -limit, limit)
+	_apply_cam()
+	# 先测居中基准占比，得出本次允许的可见面积下限
+	var cur := focus
+	focus = Vector3.ZERO
+	_apply_cam()
+	var center_ratio := _map_visible_ratio()
+	var thr := minf(MAP_MIN_VISIBLE, center_ratio * 0.9)
+	# 回到粗夹取后的焦点，测其占比是否已达标
+	focus = cur
+	_apply_cam()
+	if _map_visible_ratio() >= thr:
+		return
+	var lo := 0.0
+	var hi := 1.0
+	for _i in 6:
+		var mid := (lo + hi) * 0.5
+		focus = cur.lerp(Vector3.ZERO, mid)
+		_apply_cam()
+		if _map_visible_ratio() >= thr:
+			hi = mid
+		else:
+			lo = mid
+	focus = cur.lerp(Vector3.ZERO, hi)
 	_apply_cam()
 
 

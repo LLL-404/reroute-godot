@@ -98,10 +98,24 @@ func _initialize() -> void:
 
 	# ---- 10.「回标题」→ 标题 ----
 	var run2: int = main.run_index
+	var core = main.view.core
+	var std_focus: Vector3 = core.focus # 回标题前（对局内）标准取景值
+	var std_dist: float = core._dist
+	var seed_before: int = main.sc.seed
+	# 人为打乱视角：回标题必须强制复位到标准取景，而不是保留玩家视角
+	core.yaw = 0.7
+	core._zoom = 1.5
+	core.focus = Vector3(20.0, 0.0, 20.0)
+	core._apply_cam()
 	await _click_btn(page_go, "btn_to_title2")
 	check(shell.current_page() == "title", "回标题")
 	check(main.paused == true and hud.top_bar.visible == false, "标题态复位")
 	cmp_int(main.run_index, run2 + 1, "回标题备新局 run_index+1")
+	check(core.yaw == 0.0, "回标题 yaw 复位 0（得 %.3f）" % core.yaw)
+	check(core._zoom == 1.0, "回标题 zoom 复位 1（得 %.3f）" % core._zoom)
+	check(core.focus.distance_to(std_focus) < 0.01, "回标题 focus 回到标准取景（%s → %s）" % [str(std_focus), str(core.focus)])
+	check(absf(core._dist - std_dist) < 0.01, "回标题 _dist 回到标准取景（%.3f → %.3f）" % [std_dist, core._dist])
+	check(main.sc.seed != seed_before, "回标题背景地图随局号轮换（seed %d → %d）" % [seed_before, main.sc.seed])
 
 	# ---- 11. 标题屏 ESC 不响应 ----
 	await _press_esc()

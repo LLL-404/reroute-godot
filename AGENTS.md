@@ -4,7 +4,7 @@
 > **速查表与红线**，不复制权威文档内容；冲突时以方案为准。
 
 64×64 塔防，核心机制「放墙改道」：敌人绕得越远、死时赏金越高（`reward + traveled>>3`）。
-Engineering 保真度极高：模拟核心是**确定性**的，有 16 指纹黄金基线锁死行为（2026-10-17 六边化 + G2 后第四次重录）。世界为 **pointy-top odd-r 六边形 64×64**（奇行右移半格）。
+Engineering 保真度极高：模拟核心是**确定性**的，有 16 指纹黄金基线锁死行为（2026-10-24 地形算法重做 + 爬坡寻路后第五次重录）。世界为 **pointy-top odd-r 六边形 64×64**（奇行右移半格），高度域 -2..5。
 
 ---
 
@@ -14,7 +14,7 @@ Engineering 保真度极高：模拟核心是**确定性**的，有 16 指纹黄
 |---|---|
 | `sim/` | 模拟核心十二模块，纯逻辑、**无浮点、无渲染**：`lua64`(语义 shim) / `canon` / `rng` / `grid` / `flowfield` / `mapgen`(布局生成) / `scenario`(布局构造+校验) / `sim`(数值表) / `world` / `verify` / `golden_baseline` / `save`(存档编解码) |
 | `game/` | 表现层，只读模拟：`main`(主循环/输入) / `view`(3D 门面) + 组件 `view_core`/`view_terrain`/`view_entities`/`view_audio`（D5-1 拆分 2026-10-15） / `models` / `blueprint` / `hud` / `screens`(五屏+确认弹窗) / `save_io`(槽位 I/O) / `user_settings`(音量/全屏) / `selfcheck` |
-| `tests/` | 单测 106 例 + **21 个验收探针**（`tests/probes/`，公共夹具 `probe_kit.gd`，D5-2 2026-10-15；`probe_intro` 2026-10-17） |
+| `tests/` | 单测 126 例 + **38 个验收探针**（`tests/probes/`，公共夹具 `probe_kit.gd`，D5-2 2026-10-15；`probe_intro` 2026-10-17；`probe_seed` 2026-10-24） |
 | `tools/` | Python 工具：`check_shots.py` / `convert_all.py` / `umd2_to_gltf.py` / `verify_glb.py` |
 | `assets/` | `audio/sfx`(30 mp3) / `fonts`(Noto Sans SC) / `models`(glb) / `icon`(图标五件套) |
 | `docs/` | 开发方案（权威）、审计报告、`devlogs/`、`refs/`（外部参考技能，见下） |
@@ -44,13 +44,13 @@ GODOT="C:/G/game/Godot_v4.7.2-stable_mono_win64/Godot_v4.7.2-stable_mono_win64_c
 P="C:/Users/Administrator/Documents/默认项目/reroute-godot"
 
 # headless 安全：单测 + 模拟模块探针 + 场景构建
-"$GODOT" --headless --path "$P" -s res://tests/run_tests.gd                    # 106 单测
+"$GODOT" --headless --path "$P" -s res://tests/run_tests.gd                    # 126 单测
 for p in golden scene blueprint sim grid flow scenario world; do
   "$GODOT" --headless --path "$P" -s res://tests/probes/probe_$p.gd
 done
 
 # 必须窗口模式（涉及屏幕坐标/渲染纹理，headless 下必然失败或空转不退出）
-for p in sync input hud ui_flow smoke shots audio asset model orient save touch intro; do
+for p in sync input hud ui_flow smoke shots audio asset model orient save touch intro seed; do
   "$GODOT" --path "$P" -s res://tests/probes/probe_$p.gd
 done
 
@@ -64,7 +64,7 @@ python tools/check_shots.py    # 截图像素校验
 1. **无头 CLI 用 `_console.exe` 变体**，普通 `.exe` 不输出 stdout。
 2. **`--headless` 下根视口只有 64×64**。凡涉及屏幕坐标或渲染纹理的探针
    （`sync` / `input` / `hud` / `ui_flow` / `smoke` / `shots` / `audio` /
-   `asset` / `model` / `orient` / `save` / `touch` / `intro`）**必须窗口模式运行**。
+   `asset` / `model` / `orient` / `save` / `touch` / `intro` / `seed`）**必须窗口模式运行**。
 
 ## 五、调试陷阱（都会伪装成「挂起」）
 
@@ -79,8 +79,8 @@ python tools/check_shots.py    # 截图像素校验
 | 冻结物 | 位置 |
 |---|---|
 | 16 个黄金指纹 | `sim/golden_baseline.gd` |
-| 剧本指纹 `0x7dea2b02` | `Scenario.fingerprint()` |
-| `STATE_SCHEMA = 6`（六边化后；v5 旧档拒载） | `canon.gd` / `world.canonical_bytes()` |
+| 剧本指纹 `0x234abc91` | `Scenario.fingerprint()` |
+| `STATE_SCHEMA = 7`（地形高度域 -2 后；v6 旧档拒载） | `canon.gd` / `world.canonical_bytes()` |
 
 漂移了先怀疑**实现**，不是怀疑基线。真要改：先说明为何必须改 → 重跑 `probe_golden` 采新值
 → **同一次提交里**更新基线 + 写决策记录。

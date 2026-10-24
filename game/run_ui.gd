@@ -24,12 +24,7 @@ func init(callbacks: Dictionary, _hud) -> void:
 	C = UiStyle.DARK
 	layer = 11
 	_recalc_s()
-	root = Control.new()
-	root.name = "RunRoot"
-	root.set_anchors_preset(Control.PRESET_FULL_RECT)
-	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(root)
-	_build()
+	_bind()
 	visible = false
 
 
@@ -37,67 +32,51 @@ func _recalc_s() -> void:
 	S = clampf(get_viewport().get_visible_rect().size.y / 816.0, 1.0, 1.6)
 
 
-func _build() -> void:
-	# 顶部层/波条
-	var top := PanelContainer.new()
+## 绑定场景骨架（结构在 run_ui.tscn）；位置/尺寸/边距/主题变体按 S 注入
+func _bind() -> void:
+	root = $RunRoot
+
+	# 顶部层/波条（位置按 S 运行时注入，场景只保证节点层级）
+	var top: PanelContainer = root.get_node("top")
 	top.theme_type_variation = UiStyle.CARD_VAR
 	top.position = Vector2(int(24.0 * S), int(18.0 * S))
 	top.custom_minimum_size = Vector2(int(360.0 * S), int(34.0 * S))
-	var m := MarginContainer.new()
+	var m: MarginContainer = top.get_node("Margin")
 	m.add_theme_constant_override("margin_left", int(14 * S))
 	m.add_theme_constant_override("margin_right", int(14 * S))
 	m.add_theme_constant_override("margin_top", int(6 * S))
 	m.add_theme_constant_override("margin_bottom", int(6 * S))
-	head = UiStyle.label("", 13.0 * S, C["gold_hi"])
-	m.add_child(head)
-	top.add_child(m)
-	root.add_child(top)
+	head = m.get_node("head")
+	head.add_theme_font_size_override("font_size", int(13.0 * S))
+	head.add_theme_color_override("font_color", C["gold_hi"])
 
-	# 底部容器：全屏 VBox 贴底对齐，bar 与手牌都在里面按内容高度排，避免锚点/尺寸互相打架
-	var holder := VBoxContainer.new()
-	holder.name = "BottomHolder"
-	holder.set_anchors_preset(Control.PRESET_FULL_RECT)
-	holder.alignment = BoxContainer.ALIGNMENT_END
-	holder.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	# 底部容器：全屏 VBox 贴底对齐，bar 与手牌都在里面按内容高度排
+	var holder: VBoxContainer = root.get_node("BottomHolder")
 	holder.add_theme_constant_override("separation", int(8 * S))
-	root.add_child(holder)
-
-	# 手牌行（在阶段条上方，左对齐）
-	var hand_wrap := HBoxContainer.new()
-	hand_wrap.alignment = BoxContainer.ALIGNMENT_BEGIN
-	hand_wrap.add_theme_constant_override("separation", int(8 * S))
-	hand_row = hand_wrap
-	var hand_pad := MarginContainer.new()
-	hand_pad.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var hand_pad: MarginContainer = holder.get_node("hand_pad")
 	hand_pad.add_theme_constant_override("margin_left", int(24 * S))
-	hand_pad.add_child(hand_wrap)
-	holder.add_child(hand_pad)
+	hand_row = hand_pad.get_node("hand_row")
+	hand_row.add_theme_constant_override("separation", int(8 * S))
 
 	# 阶段条：居中 + 按内容撑高
-	var bar_wrap := HBoxContainer.new()
-	bar_wrap.alignment = BoxContainer.ALIGNMENT_CENTER
-	bar_wrap.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	bar = PanelContainer.new()
+	var bar_wrap: HBoxContainer = holder.get_node("bar_wrap")
+	bar = bar_wrap.get_node("bar")
 	bar.theme_type_variation = UiStyle.CARD_VAR
-	bar.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	var bm := MarginContainer.new()
+	var bm: MarginContainer = bar.get_node("bm")
 	for side in ["left", "right", "top", "bottom"]:
 		bm.add_theme_constant_override("margin_" + side, int(18 * S))
-	bar_body = VBoxContainer.new()
+	bar_body = bm.get_node("bar_body")
 	bar_body.add_theme_constant_override("separation", int(10 * S))
-	bar_body.alignment = BoxContainer.ALIGNMENT_CENTER
-	bm.add_child(bar_body)
-	bar.add_child(bm)
-	bar_wrap.add_child(bar)
-	holder.add_child(bar_wrap)
-	holder.add_child(_pad_bottom(int(24 * S)))
+	var pad: Control = holder.get_node("pad_bottom")
+	pad.custom_minimum_size = Vector2(0, int(24 * S))
 
 	# 浮字提示
-	toast = UiStyle.label("", 12.0 * S, C["muted"])
+	toast = root.get_node("toast")
+	toast.add_theme_font_size_override("font_size", int(12.0 * S))
+	toast.add_theme_color_override("font_color", C["muted"])
 	toast.set_anchors_preset(Control.PRESET_CENTER_TOP)
 	toast.position = Vector2(0, int(64.0 * S))
 	toast.visible = false
-	root.add_child(toast)
 
 
 ## 进入肉鸽局：显示 HUD 并刷新
@@ -205,14 +184,6 @@ func _small(text: String, fn: Callable) -> Button:
 	b.add_theme_stylebox_override("pressed", UiStyle.flat(C["btn_pressed"], C["gold_hi"], int(3 * S)))
 	b.pressed.connect(fn)
 	return b
-
-
-## 底部留白（VBox 贴底时垫出边距）
-func _pad_bottom(h: int) -> Control:
-	var c := Control.new()
-	c.custom_minimum_size = Vector2(0, h)
-	c.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	return c
 
 
 func _clear(node: Node) -> void:

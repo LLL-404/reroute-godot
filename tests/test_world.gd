@@ -147,11 +147,27 @@ func register(kit: TestKit) -> void:
 		kit.eq(w.supply, 225, "顶格拒填不扣费")
 		for _i in 5:
 			w.apply_command({ "kind": "lower", "x": 3, "y": 3 })
-		kit.eq(w.grid.get_h(3, 3), Sim.H_MIN, "连挖到 h0")
+		kit.eq(w.grid.get_h(3, 3), 0, "连挖到 h0")
 		kit.eq(w.supply, 175, "5 次挖低扣 50")
 		w.apply_command({ "kind": "lower", "x": 3, "y": 3 })
+		kit.eq(w.grid.get_h(3, 3), -1, "继续挖到 h-1")
+		w.apply_command({ "kind": "lower", "x": 3, "y": 3 })
+		kit.eq(w.grid.get_h(3, 3), Sim.H_MIN, "连挖到 h-2")
+		kit.eq(w.supply, 155, "7 次挖低扣 70")
+		w.apply_command({ "kind": "lower", "x": 3, "y": 3 })
 		kit.eq(w.grid.get_h(3, 3), Sim.H_MIN, "地板再挖被拒")
-		kit.eq(w.supply, 175, "地板拒挖不扣费"))
+		kit.eq(w.supply, 155, "地板拒挖不扣费"))
+
+	kit.test("lower-to-negative-min", func():
+		var w := World.new(StubScenario.new(), 1)
+		w.apply_command({ "kind": "lower", "x": 3, "y": 3 })
+		kit.eq(w.grid.get_h(3, 3), -1, "第一次挖低到 -1")
+		w.apply_command({ "kind": "lower", "x": 3, "y": 3 })
+		kit.eq(w.grid.get_h(3, 3), -2, "第二次挖低到 -2")
+		kit.eq(w.supply, 280, "两次挖低扣 20")
+		w.apply_command({ "kind": "lower", "x": 3, "y": 3 })
+		kit.eq(w.grid.get_h(3, 3), -2, "第三次挖低无效")
+		kit.eq(w.supply, 280, "无效挖低不扣费"))
 
 	kit.test("fill-lower-guards", func():
 		var w := World.new(StubScenario.new({ "cover": [Vector2i(3, 3)] }), 1)
@@ -167,13 +183,13 @@ func register(kit: TestKit) -> void:
 		w.apply_command({ "kind": "spawn", "x": 5, "y": 5, "speed": 1000 })
 		w.apply_command({ "kind": "fill", "x": 5, "y": 5 })
 		kit.eq(w.grid.get_h(5, 5), 0, "单位格填高被拒")
-		w.supply = 10 # 白盒：制造供给不足
+		w.supply = 9 # 白盒：制造供给不足（填 15 / 挖 10 都不够）
 		w.apply_command({ "kind": "fill", "x": 6, "y": 6 })
 		kit.eq(w.grid.get_h(6, 6), 0, "供给不足填高被拒")
-		kit.eq(w.supply, 10, "拒填不扣费")
+		kit.eq(w.supply, 9, "拒填不扣费")
 		w.apply_command({ "kind": "lower", "x": 6, "y": 6 })
 		kit.eq(w.grid.get_h(6, 6), 0, "供给不足挖低被拒")
-		kit.eq(w.supply, 10, "拒挖不扣费"))
+		kit.eq(w.supply, 9, "拒挖不扣费"))
 
 	# ---------------- 单位移动与啃建筑 ----------------
 
@@ -262,6 +278,62 @@ func register(kit: TestKit) -> void:
 		kit.eq(w.units[0]["x"], 9, "停走待命（贴墙侧 (9,8)，围攻场无处可降）")
 		kit.eq(w.units[0]["y"], 8, "停走待命（贴墙侧 (9,8)，围攻场无处可降）")
 		kit.eq(wall["hp"], 120, "始终不啃"))
+
+	kit.test("climb-wait-after-ascent", func():
+		# 单宽走廊 y=1：在 (4,1) 造 1 级坡，单位从 (5,1) 爬上去后必须后摇 2 tick。
+		var solid := []
+		for y in 8:
+			for x in 8:
+				if y != 1:
+					solid.append(Vector2i(x, y))
+		var w := World.new(StubScenario.new({ "size": 8, "solid": solid }), 1)
+		w.grid.set_h(4, 1, 1)
+		w.apply_command({ "kind": "spawn", "x": 5, "y": 1, "speed": 1 })
+		w.tick() # tick1：补场 → 移动跨坡
+		kit.eq(w.units[0]["x"], 4, "tick1 跨坡进入 h1 格")
+		kit.eq(w.units[0]["climb_wait"], Sim.CLIMB_EXTRA_TICKS, "爬 1 级等待 2 tick")
+		w.tick()
+		kit.eq(w.units[0]["x"], 4, "等待第 1 tick 不动")
+		kit.eq(w.units[0]["climb_wait"], 1, "等待计数递减")
+		w.tick()
+		kit.eq(w.units[0]["x"], 4, "等待第 2 tick 不动")
+		kit.eq(w.units[0]["climb_wait"], 0, "等待计数归零")
+		w.tick()
+		kit.eq(w.units[0]["x"], 3, "后摇结束后继续移动"))
+
+	kit.test("swarm-climbs-two-behemoth-detours", func():
+		# 走廊 y=1 在 (3,1) 有 2 级坡；y=3 是绕行长廊（x<=6），两端经 (6,2)/(1,2) 连通。
+		var solid := []
+		for y in 8:
+			for x in 8:
+				var keep := (y == 1) or (y == 3 and x <= 6) or (x == 6 and y == 2) or (x == 1 and y == 2)
+				if not keep:
+					solid.append(Vector2i(x, y))
+		var w := World.new(StubScenario.new({ "size": 8, "solid": solid }), 1)
+		w.grid.set_h(3, 1, 2)
+		kit.ok(w.field_for(Sim.E_SWARM) == w.field, "虫群用普通场（climb_max=2）")
+		kit.ok(w.field_for(Sim.E_BEHEMOTH) == w.field_heavy, "蛮兽用 heavy 场（climb_max=1）")
+		w.apply_command({ "kind": "spawn", "x": 6, "y": 1, "speed": 4, "kind_id": Sim.E_SWARM })
+		_run(w, 40)
+		kit.eq(w.units[0]["x"], 0, "虫群爬 2 级坡后到达核心侧")
+		kit.eq(w.units[0]["y"], 1, "虫群沿走廊抵达")
+		kit.ok(w.units[0]["stuck_ticks"] > 0 and w.units[0]["atk_target"] == w.core["id"], "虫群贴核开啃（未卡死）")
+
+		var w2 := World.new(StubScenario.new({ "size": 8, "solid": solid }), 1)
+		w2.grid.set_h(3, 1, 2)
+		w2.apply_command({ "kind": "spawn", "x": 6, "y": 1, "speed": 4, "kind_id": Sim.E_BEHEMOTH })
+		var crossed_cliff := false
+		var took_detour := false
+		for _i in 60:
+			w2.tick()
+			var u: Dictionary = w2.units[0]
+			if u["x"] == 3 and u["y"] == 1:
+				crossed_cliff = true
+			if u["y"] == 3:
+				took_detour = true
+		kit.ok(not crossed_cliff, "蛮兽不进入 2 级坡格")
+		kit.ok(took_detour, "蛮兽绕行至 y=3 长廊")
+		kit.ok(w2.units[0]["stuck_ticks"] > 0 and w2.units[0]["atk_target"] == w2.core["id"], "蛮兽最终贴核开啃（未卡死）"))
 
 	# ---------------- 英雄 ----------------
 
@@ -477,7 +549,7 @@ func register(kit: TestKit) -> void:
 		kit.eq(b.data[0], 0, "STATE_SCHEMA 大端字节 1")
 		kit.eq(b.data[1], 0, "STATE_SCHEMA 大端字节 2")
 		kit.eq(b.data[2], 0, "STATE_SCHEMA 大端字节 3")
-		kit.eq(b.data[3], 6, "STATE_SCHEMA = 6"))
+		kit.eq(b.data[3], 7, "STATE_SCHEMA = 7"))
 
 	kit.test("compact-keeps-order", func():
 		var w := World.new(StubScenario.new(), 1)

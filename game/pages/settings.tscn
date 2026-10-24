@@ -1,0 +1,382 @@
+[gd_scene format=3]
+
+[node name="page_settings" type="Control"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 0
+
+[node name="bg" type="ColorRect" parent="."]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="fx" type="Control" parent="."]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="Center" type="CenterContainer" parent="."]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="card" type="PanelContainer" parent="Center"]
+
+[node name="Margin" type="MarginContainer" parent="Center/card"]
+
+[node name="col" type="VBoxContainer" parent="Center/card/Margin"]
+alignment = 1
+
+[node name="title_bar" type="Panel" parent="Center/card/Margin/col"]
+
+[node name="title" type="Label" parent="Center/card/Margin/col/title_bar"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+text = "设置"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="rule1" type="ColorRect" parent="Center/card/Margin/col"]
+mouse_filter = 2
+
+[node name="settings_scroll_wrap" type="Control" parent="Center/card/Margin/col"]
+mouse_filter = 2
+
+[node name="settings_scroll" type="ScrollContainer" parent="Center/card/Margin/col/settings_scroll_wrap"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="settings_body" type="VBoxContainer" parent="Center/card/Margin/col/settings_scroll_wrap/settings_scroll"]
+
+[node name="group_audio" type="HBoxContainer" parent="Center/card/Margin/col/settings_scroll_wrap/settings_scroll/settings_body"]
+mouse_filter = 2
+
+[node name="tick" type="ColorRect" parent="Center/card/Margin/col/settings_scroll_wrap/settings_scroll/settings_body/group_audio"]
+mouse_filter = 2
+
+[node name="title" type="Label" parent="Center/card/Margin/col/settings_scroll_wrap/settings_scroll/settings_body/group_audio"]
+text = "音频"
+
+[node name="line" type="ColorRect" parent="Center/card/Margin/col/settings_scroll_wrap/settings_scroll/settings_body/group_audio"]
+mouse_filter = 2
+
+[node name="row_music" type="HBoxContainer" parent="Center/card/Margin/col/settings_scroll_wrap/settings_scroll/settings_body"]
+
+[node name="lbl" type="Label" parent="Center/card/Margin/col/settings_scroll_wrap/settings_scroll/settings_body/row_music"]
+text = "音乐音量"
+
+[node name="sld_music" type="HSlider" parent="Center/card/Margin/col/settings_scroll_wrap/settings_scroll/settings_body/row_music"]
+
+[node name="lbl_music_val" type="Label" parent="Center/card/Margin/col/settings_scroll_wrap/settings_scroll/settings_body/row_music"]
+text = "100"
+
+[node name="row_sfx" type="HBoxContainer" parent="Center/card/Margin/col/settings_scroll_wrap/settings_scroll/settings_body"]
+
+[node name="lbl" type="Label" parent="Center/card/Margin/col/settings_scroll_wrap/settings_scroll/settings_body/row_sfx"]
+text = "音效音量"
+
+[node name="sld_sfx" type="HSlider" parent="Center/card/Margin/col/settings_scroll_wrap/settings_scroll/settings_body/row_sfx"]
+
+[node name="lbl_sfx_val" type="Label" parent="Center/card/Margin/col/settings_scroll_wrap/settings_scroll/settings_body/row_sfx"]
+text = "100"
+
+[node name="group_display" type="HBoxContainer" parent="Center/card/Margin/col/settings_scroll_wrap/settings_scroll/settings_body"]
+mouse_filter = 2
+
+[node name="tick" type="ColorRect" parent="Center/card/Margin/col/settings_scroll_wrap/settings_scroll/settings_body/group_display"]
+mouse_filter = 2
+
+[node name="title" type="Label" parent="Center/card/Margin/col/settings_scroll_wrap/settings_scroll/settings_body/group_display"]
+text = "显示"
+
+[node name="line" type="ColorRect" parent="Center/card/Margin/col/settings_scroll_wrap/settings_scroll/settings_body/group_display"]
+mouse_filter = 2
+
+[node name="row_display_mode" type="HBoxContainer" parent="Center/card/Margin/col/settings_scroll_wrap/settings_scroll/settings_body"]
+
+[node name="lbl" type="Label" parent="Center/card/Margin/col/settings_scroll_wrap/settings_scroll/settings_body/row_display_mode"]
+text = "显示模式"
+
+[node name="btn_display_mode_0" type="Button" parent="Center/card/Margin/col/settings_scroll_wrap/settings_scroll/settings_body/row_display_mode"]
+text = "窗口化"
+focus_mode = 0
+
+[node name="btn_display_mode_1" type="Button" parent="Center/card/Margin/col/settings_scroll_wrap/settings_scroll/settings_body/row_display_mode"]
+text = "无边框"
+focus_mode = 0
+
+[node name="btn_display_mode_2" type="Button" parent="Center/card/Margin/col/settings_scroll_wrap/settings_scroll/settings_body/row_display_mode"]
+text = "全屏"
+focus_mode = 0
+
+[node name="row_res_idx" type="HBoxContainer" parent="Center/card/Margin/col/settings_scroll_wrap/settings_scroll/settings_body"]
+
+[node name="lbl" type="Label" parent="Center/card/Margin/col/settings_scroll_wrap/settings_scroll/settings_body/row_res_idx"]
+text = "分辨率"
+
+[node name="btn_res_idx_0" type="Button" parent="Center/card/Margin/col/settings_scroll_wrap/settings_scroll/settings_body/row_res_idx"]
+text = "原生"
+focus_mode = 0
+
+[node name="btn_res_idx_1" type="Button" parent="Center/card/Margin/col/settings_scroll_wrap/settings_scroll/settings_body/row_res_idx"]
+text = "1440p"
+focus_mode = 0
+
+[node name="btn_res_idx_2" type="Button" parent="Center/card/Margin/col/settings_scroll_wrap/settings_scroll/settings_body/row_res_idx"]
+text = "1080p"
+focus_mode = 0
+
+[node name="btn_res_idx_3" type="Button" parent="Center/card/Margin/col/settings_scroll_wrap/settings_scroll/settings_body/row_res_idx"]
+text = "900p"
+focus_mode = 0
+
+[node name="btn_res_idx_4" type="Button" parent="Center/card/Margin/col/settings_scroll_wrap/settings_scroll/settings_body/row_res_idx"]
+text = "720p"
+focus_mode = 0
+
+[node name="row_vsync" type="HBoxContainer" parent="Center/card/Margin/col/settings_scroll_wrap/settings_scroll/settings_body"]
+
+[node name="lbl" type="Label" parent="Center/card/Margin/col/settings_scroll_wrap/settings_scroll/settings_body/row_vsync"]
+text = "垂直同步"
+
+[node name="btn_vsync_0" type="Button" parent="Center/card/Margin/col/settings_scroll_wrap/settings_scroll/settings_body/row_vsync"]
+text = "关"
+focus_mode = 0
+
+[node name="btn_vsync_1" type="Button" parent="Center/card/Margin/col/settings_scroll_wrap/settings_scroll/settings_body/row_vsync"]
+text = "开"
+focus_mode = 0
+
+[node name="row_fps" type="HBoxContainer" parent="Center/card/Margin/col/settings_scroll_wrap/settings_scroll/settings_body"]
+
+[node name="lbl" type="Label" parent="Center/card/Margin/col/settings_scroll_wrap/settings_scroll/settings_body/row_fps"]
+text = "帧率上限"
+
+[node name="btn_fps_0" type="Button" parent="Center/card/Margin/col/settings_scroll_wrap/settings_scroll/settings_body/row_fps"]
+text = "无限制"
+focus_mode = 0
+
+[node name="btn_fps_30" type="Button" parent="Center/card/Margin/col/settings_scroll_wrap/settings_scroll/settings_body/row_fps"]
+text = "30"
+focus_mode = 0
+
+[node name="btn_fps_60" type="Button" parent="Center/card/Margin/col/settings_scroll_wrap/settings_scroll/settings_body/row_fps"]
+text = "60"
+focus_mode = 0
+
+[node name="btn_fps_120" type="Button" parent="Center/card/Margin/col/settings_scroll_wrap/settings_scroll/settings_body/row_fps"]
+text = "120"
+focus_mode = 0
+
+[node name="group_quality" type="HBoxContainer" parent="Center/card/Margin/col/settings_scroll_wrap/settings_scroll/settings_body"]
+mouse_filter = 2
+
+[node name="tick" type="ColorRect" parent="Center/card/Margin/col/settings_scroll_wrap/settings_scroll/settings_body/group_quality"]
+mouse_filter = 2
+
+[node name="title" type="Label" parent="Center/card/Margin/col/settings_scroll_wrap/settings_scroll/settings_body/group_quality"]
+text = "画质"
+
+[node name="line" type="ColorRect" parent="Center/card/Margin/col/settings_scroll_wrap/settings_scroll/settings_body/group_quality"]
+mouse_filter = 2
+
+[node name="row_quality" type="HBoxContainer" parent="Center/card/Margin/col/settings_scroll_wrap/settings_scroll/settings_body"]
+
+[node name="lbl" type="Label" parent="Center/card/Margin/col/settings_scroll_wrap/settings_scroll/settings_body/row_quality"]
+text = "画质预设"
+
+[node name="btn_quality_0" type="Button" parent="Center/card/Margin/col/settings_scroll_wrap/settings_scroll/settings_body/row_quality"]
+text = "低"
+focus_mode = 0
+
+[node name="btn_quality_1" type="Button" parent="Center/card/Margin/col/settings_scroll_wrap/settings_scroll/settings_body/row_quality"]
+text = "中"
+focus_mode = 0
+
+[node name="btn_quality_2" type="Button" parent="Center/card/Margin/col/settings_scroll_wrap/settings_scroll/settings_body/row_quality"]
+text = "高"
+focus_mode = 0
+
+[node name="btn_quality_3" type="Button" parent="Center/card/Margin/col/settings_scroll_wrap/settings_scroll/settings_body/row_quality"]
+text = "极高"
+focus_mode = 0
+
+[node name="row_shadow_q" type="HBoxContainer" parent="Center/card/Margin/col/settings_scroll_wrap/settings_scroll/settings_body"]
+
+[node name="lbl" type="Label" parent="Center/card/Margin/col/settings_scroll_wrap/settings_scroll/settings_body/row_shadow_q"]
+text = "阴影质量"
+
+[node name="btn_shadow_q_0" type="Button" parent="Center/card/Margin/col/settings_scroll_wrap/settings_scroll/settings_body/row_shadow_q"]
+text = "低"
+focus_mode = 0
+
+[node name="btn_shadow_q_1" type="Button" parent="Center/card/Margin/col/settings_scroll_wrap/settings_scroll/settings_body/row_shadow_q"]
+text = "中"
+focus_mode = 0
+
+[node name="btn_shadow_q_2" type="Button" parent="Center/card/Margin/col/settings_scroll_wrap/settings_scroll/settings_body/row_shadow_q"]
+text = "高"
+focus_mode = 0
+
+[node name="row_fx_q" type="HBoxContainer" parent="Center/card/Margin/col/settings_scroll_wrap/settings_scroll/settings_body"]
+
+[node name="lbl" type="Label" parent="Center/card/Margin/col/settings_scroll_wrap/settings_scroll/settings_body/row_fx_q"]
+text = "特效质量"
+
+[node name="btn_fx_q_0" type="Button" parent="Center/card/Margin/col/settings_scroll_wrap/settings_scroll/settings_body/row_fx_q"]
+text = "低"
+focus_mode = 0
+
+[node name="btn_fx_q_1" type="Button" parent="Center/card/Margin/col/settings_scroll_wrap/settings_scroll/settings_body/row_fx_q"]
+text = "中"
+focus_mode = 0
+
+[node name="btn_fx_q_2" type="Button" parent="Center/card/Margin/col/settings_scroll_wrap/settings_scroll/settings_body/row_fx_q"]
+text = "高"
+focus_mode = 0
+
+[node name="row_aa" type="HBoxContainer" parent="Center/card/Margin/col/settings_scroll_wrap/settings_scroll/settings_body"]
+
+[node name="lbl" type="Label" parent="Center/card/Margin/col/settings_scroll_wrap/settings_scroll/settings_body/row_aa"]
+text = "抗锯齿"
+
+[node name="btn_aa_0" type="Button" parent="Center/card/Margin/col/settings_scroll_wrap/settings_scroll/settings_body/row_aa"]
+text = "关"
+focus_mode = 0
+
+[node name="btn_aa_1" type="Button" parent="Center/card/Margin/col/settings_scroll_wrap/settings_scroll/settings_body/row_aa"]
+text = "FXAA"
+focus_mode = 0
+
+[node name="btn_aa_2" type="Button" parent="Center/card/Margin/col/settings_scroll_wrap/settings_scroll/settings_body/row_aa"]
+text = "TAA"
+focus_mode = 0
+
+[node name="row_post_q" type="HBoxContainer" parent="Center/card/Margin/col/settings_scroll_wrap/settings_scroll/settings_body"]
+
+[node name="lbl" type="Label" parent="Center/card/Margin/col/settings_scroll_wrap/settings_scroll/settings_body/row_post_q"]
+text = "后期处理"
+
+[node name="btn_post_q_0" type="Button" parent="Center/card/Margin/col/settings_scroll_wrap/settings_scroll/settings_body/row_post_q"]
+text = "低"
+focus_mode = 0
+
+[node name="btn_post_q_1" type="Button" parent="Center/card/Margin/col/settings_scroll_wrap/settings_scroll/settings_body/row_post_q"]
+text = "中"
+focus_mode = 0
+
+[node name="btn_post_q_2" type="Button" parent="Center/card/Margin/col/settings_scroll_wrap/settings_scroll/settings_body/row_post_q"]
+text = "高"
+focus_mode = 0
+
+[node name="row_dof" type="HBoxContainer" parent="Center/card/Margin/col/settings_scroll_wrap/settings_scroll/settings_body"]
+
+[node name="lbl" type="Label" parent="Center/card/Margin/col/settings_scroll_wrap/settings_scroll/settings_body/row_dof"]
+text = "景深"
+
+[node name="btn_dof_0" type="Button" parent="Center/card/Margin/col/settings_scroll_wrap/settings_scroll/settings_body/row_dof"]
+text = "关"
+focus_mode = 0
+
+[node name="btn_dof_1" type="Button" parent="Center/card/Margin/col/settings_scroll_wrap/settings_scroll/settings_body/row_dof"]
+text = "开"
+focus_mode = 0
+
+[node name="group_perf" type="HBoxContainer" parent="Center/card/Margin/col/settings_scroll_wrap/settings_scroll/settings_body"]
+mouse_filter = 2
+
+[node name="tick" type="ColorRect" parent="Center/card/Margin/col/settings_scroll_wrap/settings_scroll/settings_body/group_perf"]
+mouse_filter = 2
+
+[node name="title" type="Label" parent="Center/card/Margin/col/settings_scroll_wrap/settings_scroll/settings_body/group_perf"]
+text = "性能"
+
+[node name="line" type="ColorRect" parent="Center/card/Margin/col/settings_scroll_wrap/settings_scroll/settings_body/group_perf"]
+mouse_filter = 2
+
+[node name="row_render_pct" type="HBoxContainer" parent="Center/card/Margin/col/settings_scroll_wrap/settings_scroll/settings_body"]
+
+[node name="lbl" type="Label" parent="Center/card/Margin/col/settings_scroll_wrap/settings_scroll/settings_body/row_render_pct"]
+text = "渲染缩放"
+
+[node name="sld_render_pct" type="HSlider" parent="Center/card/Margin/col/settings_scroll_wrap/settings_scroll/settings_body/row_render_pct"]
+
+[node name="lbl_render_pct_val" type="Label" parent="Center/card/Margin/col/settings_scroll_wrap/settings_scroll/settings_body/row_render_pct"]
+text = "100"
+
+[node name="row_ui_pct" type="HBoxContainer" parent="Center/card/Margin/col/settings_scroll_wrap/settings_scroll/settings_body"]
+
+[node name="lbl" type="Label" parent="Center/card/Margin/col/settings_scroll_wrap/settings_scroll/settings_body/row_ui_pct"]
+text = "UI 缩放"
+
+[node name="sld_ui_pct" type="HSlider" parent="Center/card/Margin/col/settings_scroll_wrap/settings_scroll/settings_body/row_ui_pct"]
+
+[node name="lbl_ui_pct_val" type="Label" parent="Center/card/Margin/col/settings_scroll_wrap/settings_scroll/settings_body/row_ui_pct"]
+text = "100"
+
+[node name="row_bright_pct" type="HBoxContainer" parent="Center/card/Margin/col/settings_scroll_wrap/settings_scroll/settings_body"]
+
+[node name="lbl" type="Label" parent="Center/card/Margin/col/settings_scroll_wrap/settings_scroll/settings_body/row_bright_pct"]
+text = "画面亮度"
+
+[node name="sld_bright_pct" type="HSlider" parent="Center/card/Margin/col/settings_scroll_wrap/settings_scroll/settings_body/row_bright_pct"]
+
+[node name="lbl_bright_pct_val" type="Label" parent="Center/card/Margin/col/settings_scroll_wrap/settings_scroll/settings_body/row_bright_pct"]
+text = "100"
+
+[node name="group_about" type="HBoxContainer" parent="Center/card/Margin/col/settings_scroll_wrap/settings_scroll/settings_body"]
+mouse_filter = 2
+
+[node name="tick" type="ColorRect" parent="Center/card/Margin/col/settings_scroll_wrap/settings_scroll/settings_body/group_about"]
+mouse_filter = 2
+
+[node name="title" type="Label" parent="Center/card/Margin/col/settings_scroll_wrap/settings_scroll/settings_body/group_about"]
+text = "关于"
+
+[node name="line" type="ColorRect" parent="Center/card/Margin/col/settings_scroll_wrap/settings_scroll/settings_body/group_about"]
+mouse_filter = 2
+
+[node name="row_privacy" type="HBoxContainer" parent="Center/card/Margin/col/settings_scroll_wrap/settings_scroll/settings_body"]
+
+[node name="lbl" type="Label" parent="Center/card/Margin/col/settings_scroll_wrap/settings_scroll/settings_body/row_privacy"]
+text = "隐私政策"
+
+[node name="btn_privacy_policy" type="Button" parent="Center/card/Margin/col/settings_scroll_wrap/settings_scroll/settings_body/row_privacy"]
+text = "查看完整说明"
+focus_mode = 0
+
+[node name="scroll_fade" type="TextureRect" parent="Center/card/Margin/col/settings_scroll_wrap"]
+anchor_left = 0.0
+anchor_right = 1.0
+anchor_top = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+mouse_filter = 2
+
+[node name="gap" type="Control" parent="Center/card/Margin/col"]
+mouse_filter = 2
+
+[node name="rule2" type="ColorRect" parent="Center/card/Margin/col"]
+mouse_filter = 2
+
+[node name="btn_settings_back" type="Button" parent="Center/card/Margin/col"]
+text = "返回"
+focus_mode = 0

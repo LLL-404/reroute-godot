@@ -6,7 +6,9 @@
   warm=850724  teal=124  red=163694  green=575  diff(game,heat)=0.309  diff(game,ghost)=0.0009
 D1-5 追加：game_20x9.png（1600x720，20:9）/ game_narrow.png（960x720，4:3）尺寸+关键色。
 D1-5 扩展（2026-10-20）：game_tablet.png（1600x1200，4:3 平板）/ game_16x10.png（1280x800，16:10）尺寸+关键色。
-T1 追加：game_closeup.png（改造特写：填两级崖壁+裙脚 / 挖一级坑）尺寸+暖色下限。
+T1 追加：game_closeup.png（改造特写：填三级崖壁+裙脚 / 挖一级坑）尺寸+暖色下限。
+2026-10-23 Task6 追加：game_pit.png（连挖两级 -2 坑）/ game_cliff.png（CLIFF 地貌核心崖壁）
+  固定种子+相机目视件，阈值保守（近景构图，真回归=空帧/纯色）。
 跑法：python tools/check_shots.py   （cwd=reroute-godot）
 判定：exit 0 + stdout 含 [SHOTS] PASS。
 """
@@ -163,6 +165,19 @@ if im_close is not None:
     n_warm3 = scan(im_close, warm)
     chk(n_warm3 > 300000, 'game_closeup 暖色地形不足 %d（阈值 300000）' % n_warm3)
     print('[SHOTS] game_closeup warm=%d' % n_warm3)
+
+# 2026-10-23 Task6：负高度坑 + CLIFF 地貌（固定种子/相机；阈值保守，目视件为主）
+for name in ('game_pit.png', 'game_cliff.png'):
+    im_new = load(name)
+    chk(im_new is not None, name + ' 存在')
+    if im_new is None:
+        continue
+    chk(im_new.size == (W, H), '%s 尺寸 %s != %s' % (name, im_new.size, (W, H)))
+    colors5 = im_new.quantize(colors=256).getcolors()
+    chk(colors5 is not None and len(colors5) > 60, '%s 唯一色数过少 %d' % (name, len(colors5 or [])))
+    n_warm5 = scan(im_new, warm)
+    chk(n_warm5 > 150000, '%s 暖色地形不足 %d（阈值 150000）' % (name, n_warm5))
+    print('[SHOTS] %s warm=%d' % (name, n_warm5))
 
 print('[SHOTS] checks=%d fail=%d' % (checks, len(fails)))
 for f in fails:

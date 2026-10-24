@@ -23,7 +23,6 @@ const COL_TEXT := Color8(216, 212, 202)
 const COL_MUTED := Color8(150, 144, 130)
 const COL_OK := Color8(96, 255, 208)
 
-const TITLE := "隐私政策"
 const BODY := """《改道》是一款离线单机游戏，不需要联网即可游玩。
 
 【我们收集的信息】
@@ -50,29 +49,16 @@ func _init() -> void:
 
 
 func _ready() -> void:
-	_build()
+	_bind()
 
 
-## 构建界面：全屏暗底 + 居中卡片 + 标题/正文/三个按钮（纯代码，不依赖 hud/screens）
-func _build() -> void:
-	_root = Control.new()
-	_root.name = "PrivacyRoot"
-	_root.set_anchors_preset(Control.PRESET_FULL_RECT)
-	_root.mouse_filter = Control.MOUSE_FILTER_STOP
-	add_child(_root)
-
-	var bg := ColorRect.new()
-	bg.name = "bg"
+## 绑定场景骨架（privacy_gate.tscn）：只取引用、注入样式与尺寸、接线，不再建结构
+func _bind() -> void:
+	_root = $PrivacyRoot
+	var bg: ColorRect = _root.get_node("bg")
 	bg.color = COL_BG
-	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
-	_root.add_child(bg)
 
-	var center := CenterContainer.new()
-	center.set_anchors_preset(Control.PRESET_FULL_RECT)
-	_root.add_child(center)
-
-	var card := PanelContainer.new()
-	card.name = "card"
+	var card: PanelContainer = _root.get_node("CenterContainer/card")
 	var sb := StyleBoxFlat.new()
 	sb.bg_color = COL_CARD
 	sb.border_color = COL_EDGE
@@ -80,50 +66,35 @@ func _build() -> void:
 	sb.set_corner_radius_all(6)
 	sb.set_content_margin_all(28)
 	card.add_theme_stylebox_override("panel", sb)
-	center.add_child(card)
-
-	var vp := _viewport_size()
-	_card_w = clampf(vp.x * 0.86, 320.0, 560.0)
+	_card_w = clampf(_viewport_size().x * 0.86, 320.0, 560.0)
 	card.custom_minimum_size = Vector2(_card_w, 0)
 
-	var box := VBoxContainer.new()
+	var box: VBoxContainer = card.get_node("VBoxContainer")
 	box.add_theme_constant_override("separation", 14)
-	card.add_child(box)
 
-	var title := Label.new()
-	title.name = "title"
-	title.text = TITLE
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	var title: Label = box.get_node("title")
 	_style_label(title, 26, COL_GOLD)
-	box.add_child(title)
 
-	var rule := ColorRect.new()
+	var rule: ColorRect = box.get_node("ColorRect")
 	rule.color = COL_EDGE
 	rule.custom_minimum_size = Vector2(0, 1)
-	box.add_child(rule)
 
-	var body := Label.new()
-	body.name = "body"
-	body.text = BODY
-	body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	var body: Label = box.get_node("body")
+	body.text = BODY # 长正文属内容数据，留脚本常量，避免与场景双源漂移
 	body.custom_minimum_size = Vector2(_card_w - 56.0, 0)
 	_style_label(body, 14, COL_TEXT)
-	box.add_child(body)
 
-	var link := _button("查看完整隐私政策", false)
-	link.name = "btn_privacy_link"
+	var link: Button = box.get_node("btn_privacy_link")
+	_style_button(link, false)
 	link.pressed.connect(_on_open_link)
-	box.add_child(link)
 
-	var agree := _button("同意并继续", true)
-	agree.name = "btn_privacy_agree"
+	var agree: Button = box.get_node("btn_privacy_agree")
+	_style_button(agree, true)
 	agree.pressed.connect(_on_agree)
-	box.add_child(agree)
 
-	var decline := _button("不同意，退出游戏", false)
-	decline.name = "btn_privacy_decline"
+	var decline: Button = box.get_node("btn_privacy_decline")
+	_style_button(decline, false)
 	decline.pressed.connect(_on_decline)
-	box.add_child(decline)
 
 
 ## 视口尺寸：优先 DisplayServer 实际窗口（_ready 时 viewport 可能还没跟着窗口刷新），
@@ -149,10 +120,8 @@ func _style_label(l: Label, size: int, col: Color) -> void:
 	l.add_theme_color_override("font_color", col)
 
 
-## 生成一枚按钮：primary = 金底深字，否则描边暗底
-func _button(text: String, primary: bool) -> Button:
-	var b := Button.new()
-	b.text = text
+## 注入按钮样式：primary = 金底深字，否则描边暗底（节点与文案由场景承载）
+func _style_button(b: Button, primary: bool) -> void:
 	b.focus_mode = Control.FOCUS_NONE
 	b.custom_minimum_size = Vector2(0, 44 if primary else 38)
 	b.add_theme_font_override("font", F_SANS)
@@ -181,7 +150,6 @@ func _button(text: String, primary: bool) -> Button:
 	b.add_theme_stylebox_override("hover", hover)
 	b.add_theme_stylebox_override("pressed", pressed)
 	b.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
-	return b
 
 
 ## 打开完整隐私政策（外部浏览器；无浏览器时静默失败，不阻断流程）

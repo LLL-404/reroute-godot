@@ -4,18 +4,18 @@ extends ProbeKit
 # 合规要点：必须提供可真正退出的「不同意」路径（不能只有同意），因此拒绝链路单独断言。
 # 运行：godot --headless -s res://tests/probes/probe_privacy.gd
 
-const GATE_PATH := "res://game/privacy_gate.gd"
+const GATE_PATH := "res://game/privacy_gate.tscn"
 
 
 func _initialize() -> void:
-	var gate_script = load(GATE_PATH)
-	check(gate_script != null, "privacy_gate.gd 可加载")
-	if gate_script == null:
+	var gate_scene = load(GATE_PATH)
+	check(gate_scene != null, "privacy_gate.tscn 可加载")
+	if gate_scene == null:
 		finish("PRIVACY", 1)
 		return
 
 	# ---- 结构：三按钮 + 标题 + 正文 ----
-	var g = gate_script.new()
+	var g = gate_scene.instantiate()
 	get_root().add_child(g)
 	await process_frame
 	await process_frame
@@ -42,7 +42,7 @@ func _initialize() -> void:
 	check(agreed[0], "点「同意」发出 agreed 信号")
 
 	# ---- 拒绝链路（重建实例：上一个已 queue_free）----
-	var g2 = gate_script.new()
+	var g2 = gate_scene.instantiate()
 	get_root().add_child(g2)
 	await process_frame
 	await process_frame

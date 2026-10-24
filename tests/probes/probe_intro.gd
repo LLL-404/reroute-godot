@@ -4,7 +4,7 @@ extends ProbeKit
 ## + 性能口径（首拍预热帧 / 主世界停画与恢复 / 隐藏态退出安全网）。
 ## 判定：exit 0 + stdout 含 `[INTRO] PASS`。跑法：godot --path <P> -s res://tests/probes/probe_intro.gd
 
-const IntroScript = preload("res://game/intro.gd")
+const IntroScene = preload("res://game/intro.tscn")
 
 var main = null
 
@@ -25,7 +25,7 @@ func _initialize() -> void:
 	main.free()
 
 	# ---- B. 直接实例化 Intro：手动喂 dt，断言相位阶梯 ----
-	var intro = IntroScript.new()
+	var intro = IntroScene.instantiate()
 	get_root().add_child(intro)
 	intro.set_process(false) # 探针独占推进（确定性 dt）
 	var snd_calls: Array = []
@@ -82,7 +82,7 @@ func _initialize() -> void:
 	check(gone, "跳过后快速自毁")
 
 	# ---- D. 不跳过路径：自动结束 ----
-	var intro2 = IntroScript.new()
+	var intro2 = IntroScene.instantiate()
 	get_root().add_child(intro2)
 	intro2.set_process(false)
 	intro2.begin(Callable(), {})
@@ -91,7 +91,7 @@ func _initialize() -> void:
 	check(gone2, "无输入 t>DUR 自动自毁")
 
 	# ---- E. 预热帧语义：首拍 UPDATE_ONCE（黑幕盖着编译），次拍回关 ----
-	var intro3 = IntroScript.new()
+	var intro3 = IntroScene.instantiate()
 	get_root().add_child(intro3)
 	intro3.set_process(false)
 	intro3.begin(Callable(), {})
@@ -108,7 +108,7 @@ func _initialize() -> void:
 	for _i in 5:
 		await process_frame
 	main2.set_process(false)
-	var intro4 = IntroScript.new()
+	var intro4 = IntroScene.instantiate()
 	main2.add_child(intro4)
 	intro4.set_process(false)
 	intro4.begin(Callable(), {})
@@ -119,7 +119,7 @@ func _initialize() -> void:
 	check(not main2.view.visible, "第 2 拍起主世界停画")
 	intro4.free()
 	check(main2.view.visible, "隐藏态退出→安全网恢复世界")
-	var intro5 = IntroScript.new()
+	var intro5 = IntroScene.instantiate()
 	main2.add_child(intro5)
 	intro5.set_process(false)
 	intro5.begin(Callable(), {})

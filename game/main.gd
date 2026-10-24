@@ -7,10 +7,17 @@ const Blueprint = preload("res://game/blueprint.gd")
 const Selfcheck = preload("res://game/selfcheck.gd")
 const UserSettings = preload("res://game/user_settings.gd")
 const SaveIO = preload("res://game/save_io.gd")
+const PrivacyGateScene = preload("res://game/privacy_gate.tscn") # 隐私门场景（结构在 tscn）
+const IntroScene = preload("res://game/intro.tscn") # 开屏动画场景（结构在 tscn）
+const HudScene = preload("res://game/hud.tscn") # HUD 场景（结构在 tscn）
+const ScreensScene = preload("res://game/screens.tscn") # 界面壳场景（五页面 + 确认弹窗 + 过渡黑幕）
+const RunUiScene = preload("res://game/run_ui.tscn") # 肉鸽 HUD 场景（结构在 tscn）
+const HexPickerScene = preload("res://game/hex_picker.tscn") # 三选一面板场景（结构在 tscn）
 
 const TICK_DT := 1.0 / 20.0
 const MAX_CATCHUP := 5 # 单帧最多补的 tick 数（追平上限，超出丢弃积压）
 const BASE_SEED := 20261003
+const SEED_RETRY_MAX := 256 # 种子顺延上限：撞上死图（64 盐耗尽）就 +1 再试，最多这么多次
 const CAM_PAN_SPEED := 24.0 # WASD 平移速度（世界单位/秒）
 const CAM_ROT_SPEED := 1.5 # Q/E 旋转速度（rad/s）
 const CAM_KEYS := [KEY_W, KEY_A, KEY_S, KEY_D, KEY_Q, KEY_E] # 相机键（不参与对局操作）
@@ -66,6 +73,8 @@ var _intro = null # 开屏动画层（game/intro.gd；仅冷启动非探针路�
 var _settings: Dictionary = {} # 玩家设置缓存（含 runs 跨会话局数；save_cfg 回写）
 var _is_probe_run := false # 探针/自检运行：不读不写跨会话局数（保探针确定性与种子口径）
 var _ore_intent := {} # M2-a 待开挖矿格意图：{ "ore": Vector2i, "stand": Vector2i }
+var _transitioning := false # UI 过渡中（黑幕在屏上，吞掉重复点击）
+var _seed_shift_msg := "" # 种子顺延提示文案（暂存；显示接线在后续任务，不在这里碰 hud/screens）
 
 
 ## 初始化：建 HUD/壳、开新局、显示标题屏；自检模式触发 export 验收
@@ -92,7 +101,6 @@ func _boot() -> void:
 	_setup_run_ui()
 	if _is_probe_run:
 		view.core.shake_on = false # 震屏会抖偏截图：探针/selfcheck/headless 一律不启用（像素校验口径）
-	if _is_probe_run:
 		UserSettings.apply_audio(_settings) # 探针只应用音量（显示/画质保持默认，保 gate 截图口径）
 	else:
 		UserSettings.apply_all(_settings) # 启动即应用玩家设置（音量 bus / 显示模式 / 分辨率 / 垂直同步）
@@ -101,18 +109,28 @@ func _boot() -> void:
 		shell.apply_ui_scale(int(_settings.get("ui_pct", 100)))
 	if not _is_probe_run:
 		run_index = maxi(0, int(_settings.get("runs", 0))) # 跨会话续接已玩局数（标题预烘焙不算）
+		# 先亮黑幕并让出两帧再动工（2026-10-22）：否则整段构建卡在 _ready 里，
+		# 玩家面对的是没画过一帧的黑窗；手机端构建更久，必须先给可见反馈。
+		shell.veil_show("正在生成战场…")
+		await get_tree().process_frame
+		await get_tree().process_frame
 	new_game()
 	hud.set_visible_hud(false)
+	view.core.fit_camera() # 标题背景固定为标准俯视全图（不受窗口尺寸变化前的残留取景影响）
 	shell.open_title() # 启动即标题：标题屏压着静态战场（母版口径，paused 初值 true）
 	if _is_selfcheck():
+		shell.veil_hide()
 		_run_selfcheck()
 	elif _intro_enabled():
 		_play_intro()
+		shell.veil_hide() # 开屏动画自带黑场接管，避免黑幕与开屏双重淡出
+	elif not _is_probe_run:
+		shell.veil_fade_out(0.3)
 
 
 ## 弹隐私门：同意 → 落盘 + 走正常启动；不同意 → 退出应用。
 func _show_privacy_gate() -> void:
-	var gate = load("res://game/privacy_gate.gd").new()
+	var gate = PrivacyGateScene.instantiate()
 	add_child(gate)
 	gate.agreed.connect(_on_privacy_agreed)
 	gate.declined.connect(_on_privacy_declined)
@@ -144,8 +162,7 @@ func _intro_enabled() -> bool:
 
 ## 播放开屏动画（一次性；层级在壳之上，播完自毁清引用）。
 func _play_intro() -> void:
-	var Intro = load("res://game/intro.gd")
-	_intro = Intro.new()
+	_intro = IntroScene.instantiate()
 	add_child(_intro)
 	_intro.begin(Callable(view, "play_sound"), hud.DARK)
 	_intro.on_done = func() -> void:
@@ -185,7 +202,7 @@ func _setup_hud() -> void:
 	hud_layer.name = "HudLayer"
 	hud_layer.layer = 10
 	add_child(hud_layer)
-	hud = preload("res://game/hud.gd").new()
+	hud = HudScene.instantiate()
 	hud_layer.add_child(hud)
 	hud.build({
 		"on_mode": Callable(self, "_on_hud_mode"),
@@ -203,12 +220,12 @@ func _setup_hud() -> void:
 
 ## 界面壳构建与接线（口径同母版 main.Start：Shell.init 注入回调）。
 func _setup_shell() -> void:
-	shell = preload("res://game/screens.gd").new()
+	shell = ScreensScene.instantiate()
 	shell.name = "Shell"
 	add_child(shell)
 	shell.init({
-		"start_match": Callable(self, "start_match"),
-		"start_rogue": Callable(self, "start_rogue"),
+		"start_match": Callable(self, "_ui_start_match"),
+		"start_rogue": Callable(self, "_ui_start_rogue"),
 		"restart": Callable(self, "restart_game"),
 		"resume": Callable(self, "resume_game"),
 		"to_title": Callable(self, "to_title"),
@@ -218,12 +235,14 @@ func _setup_shell() -> void:
 		"save_slot": Callable(self, "save_game"),
 		"video_changed": Callable(self, "_on_video_changed"),
 		"ui_changed": Callable(self, "_on_ui_changed"),
+		"get_seed_text": Callable(self, "_seed_text"),
+		"seed_changed": Callable(self, "_on_seed_changed"),
 	}, hud)
 
 
 ## 肉鸽 HUD 构建与接线（独立 CanvasLayer，不侵入 hud/screens）
 func _setup_run_ui() -> void:
-	run_ui = preload("res://game/run_ui.gd").new()
+	run_ui = RunUiScene.instantiate()
 	run_ui.name = "RunUi"
 	add_child(run_ui)
 	run_ui.init({
@@ -234,13 +253,56 @@ func _setup_run_ui() -> void:
 		"advance": Callable(self, "_run_advance"),
 		"use_card": Callable(self, "_run_use_card"),
 	}, hud)
-	hex = preload("res://game/hex_picker.gd").new()
+	hex = HexPickerScene.instantiate()
 	hex.name = "HexPicker"
 	add_child(hex)
 	hex.init({ "sfx": Callable(view, "play_sound") }, hud)
 
 
 # ---------------- 屏幕流转（页状态 = 游戏状态：进行中 = 空态） ----------------
+
+## 标题「经典对局」按钮：短黑场过渡（0.1s 淡入 → 切场 → 0.24s 揭示）。
+## 探针直接走同步 start_match，保 probe_ui_flow 的即点即断言时序。
+## p_seed_text = 标题屏种子框原文（留空 = 复用已预烘焙的那局，不重摇）。
+func _ui_start_match(p_seed_text: String = "") -> void:
+	if _is_probe_run:
+		start_match()
+		return
+	if _transitioning:
+		return
+	_transitioning = true
+	var v := SeedCode.from_text(p_seed_text)
+	# 只有玩家给了与场上那局不同的种子才重生成；同图直接开（省一次地形重建）
+	if v > 0 and sc != null and int(sc.seed) != v:
+		shell.veil_show("正在生成战场…", 0.10)
+		await get_tree().process_frame
+		await get_tree().process_frame
+		new_game(v)
+	else:
+		shell.veil_show("", 0.10)
+		await get_tree().create_timer(0.12).timeout
+	start_match()
+	shell.veil_fade_out(0.24)
+	await get_tree().create_timer(0.26).timeout
+	_transitioning = false
+
+
+## 标题「肉鸽模式」按钮：地形重建（约 2~3s）压在全黑幕下完成，点击后不再呈现冻屏。
+## p_seed_text 口径同经典对局（留空 = 自动随机 / 取设置里的种子）。
+func _ui_start_rogue(p_seed_text: String = "") -> void:
+	if _is_probe_run:
+		start_rogue()
+		return
+	if _transitioning:
+		return
+	_transitioning = true
+	shell.veil_show("正在生成战场…", 0.12)
+	await get_tree().create_timer(0.14).timeout
+	start_rogue(SeedCode.from_text(p_seed_text))
+	shell.veil_fade_out(0.26)
+	await get_tree().create_timer(0.28).timeout
+	_transitioning = false
+
 
 ## 标题 → 对局：用启动/回标题时备好的那局。
 func start_match() -> void:
@@ -250,15 +312,33 @@ func start_match() -> void:
 	drag_start = Vector2i(-1, -1)
 	hud.reset()
 	hud.set_visible_hud(true)
+	_flush_seed_shift_msg() # 种子被顺延过的提示：HUD 可见后补一次
 	view.bgm(true)
 	shell.close_all()
 	_persist_runs()
 
 
 ## 开一局肉鸽：新种子 → RunState（内含独立 Scenario + World）→ 切表现层
-func start_rogue() -> void:
+## p_seed = 0 → 自动（探针旧口径 / 玩家种子 / 随机）；撞上死图则 +1 顺延。
+func start_rogue(p_seed: int = 0) -> void:
 	run_index += 1
-	run = RunState.new(BASE_SEED + run_index)
+	var want := p_seed if p_seed > 0 else _auto_seed()
+	# 顺延循环：换盐耗尽（gen_failed）就换下一个种子再试，最多 SEED_RETRY_MAX 次
+	var used := want
+	var r: RunState = null
+	while used < want + SEED_RETRY_MAX:
+		r = RunState.new(used)
+		if not r.sc.gen_failed:
+			break
+		r = null
+		used += 1
+	if r == null:
+		used = Scenario.DEFAULT_SEED # 全部失败：回落默认图（与 Scenario 内部回落同口径）
+		r = RunState.new(used)
+	if used != want:
+		print("[Game] 种子顺延 %d → %d" % [want, used])
+		_notify_seed_shift(want, used)
+	run = r
 	sc = run.sc
 	world = run.world
 	tower_pick = 0
@@ -277,14 +357,16 @@ func start_rogue() -> void:
 	if hud != null:
 		hud.reset()
 		hud.set_heat_vis(false)
+		hud.set_seed(used) # 肉鸽局同样显示种子（top_bar 会隐藏，种子标签挂在根下不受影响）
 	_reset_undo()
 	paused = true # INTRO 阶段：等玩家点开始
 	hud.set_visible_hud(true)
 	hud.top_bar.visible = false # 经典顶栏的「终局 tick / 波次」在肉鸽局无意义，由 run_ui 接管
+	_flush_seed_shift_msg() # 顺延提示：HUD 可见后补一次
 	run_ui.show_run(run)
 	shell.close_all()
 	view.bgm(true)
-	print("[Game] 肉鸽开局 seed=", BASE_SEED + run_index)
+	print("[Game] 肉鸽开局 seed=", used)
 	_persist_runs()
 
 
@@ -378,11 +460,13 @@ func resume_game() -> void:
 
 
 ## 暂停/结算 → 重开一局（肉鸽局重开仍是肉鸽）
+## 设置里填了种子就重开仍用它；留空 = 每局随机（探针恒为 0，保旧口径）。
 func restart_game() -> void:
+	var v := _seed_from_settings()
 	if run != null:
-		start_rogue()
+		start_rogue(v)
 		return
-	new_game()
+	new_game(v)
 	start_match()
 
 
@@ -399,7 +483,8 @@ func to_title() -> void:
 		hex.close()
 	hud.set_visible_hud(false)
 	view.bgm(false)
-	new_game()
+	new_game(_seed_from_settings())
+	view.core.fit_camera() # 回标题重置相机：与冷启动同口径（清掉玩家拖/缩/转后的视角）
 	shell.open_title()
 
 
@@ -430,6 +515,8 @@ func load_game(slot: int) -> bool:
 		hud.set_heat_vis(false)
 	_reset_undo()
 	start_match()
+	if hud != null:
+		hud.set_seed(int(world.sc.seed)) # 读档回显：显示存档内的种子（与地图一致）
 	print("[Game] 读档 槽=", slot, " run=", run_index, " tick=", world.tick_count)
 	return true
 
@@ -628,15 +715,19 @@ func _visual_anchor() -> Dictionary:
 
 ## 岩野山体锚点：岩群格 → 8×8 桶聚类（n≥6，按强度降序取前 10，同分按桶键）→
 ## [wx, wz, sigma, amp]；强度 w = min(n/30, 1)：sigma 2.3..4.0m、amp 0.8..1.7m。
+## 2026-10-23 随机高度场：视觉山体只覆盖**实际 h≥1** 的岩群（簇内平均高度），
+## 避免视觉山包落在玩法平地/坑上（地形起伏已由模拟高度层接管）。
 func _rock_ridges() -> Array:
 	var b := {}
 	for c in sc.rock_cells():
 		var cc: Vector2i = c
+		@warning_ignore("integer_division")
 		var key: int = (cc.x / 8) * 8 + cc.y / 8
-		var t: Array = b.get(key, [0, 0.0, 0.0])
+		var t: Array = b.get(key, [0, 0.0, 0.0, 0.0])
 		t[0] += 1
 		t[1] += float(cc.x) - 31.5 + 0.5 * float(cc.y & 1)
 		t[2] += float(cc.y) - 31.5
+		t[3] += float(sc.height_at(cc.x, cc.y))
 		b[key] = t
 	var keys: Array = b.keys()
 	keys.sort()
@@ -646,6 +737,8 @@ func _rock_ridges() -> Array:
 		var n: int = int(t[0])
 		if n < 6:
 			continue
+		if float(t[3]) / float(n) < 1.0:
+			continue # 平地/坑上的岩群不叠视觉山包（新高度场已给出真实起伏）
 		var w := minf(float(n) / 30.0, 1.0)
 		pts.append([float(key), float(t[1]) / float(n), float(t[2]) / float(n), 2.3 + 1.7 * w, 0.8 + 0.9 * w])
 	pts.sort_custom(func(a: Array, bb: Array) -> bool:
@@ -660,15 +753,80 @@ func _rock_ridges() -> Array:
 	return out
 
 
+## 开局要用的种子：探针/自检 → 旧口径（基准 + 局号，逐字节不变）；
+## 正常游玩 → 设置里的玩家种子，留空则摇一个 31 位正随机（0 已被「随机」占用，故 +1）。
+func _auto_seed() -> int:
+	if _is_probe_run:
+		return BASE_SEED + run_index
+	var v := SeedCode.from_text(String(_settings.get("seed_text", "")))
+	if v > 0:
+		return v
+	return randi() % 2147483646 + 1
+
+
+## 设置里的种子（文字→数字）；探针/自检恒为 0，保证闸的旧口径不掺玩家设置。
+func _seed_from_settings() -> int:
+	if _is_probe_run:
+		return 0
+	return SeedCode.from_text(String(_settings.get("seed_text", "")))
+
+
+## 标题屏种子框回填文本（空串 = 每局随机）。
+func _seed_text() -> String:
+	return String(_settings.get("seed_text", ""))
+
+
+## 标题屏种子框改动：清洗（去空白 + 截 24）后写设置缓存；探针模式不落盘（保闸确定性）。
+func _on_seed_changed(t: String) -> void:
+	_settings["seed_text"] = UserSettings.clean_seed_text(t)
+	if not _is_probe_run:
+		UserSettings.save_cfg(_settings)
+
+
+## 按种子建剧本；撞上死图（64 次换盐仍不合法）就 +1 顺延，最多 SEED_RETRY_MAX 次。
+## 返回 {"sc": Scenario, "seed": 实际生效的种子}（回落默认图时 seed = 默认种子）。
+func _make_scenario(p_seed: int) -> Dictionary:
+	var sd := p_seed
+	for _attempt in SEED_RETRY_MAX:
+		var s := Scenario.new(sd)
+		if not s.gen_failed:
+			if sd != p_seed:
+				print("[Game] 种子顺延 %d → %d" % [p_seed, sd])
+			return {"sc": s, "seed": sd}
+		sd += 1
+	# 256 次全失败：用默认图（Scenario 内部同样回落默认），种子记为默认种子
+	print("[Game] 种子顺延 %d → %d" % [p_seed, Scenario.DEFAULT_SEED])
+	return {"sc": Scenario.new(Scenario.DEFAULT_SEED), "seed": Scenario.DEFAULT_SEED}
+
+
+## 种子被顺延时暂存中文提示（两个数字）；HUD 可见时由 _flush_seed_shift_msg 显示。
+func _notify_seed_shift(want: int, used: int) -> void:
+	_seed_shift_msg = "种子 %d 不可用，已改用 %d" % [want, used]
+
+
+## 把暂存的顺延提示丢给 HUD（一次性，显示后清空；HUD 未建时留到下次开局）。
+func _flush_seed_shift_msg() -> void:
+	if _seed_shift_msg.is_empty() or hud == null:
+		return
+	hud.hint(_seed_shift_msg)
+	_seed_shift_msg = ""
+
+
 ## 开新局：局号 +1 → 新玩法地图 + 蓝图视觉 + 世界重置（标题/重开共用）
-func new_game() -> void:
+## p_seed = 0 → 自动取种（探针旧口径 / 玩家种子 / 随机）；>0 → 玩家指定。
+func new_game(p_seed: int = 0) -> void:
 	run_index += 1
-	sc = Scenario.new(BASE_SEED + run_index) # 玩法地图 = 每局一套布局（与 RNG 种子同源，确定性）
+	var want := p_seed if p_seed > 0 else _auto_seed()
+	var made: Dictionary = _make_scenario(want)
+	sc = made["sc"] # 玩法地图 = 每局一套布局（同种子恒同图，确定性）
+	var used: int = made["seed"] # 实际采用的种子（可能被顺延过）
 	# 新局先清理上一局的视觉状态，避免热层跨局残留。
 	view.set_heat(false)
 	var picked: Array = Blueprint.pick(run_index)
 	view.apply_blueprint(picked[0], picked[1], _visual_anchor())
-	world = World.new(sc, BASE_SEED + run_index)
+	world = World.new(sc, used)
+	if hud != null:
+		hud.set_seed(used) # HUD 常驻显示本局实际种子（可能是顺延后的）
 	view.is_ore = Callable(sc, "is_ore")
 	view.build_terrain(world.grid)
 	view.sync(world)
@@ -680,14 +838,16 @@ func new_game() -> void:
 		hud.reset()
 		hud.set_heat_vis(false)
 	_reset_undo()
-	print("[Game] 新对局 run=", run_index, " seed=", BASE_SEED + run_index, " sc_seed=", sc.seed)
+	print("[Game] 新对局 run=", run_index, " seed=", used, " sc_seed=", sc.seed)
+	if used != want:
+		_notify_seed_shift(want, used)
 
 
 ## 限帧：非对局态（标题/暂停/结算，判据同 _camera_free）取 min(玩家上限, 60) 压风扇/GPU；
 ## 对局态 = 玩家上限（0 = vsync 锁刷新率全速）。探针/自检恒用 0/60 口径（忽略玩家设置，
 ## 保 gate 确定性）。每帧幂等同步，无状态簿记。
 func _sync_fps_cap() -> void:
-	var cap := 0 if _is_probe_run else UserSettings.fps_cap(_settings)
+	var cap: int = 0 if _is_probe_run else UserSettings.fps_cap(_settings) # 显式 int：preload 静态调用退回 Variant 会触发三元类型不兼容警告
 	var want := cap
 	if not _camera_free():
 		want = MENU_FPS if cap <= 0 else mini(cap, MENU_FPS)

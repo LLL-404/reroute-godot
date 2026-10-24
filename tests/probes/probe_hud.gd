@@ -332,6 +332,9 @@ func _find_clickable(main, world, exclude: Array = []) -> Vector2i:
 			var sp := _sp_of(main, Vector2i(x, y))
 			if sp.x < 0.0 or sp.y < 0.0 or sp.x >= vp_size.x or sp.y >= vp_size.y:
 				continue
+			# 取景拉近后地图边缘会压到 HUD 下：被 HUD 覆盖的格真实输入会被 main.in_hud_region 排除，不算可点击
+			if main.in_hud_region(sp.x, sp.y):
+				continue
 			var back: Vector2i = view.pick_cell(sp.x, sp.y)
 			if back.x == x and back.y == y:
 				return Vector2i(x, y)

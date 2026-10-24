@@ -27,7 +27,7 @@ func _scripted(w: World) -> void:
 	var c_fill := _find_cell(w, 0)
 	if c_fill.x >= 0:
 		w.apply_command({ "kind": "fill", "x": c_fill.x, "y": c_fill.y })
-	var c_low := _find_cell(w, Sim.H_MIN + 1)
+	var c_low := _find_cell(w, Sim.H_MIN + 3)
 	if c_low.x >= 0:
 		w.apply_command({ "kind": "lower", "x": c_low.x, "y": c_low.y })
 
@@ -43,9 +43,9 @@ func register(kit: TestKit) -> void:
 	kit.test("encode-fields", func():
 		var w := World.new(Scenario.new(), 123)
 		var d := Save.encode(w, 2)
-		kit.eq(d["format"], 2, "格式版本")
+		kit.eq(d["format"], 3, "格式版本")
 		kit.eq(d["schema"], Canon.STATE_SCHEMA, "状态版本")
-		kit.eq(d["sc_fp"], 2112498434, "剧本指纹 0x7dea2b02")
+		kit.eq(d["sc_fp"], 592100497, "剧本指纹 0x234abc91")
 		kit.eq(d["meta"]["run"], 2, "meta.run")
 		kit.eq(d["meta"]["tick"], 0, "meta.tick")
 		kit.eq(d["meta"]["wave"], 0, "meta.wave 开局 0")
@@ -154,14 +154,53 @@ func register(kit: TestKit) -> void:
 		d["checksum"] = int(d["checksum"]) + 1
 		kit.ok(Save.decode(_json_rt(d)) == null, "校验和被改即拒绝"))
 
+	kit.test("negative-height-roundtrip", func():
+		var w := World.new(Scenario.new(), 12)
+		var c := _find_cell(w, 0)
+		kit.ok(c.x >= 0, "找到平地格")
+		if c.x >= 0:
+			w.apply_command({ "kind": "lower", "x": c.x, "y": c.y })
+			w.apply_command({ "kind": "lower", "x": c.x, "y": c.y })
+			kit.eq(w.grid.get_h(c.x, c.y), -2, "两次挖低到 h-2")
+		var w2 := Save.decode(_json_rt(Save.encode(w, 1)))
+		kit.ok(w2 != null, "负高度档读档非空")
+		kit.eq(w2.fingerprint(), w.fingerprint(), "负高度 canonical 一致")
+		var same := true
+		for i in w.grid.w * w.grid.h:
+			if w2.grid.hgt[i] != w.grid.hgt[i]:
+				same = false
+				break
+		kit.ok(same, "hgt 含负值逐格一致")
+		if c.x >= 0:
+			kit.eq(w2.grid.get_h(c.x, c.y), -2, "读回后负高度保真"))
+
+	kit.test("climb-wait-roundtrip", func():
+		var w := World.new(Scenario.new(), 13)
+		var c := _find_cell(w, 0)
+		if c.x >= 0:
+			w.spawn_unit(c.x, c.y, 4, Sim.E_SWARM)
+			w.units[0]["climb_wait"] = 5 # 白盒：制造后摇窗口
+		var w2 := Save.decode(_json_rt(Save.encode(w, 1)))
+		kit.ok(w2 != null, "后摇档读档非空")
+		kit.eq(w2.units.size(), w.units.size(), "单位数一致")
+		if w2.units.size() > 0:
+			kit.eq(w2.units[0]["climb_wait"], 5, "climb_wait 往返保真")
+		kit.eq(w2.fingerprint(), w.fingerprint(), "含 climb_wait 的 canonical 一致"))
+
 	kit.test("reject-version-mismatch", func():
 		var w := World.new(Scenario.new(), 3)
 		var d1 := Save.encode(w, 1)
 		d1["format"] = 99
 		kit.ok(Save.decode(_json_rt(d1)) == null, "格式版本不符拒绝")
+		var d0 := Save.encode(w, 1)
+		d0["format"] = 2
+		kit.ok(Save.decode(_json_rt(d0)) == null, "旧 format 2 拒载")
 		var d2 := Save.encode(w, 1)
 		d2["schema"] = 99
 		kit.ok(Save.decode(_json_rt(d2)) == null, "状态版本不符拒绝")
+		var d0s := Save.encode(w, 1)
+		d0s["schema"] = 6
+		kit.ok(Save.decode(_json_rt(d0s)) == null, "旧 schema 6 拒载")
 		var d3 := Save.encode(w, 1)
 		d3["sc_fp"] = 0
 		kit.ok(Save.decode(_json_rt(d3)) == null, "剧本指纹不符拒绝"))

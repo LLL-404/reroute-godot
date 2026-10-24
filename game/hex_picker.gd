@@ -10,7 +10,7 @@ extends CanvasLayer
 # 层级 12：压在 run_ui(11) 与 hud(10) 之上，低于 shell(20)。
 
 const UiStyle = preload("res://game/ui_style.gd")
-const UiIcon = preload("res://game/ui_icon.gd")
+const HexCardScene = preload("res://game/hex_card.tscn") # 卡片骨架场景（结构在 tscn）
 
 # 稀有度配色（银 / 金 / 棱彩），LOL 口径
 const RARITY := {
@@ -67,12 +67,7 @@ func init(callbacks: Dictionary, _hud_ref) -> void:
 	C = UiStyle.DARK
 	layer = 12
 	_recalc_s()
-	root = Control.new()
-	root.name = "HexRoot"
-	root.set_anchors_preset(Control.PRESET_FULL_RECT)
-	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(root)
-	_build()
+	_bind()
 	visible = false
 
 
@@ -80,33 +75,29 @@ func _recalc_s() -> void:
 	S = clampf(get_viewport().get_visible_rect().size.y / 816.0, 1.0, 1.6)
 
 
-func _build() -> void:
-	dim = ColorRect.new()
-	dim.color = Color(0.03, 0.025, 0.015, 0.0)
-	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
-	dim.mouse_filter = Control.MOUSE_FILTER_STOP # 吃掉点击，防穿透到战场
-	root.add_child(dim)
+## 绑定场景骨架（结构在 hex_picker.tscn）；颜色/纹理/位置/边距按 S 注入
+func _bind() -> void:
+	root = $HexRoot
 
-	vignette = TextureRect.new()
+	dim = root.get_node("dim")
+	dim.color = Color(0.03, 0.025, 0.015, 0.0) # 压暗层起始全透，动画拉到 0.72
+	dim.mouse_filter = Control.MOUSE_FILTER_STOP # 吃掉点击，防穿透到战场
+
+	vignette = root.get_node("vignette")
 	vignette.texture = UiStyle.vignette_tex()
 	vignette.stretch_mode = TextureRect.STRETCH_SCALE
-	vignette.set_anchors_preset(Control.PRESET_FULL_RECT)
-	vignette.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	root.add_child(vignette)
 
-	title = UiStyle.label("", 13.0 * S, C["muted"])
+	title = root.get_node("title")
+	title.add_theme_font_size_override("font_size", int(13.0 * S))
+	title.add_theme_color_override("font_color", C["muted"])
 	title.set_anchors_preset(Control.PRESET_CENTER_TOP)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.position = Vector2(0, int(54.0 * S))
-	root.add_child(title)
 
-	card_layer = Control.new()
-	card_layer.set_anchors_preset(Control.PRESET_FULL_RECT)
+	card_layer = root.get_node("card_layer")
 	card_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	root.add_child(card_layer)
 
-	foot = HBoxContainer.new()
-	foot.alignment = BoxContainer.ALIGNMENT_CENTER
+	foot = root.get_node("foot")
 	foot.add_theme_constant_override("separation", int(14 * S))
 	foot.anchor_left = 0.5
 	foot.anchor_right = 0.5
@@ -116,8 +107,6 @@ func _build() -> void:
 	foot.offset_right = 180.0 * S
 	foot.offset_top = -74.0 * S
 	foot.offset_bottom = -30.0 * S
-	foot.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	root.add_child(foot)
 
 
 # ---------------- 对外接口 ----------------
@@ -305,7 +294,8 @@ func _refresh() -> void:
 func _make_card(i: int, def: Dictionary, cw: float, ch: float) -> Control:
 	var rar: String = String(def.get("rarity", "common"))
 	var rc: Dictionary = RARITY.get(rar, RARITY["common"])
-	var holder := Control.new()
+	# 骨架来自 hex_card.tscn；尺寸/稀有度配色/文本在运行时注入
+	var holder: Control = HexCardScene.instantiate()
 	holder.name = "card%d" % i
 	holder.size = Vector2(cw, ch)
 	holder.pivot_offset = Vector2(cw * 0.5, ch * 0.5)
@@ -319,80 +309,71 @@ func _make_card(i: int, def: Dictionary, cw: float, ch: float) -> Control:
 				_select(i))
 
 	# 稀有度光晕（比卡大一圈，悬停点亮）
-	var glow := Panel.new()
-	glow.name = "glow"
-	glow.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var gc: Color = rc["glow"]
+	var glow: Panel = holder.get_node("glow")
 	glow.position = Vector2(-12.0 * S, -12.0 * S)
 	glow.size = Vector2(cw + 24.0 * S, ch + 24.0 * S)
-	var gc: Color = rc["glow"]
 	glow.add_theme_stylebox_override("panel", UiStyle.flat(Color(gc.r, gc.g, gc.b, 0.26), Color(0, 0, 0, 0), int(10 * S), 0))
 	glow.modulate.a = 0.45
-	holder.add_child(glow)
 
 	# 卡面
-	var card := PanelContainer.new()
-	card.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	card.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var ec: Color = rc["edge"]
+	var card: PanelContainer = holder.get_node("face")
 	card.add_theme_stylebox_override("panel", UiStyle.flat(Color(0.075, 0.06, 0.035, 0.97), ec, int(6 * S), 2))
-	holder.add_child(card)
 
-	var m := MarginContainer.new()
-	m.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var m: MarginContainer = card.get_node("Margin")
 	for side in ["left", "right"]:
 		m.add_theme_constant_override("margin_" + side, int(16 * S))
 	m.add_theme_constant_override("margin_top", int(14 * S))
 	m.add_theme_constant_override("margin_bottom", int(14 * S))
-	var v := VBoxContainer.new()
-	v.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var v: VBoxContainer = m.get_node("col")
 	v.add_theme_constant_override("separation", int(9 * S))
 
-	var bar := ColorRect.new()
+	var bar: ColorRect = v.get_node("bar")
 	bar.color = ec
 	bar.custom_minimum_size = Vector2(0, int(3 * S))
-	bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	v.add_child(bar)
 
-	var kind_l := UiStyle.label(String(KIND_NAME.get(String(def.get("kind", "")), "")), 10.0 * S, C["muted"])
-	v.add_child(kind_l)
+	var kind_l: Label = v.get_node("kind")
+	kind_l.text = String(KIND_NAME.get(String(def.get("kind", "")), ""))
+	kind_l.add_theme_font_size_override("font_size", int(10.0 * S))
+	kind_l.add_theme_color_override("font_color", C["muted"])
 
-	var name_l := UiStyle.label(String(def.get("name", "")), 22.0 * S, ec, null, false, true)
-	v.add_child(name_l)
+	var name_l: Label = v.get_node("card_name")
+	name_l.text = String(def.get("name", ""))
+	name_l.add_theme_font_size_override("font_size", int(22.0 * S))
+	name_l.add_theme_color_override("font_color", ec)
+	name_l.add_theme_color_override("font_shadow_color", UiStyle.GLOW_GOLD)
+	name_l.add_theme_constant_override("shadow_offset_x", 0)
+	name_l.add_theme_constant_override("shadow_offset_y", 1)
 
-	var ic := UiIcon.new()
+	var ic = v.get_node("icon") # 挂 ui_icon.gd 脚本：无静态类型才能调 setup
 	ic.custom_minimum_size = Vector2(int(84.0 * S), int(84.0 * S))
 	ic.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	ic.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	ic.setup(String(KIND_ICON.get(String(def.get("kind", "")), "skill")), Color(ec.r, ec.g, ec.b, 0.88))
-	v.add_child(ic)
 
-	var d := UiStyle.label(String(def.get("desc", "")), 13.0 * S, C["text"])
-	d.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	var d: Label = v.get_node("desc")
+	d.text = String(def.get("desc", ""))
+	d.add_theme_font_size_override("font_size", int(13.0 * S))
+	d.add_theme_color_override("font_color", C["text"])
 	d.custom_minimum_size = Vector2(cw - 34.0 * S, 0)
-	v.add_child(d)
 
-	var spring := Control.new()
-	spring.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	spring.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	v.add_child(spring)
-
-	var rule := ColorRect.new()
+	var rule: ColorRect = v.get_node("rule")
 	rule.color = Color(ec.r, ec.g, ec.b, 0.35)
 	rule.custom_minimum_size = Vector2(0, 1)
-	rule.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	v.add_child(rule)
 
-	var rar_l := UiStyle.label(String(rc["name"]), 10.0 * S, ec)
-	v.add_child(rar_l)
+	var rar_l: Label = v.get_node("rarity")
+	rar_l.text = String(rc["name"])
+	rar_l.add_theme_font_size_override("font_size", int(10.0 * S))
+	rar_l.add_theme_color_override("font_color", ec)
 
-	m.add_child(v)
-	card.add_child(m)
 	return holder
 
 
 ## 一次性的悬停/位移动画缓存（避免同一张卡上多条 tween 打架）
 func _kill(c: Control) -> void:
-	var old = c.get_meta("tw", null)
+	if not c.has_meta("tw"): # 未登记过 tween：无需停旧动画（get_meta 缺省 null 会报错）
+		return
+	var old = c.get_meta("tw")
 	if old is Tween and old.is_running():
 		old.kill()
 	c.set_meta("tw", null)

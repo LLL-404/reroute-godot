@@ -13,7 +13,8 @@ extends RefCounted
 # 2026-10-17 六边化（H3）：场区渲染由「lattice 邻格 max-blend」改为**逐格六棱板网格**
 # （_rebuild_hex：顶面 = 每格 7 顶点扇形 + 坡度法线；棱墙 = 朝低邻侧，界外壁双面 + 埋深 0.5）。
 # 2026-10-17 T1 自然化：落差边改「圆唇 + 斜壁/边坡 + 确定性微扰」（edge_kind_at/edge_profile/
-# _edge_color；分级按**模拟高度差**：同层=石阶、Δ1=暖色可爬坡、Δ≥2/实心=崖壁。顶面恒平不动）。
+# _edge_color；分级按**模拟高度差**：同层=石阶、Δ1..2=暖色可爬坡、Δ≥3/实心=崖壁。顶面恒平不动）。
+# 2026-10-23 高度域 -2..5：分级口径对齐爬坡真值（落差 1~2 可爬、≥3 不可通行）。
 # lattice 网格保留场外渐进环 + **场内区改取蓝图高度函数平滑直填**（内部面片整体跳过，
 # 只留最外圈 1 环缝合场外；欠缝/半格锯齿为 odd-r 固有，接受）。高度变化只重建六边网格。
 
@@ -50,14 +51,16 @@ const RIM_MOUTH_W := 3.6 # 南面出怪口豁口半宽（m，spawn 列两侧高�
 # E=C1-C2 / NE=C0-C1 / NW=C5-C0 / W=C4-C5 / SW=C3-C4 / SE=C2-C3
 const HEX_EDGE_A := [1, 0, 5, 4, 3, 2]
 const HEX_EDGE_B := [2, 1, 0, 5, 4, 3]
+# 角点 → 相邻两条棱边（E=C1-C2 / NE=C0-C1 / NW=C5-C0 / W=C4-C5 / SW=C3-C4 / SE=C2-C3）
+const HEX_CORNER_EDGES := [[1, 2], [0, 1], [5, 0], [4, 5], [3, 4], [2, 3]]
 const WALL_EMBED := 0.5 # 界外壁底埋深（相对蓝图高度函数）
 
 # 落差边自然化（2026-10-17 T1 阶段1）：圆唇 + 斜壁/边坡 + 确定性微扰。
 # 每格落差边由「高格一侧」拥有（与既有棱墙归属一致）；顶面板本身不动（贴地/热层/拾取全走平顶）。
-# 分级按**模拟高度差**（可爬性真值）：同层(微差)=保留石阶感，Δh=1 可爬=暖色渣坡，Δh≥2/实心=崖壁。
+# 分级按**模拟高度差**（可爬性真值）：同层(微差)=保留石阶感，Δh=1..2 可爬=暖色渣坡，Δh≥3/实心=崖壁。
 const EDGE_MICRO := 0 # 同层高差（蓝图起伏台阶；维持暗色石阶 + 圆唇）
-const EDGE_RAMP := 1 # 模拟高度差 1（可爬；暖色边坡带，一眼可走）
-const EDGE_CLIFF := 2 # 模拟高度差 ≥2 或触及实心/界外（不可爬；斜壁 + 层理色阶 + 渣坡裙脚）
+const EDGE_RAMP := 1 # 模拟高度差 1..2（可爬；暖色边坡带，一眼可走）
+const EDGE_CLIFF := 2 # 模拟高度差 ≥3 或触及实心/界外（不可爬；斜壁 + 层理色阶 + 渣坡裙脚）
 const LIP_OUT := 0.07 # 圆唇外挑（m）
 const LIP_V := 0.14 # 圆唇垂落（m，微差边按落差比例收窄）
 const RAMP_RUN := 0.34 # 可爬边坡坡脚外伸基准（m，随视觉落差限幅缩放）
@@ -67,6 +70,18 @@ const EDGE_J := 0.05 # 沿边微扰幅度（m；确定性 ihash，去镜面平�
 # 平顶间留一条透背景的细缝，远看即「六边地块边缘发光」。降到 1mm：只跳过真正等高，
 # 任何可见高差都由高格画墙闭合；剖面 delta 另有 0.01 下限，薄墙会埋到低邻顶下，不会穿插。
 const EDGE_MIN_DH := 0.001
+# A8 顶面表现（2026-10-22）：
+# 顶面不再逐格单色，改为「每顶点按世界坐标取色 + 微起伏 + 贴墙 AO」。
+# 相邻格共享角点位置 → 角点高度/颜色恒等 → 大平面内部无拼板缝。
+const TOP_RIPPLE_A := 0.055 # 缓丘主波幅（m；波长约 13m，全场连续）
+const TOP_RIPPLE_B := 0.022 # 次波幅（m；斜向短波，打碎规则感）
+const TOP_AO_CORNER := 0.26 # 单条贴墙边在角点处的 AO 压暗量（0=不压）
+const TOP_AO_INNER := 0.12 # 同一方向内环（0.55r）处的压暗量（做窄一点的接触阴影）
+# 空地散布（A8）：岩顶碎石之外，软地补极少量小碎石 + 干草丛，填满大片空地。
+const PEBBLE_SALT := 913
+const PEBBLE_DENSITY := 0.022
+const GRASS_SALT := 947
+const GRASS_DENSITY := 0.045
 # 自然地形并台（2026-10-20 B；2026-10-21 扩为全场）：
 # 场内相邻格先按「高度阈值 + 材质（SOLID/软地）」并块（块内取成员均值，消除逐格 5~15cm 的
 # 拼板噪声），再把块高量化到 PLATE_STEP 的整倍（大块平面 + 干净踢脚，块内严格共面）。
@@ -131,6 +146,8 @@ var _indices := PackedInt32Array()
 var _ground: MeshInstance3D = null
 var _hex: MeshInstance3D = null # 场内六棱板网格（顶面扇形 + 棱墙；随 _cell_top 重建）
 var _rock_props: MeshInstance3D = null # 程序化岩块合并网格（HexField 子节点；随地形重建）
+var _grass_props: MeshInstance3D = null # 干草丛合并网格（HexField 子节点；A8 软地散布）
+var _grass_mat: StandardMaterial3D = null # 草材质（顶点色 albedo；双面；不投影）
 var _rock_var_cache: Array = [] # 岩块变体 12 顶点缓存（几何与配色无关；配色在发射期上）
 var _ground_mat: ShaderMaterial = null
 var _col_lo := Color()
@@ -176,8 +193,8 @@ func ground_y(x: int, y: int) -> float:
 ## 应用蓝图：换高度函数与场内高表、重建地面网格、重刷配色与雾。（R1 一次 + 每局一次）
 ## anchor：地标位置对齐当局 Scenario（ridge_y/ridge_off/ridge_pts/basin_*/core gate_x/gate_pts）；
 ## 空 = 预设坐标（探针口径）。
-func apply_blueprint(bp: Dictionary, seed: int, anchor: Dictionary = {}) -> void:
-	var composed: Array = Blueprint.compose(bp, seed, anchor)
+func apply_blueprint(bp: Dictionary, bp_seed: int, anchor: Dictionary = {}) -> void:
+	var composed: Array = Blueprint.compose(bp, bp_seed, anchor)
 	height_fn = composed[0]
 	cur_palette = composed[1]
 	_gate_pts = []
@@ -221,6 +238,14 @@ func apply_blueprint(bp: Dictionary, seed: int, anchor: Dictionary = {}) -> void
 		_ground_mat.set_shader_parameter("sand_nrm", TEX_SAND_NRM)
 		_ground_mat.set_shader_parameter("rock_col", TEX_ROCK_COL)
 		_ground_mat.set_shader_parameter("rock_nrm", TEX_ROCK_NRM)
+	if _grass_mat == null:
+		# 干草：顶点色 = 根深梢浅；双面薄片，不投影（省移动端阴影预算）
+		_grass_mat = StandardMaterial3D.new()
+		# 2026-10-22 A8：细竖片在侧逆光下两面反差极大——受光面米白、背光面坠进冷调 ambient 读成黑点。
+		# 改为不受光（亮度全由顶点色根深梢浅决定），远近、朝向都稳定，不再出现满地黑豇豆。
+		_grass_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		_grass_mat.vertex_color_use_as_albedo = true
+		_grass_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
 
 	if core.env != null:
 		var fog: Array = cur_palette["fog"]
@@ -298,19 +323,7 @@ func _build_ground() -> void:
 		_positions.resize(n2)
 		_normals.resize(n2)
 		_colors.resize(n2)
-	for lj in _ln:
-		var pz := _lattice[lj]
-		var row := lj * _ln
-		for li in _ln:
-			if li >= _i0 and li <= _i1 and lj >= _i0 and lj <= _i1:
-				continue # 场内区由 _fill_field_region 负责
-			var px := _lattice[li]
-			var h := 0.0
-			if not height_fn.is_null():
-				h = height_fn.call(px, pz)
-			_heights[row + li] = h
-			_positions[row + li] = Vector3(px, h, pz)
-			_colors[row + li] = _outside_color(px, pz, h)
+	_sample_outside()
 	_fill_field_region()
 	_recompute_normals(0, _ln - 1)
 	if _ground == null:
@@ -320,6 +333,75 @@ func _build_ground() -> void:
 		field_root.add_child(_ground)
 	_apply_mesh()
 	_rebuild_hex()
+
+
+## 场外区采样（2026-10-22 并行化）：每顶点 1 次高度 + 2 次邻域高度（`_outside_color` 求坡度）
+## + 配色，实测占单局地形构建 ~60%。按行分段多线程计算（纯采样、不碰节点），再按行写回。
+## 每个顶点仍按原顺序算同一公式 → 结果逐位一致（改前/改后截屏可像素级比对验证）。
+func _sample_outside() -> void:
+	var nt := clampi(OS.get_processor_count(), 1, 4) # 上限 4：再多人肉核收益小，且手机发热
+	if nt <= 1 or _ln < 64:
+		_merge_outside_chunk(_sample_outside_chunk(0, _ln))
+		return
+	var per := ceili(float(_ln) / float(nt))
+	var threads: Array[Thread] = []
+	for t in range(1, nt):
+		var y0: int = t * per
+		var y1: int = mini(y0 + per, _ln)
+		if y0 >= y1:
+			break
+		var th := Thread.new()
+		th.start(func() -> Dictionary:
+			return _sample_outside_chunk(y0, y1))
+		threads.append(th)
+	# 主线程算第一段（与工作线程并行），再逐段回收
+	_merge_outside_chunk(_sample_outside_chunk(0, mini(per, _ln)))
+	for th in threads:
+		_merge_outside_chunk(th.wait_to_finish())
+
+
+## 采样 [y0, y1) 行里的场外行列（场内区留给 _fill_field_region）；返回分段数组。
+func _sample_outside_chunk(y0: int, y1: int) -> Dictionary:
+	var rows := y1 - y0
+	var hs := PackedFloat64Array()
+	var ps := PackedVector3Array()
+	var cs := PackedColorArray()
+	hs.resize(rows * _ln)
+	ps.resize(rows * _ln)
+	cs.resize(rows * _ln)
+	var has_fn := not height_fn.is_null()
+	for lj in range(y0, y1):
+		var pz := _lattice[lj]
+		var dst := (lj - y0) * _ln
+		for li in _ln:
+			if li >= _i0 and li <= _i1 and lj >= _i0 and lj <= _i1:
+				continue
+			var px := _lattice[li]
+			var h := 0.0
+			if has_fn:
+				h = height_fn.call(px, pz)
+			hs[dst + li] = h
+			ps[dst + li] = Vector3(px, h, pz)
+			cs[dst + li] = _outside_color(px, pz, h)
+	return {"y0": y0, "y1": y1, "h": hs, "p": ps, "c": cs}
+
+
+## 把分段采样结果写回整网格数组（场内区跳过）。
+func _merge_outside_chunk(res: Dictionary) -> void:
+	var y0: int = res["y0"]
+	var y1: int = res["y1"]
+	var hs: PackedFloat64Array = res["h"]
+	var ps: PackedVector3Array = res["p"]
+	var cs: PackedColorArray = res["c"]
+	for lj in range(y0, y1):
+		var src := (lj - y0) * _ln
+		var dst := lj * _ln
+		for li in _ln:
+			if li >= _i0 and li <= _i1 and lj >= _i0 and lj <= _i1:
+				continue
+			_heights[dst + li] = hs[src + li]
+			_positions[dst + li] = ps[src + li]
+			_colors[dst + li] = cs[src + li]
 
 
 ## 场内区采样线（2026-10-17 六边化）：整区取蓝图高度函数平滑直填（内部面片已跳过，
@@ -395,6 +477,7 @@ func _merge_plate_tops() -> void:
 				var j: int = members[qi]
 				qi += 1
 				var jx := j % n
+				@warning_ignore("integer_division")
 				var jy := j / n
 				for k in 6:
 					var nx := Grid.nx(jx, jy, k)
@@ -435,7 +518,9 @@ func _rock_variant(vi: int) -> PackedVector3Array:
 
 ## 发射一块岩：12 顶点变换（放大/压扁 + 绕 Y 旋转 + 抬升埋底）→ 20 面展平法线 + 逐面明度抖动。
 ## 顶点色 a=1（走地形 shader 的岩纹理三平面），rgb = 当前 palette 岩石色 × 面明度。
-func _emit_rock(verts: PackedVector3Array, nrms: PackedVector3Array, cols: PackedColorArray, tri: PackedInt32Array, pos: Vector3, yaw: float, s: float, hs: float, vi: int, pid: int) -> void:
+## bright：整体明度系数（岩石默认 1.35：岩纹理本就偏暗，乘上后暗面不再读成黑块）。
+## flat_col：改按「浅沙石」常数上色（不走 palette 岩石色 / 岩纹理权值），供不受光的 GrassProps 网格用。
+func _emit_rock(verts: PackedVector3Array, nrms: PackedVector3Array, cols: PackedColorArray, tri: PackedInt32Array, pos: Vector3, yaw: float, s: float, hs: float, vi: int, pid: int, bright: float = 1.35, flat_col: bool = false) -> void:
 	var base := _rock_variant(vi)
 	var cy := cos(yaw)
 	var sy := sin(yaw)
@@ -456,7 +541,11 @@ func _emit_rock(verts: PackedVector3Array, nrms: PackedVector3Array, cols: Packe
 		nn = nn.normalized()
 		var k := 0.86 + 0.18 * Blueprint.ihash(pid * 131 + fi, pid * 17 + fi * 7, ROCK_PROP_SALT + 30)
 		k *= 0.94 + 0.06 * (nn.y * 0.5 + 0.5) # 朝上面稍亮（低模岩石的轻明暗，不替代光照）
+		k *= bright
 		var c := Color(minf(_col_rock.r * k, 1.0), minf(_col_rock.g * k, 1.0), minf(_col_rock.b * k, 1.0), 1.0)
+		if flat_col:
+			# 浅沙石（A8 软地石粒）：GrassProps 走 unshaded，颜色即最终亮度，取沙地略偏暖的中调
+			c = Color(minf(0.46 * k, 1.0), minf(0.38 * k, 1.0), minf(0.25 * k, 1.0), 1.0)
 		var st := verts.size()
 		verts.append(va)
 		verts.append(vb)
@@ -610,6 +699,8 @@ func _rebuild_rock_props() -> void:
 				var vi0 := int(Blueprint.ihash(x * 23 + 9, y * 23 + 12, ROCK_PROP_SALT + 44) * 4.0)
 				_emit_rock(verts, nrms, cols, tri, Vector3(w0.x + ex0 / l0 * 0.80, t0 - 0.05, w0.z + ez0 / l0 * 0.80), yaw0, s0, hs0, vi0, pid)
 				pid += 1
+	# —— 软地小石粒（A8）已移交 GrassProps（见 _rebuild_grass_props）：岩石网格吃光影，
+	# 几厘米的碎粒只剩背光侧壁会读成黑点/黑框，改由不受光的网格以浅沙石色绘制。
 	var mesh := ArrayMesh.new()
 	if verts.size() > 0:
 		var arrays: Array = []
@@ -620,6 +711,117 @@ func _rebuild_rock_props() -> void:
 		arrays[Mesh.ARRAY_INDEX] = tri
 		mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
 	_rock_props.mesh = mesh
+
+
+## 重建干草丛散布（A8）：软地开阔格低密度、靠岩/台缘略密；确定性哈希，单网格合并。
+## 与 RockProps 分开节点（probe_scene 约定 RockProps 单 surface 且顶点预算不变）；
+## 薄片双面、不投影，挂 HexField 子节点，不进 field_root 直接子节点。
+func _rebuild_grass_props() -> void:
+	if _hex == null or grid == null or _cell_top.size() != core.CELL_N * core.CELL_N:
+		return
+	if _grass_props == null:
+		_grass_props = MeshInstance3D.new()
+		_grass_props.name = "GrassProps"
+		_grass_props.material_override = _grass_mat
+		_grass_props.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		_hex.add_child(_grass_props)
+	var n := core.CELL_N
+	var verts := PackedVector3Array()
+	var nrms := PackedVector3Array()
+	var cols := PackedColorArray()
+	var tri := PackedInt32Array()
+	for y in range(1, n - 1):
+		for x in range(1, n - 1):
+			if grid.at(x, y) == Grid.SOLID or grid.get_h(x, y) != 0:
+				continue
+			var t: float = _cell_top[y * n + x]
+			# 靠岩/台缘加密：邻格是 SOLID 或与本地块有高差 → 草丛沿边缘聚拢
+			var near := 0
+			for k in 6:
+				var nx := Grid.nx(x, y, k)
+				var ny := Grid.ny(x, y, k)
+				if nx < 0 or ny < 0 or nx >= n or ny >= n:
+					continue
+				if grid.at(nx, ny) == Grid.SOLID or absf(_cell_top[ny * n + nx] - t) > 0.05:
+					near += 1
+			var dens := GRASS_DENSITY + 0.045 * float(near)
+			if Blueprint.ihash(x * 5 + 2, y * 5 + 7, GRASS_SALT) >= dens:
+				continue
+			var w := core.cell_to_world(x, y)
+			var tufts := 1 + int(Blueprint.ihash(x * 31 + 3, y * 31 + 4, GRASS_SALT + 1) * 2.0)
+			for j in tufts:
+				var ox := (Blueprint.ihash(x * 13 + j * 7, y * 13 + j, GRASS_SALT + 2) - 0.5) * 0.55
+				var oz := (Blueprint.ihash(x * 17 + j * 5, y * 17 + j * 3, GRASS_SALT + 3) - 0.5) * 0.60
+				var s := 1.0 + 0.55 * Blueprint.ihash(x * 19 + j, y * 19 + j * 5, GRASS_SALT + 4) # 单簇整体放大约 1.3×（远看不再像噪点）
+				var yaw := TAU * Blueprint.ihash(x * 23 + j * 3, y * 23 + j * 7, GRASS_SALT + 5)
+				_emit_grass(verts, nrms, cols, tri, Vector3(w.x + ox, t - 0.015, w.z + oz), yaw, s, x * 7 + y * 13 + j)
+	# —— 软地小石粒（A8）：与草同一不受光网格，浅沙石色，填掉空地的大片空白。
+	# 确定性哈希；尺寸远小于岩顶碎石，密度低。
+	var pid := 0
+	for y in range(1, n - 1):
+		for x in range(1, n - 1):
+			if grid.at(x, y) == Grid.SOLID or grid.get_h(x, y) != 0:
+				continue
+			if Blueprint.ihash(x * 7 + 5, y * 7 + 9, PEBBLE_SALT) >= PEBBLE_DENSITY:
+				continue
+			var t1: float = _cell_top[y * n + x]
+			var w1 := core.cell_to_world(x, y)
+			var s1 := 0.13 + 0.09 * Blueprint.ihash(x * 11 + 2, y * 11 + 3, PEBBLE_SALT + 1)
+			var hs1 := 0.30 + 0.15 * Blueprint.ihash(x * 13 + 4, y * 13 + 6, PEBBLE_SALT + 2)
+			var yaw1 := TAU * Blueprint.ihash(x * 17 + 7, y * 17 + 8, PEBBLE_SALT + 3)
+			var ox1 := (Blueprint.ihash(x * 19 + 1, y * 19 + 2, PEBBLE_SALT + 4) - 0.5) * 0.50
+			var oz1 := (Blueprint.ihash(x * 23 + 3, y * 23 + 5, PEBBLE_SALT + 6) - 0.5) * 0.55
+			var vi1 := int(Blueprint.ihash(x * 29 + 8, y * 29 + 9, PEBBLE_SALT + 7) * 4.0)
+			_emit_rock(verts, nrms, cols, tri, Vector3(w1.x + ox1, t1 - 0.008, w1.z + oz1), yaw1, s1, hs1, vi1, pid, 1.0, true)
+			pid += 1
+	var mesh := ArrayMesh.new()
+	if verts.size() > 0:
+		var arrays: Array = []
+		arrays.resize(Mesh.ARRAY_MAX)
+		arrays[Mesh.ARRAY_VERTEX] = verts
+		arrays[Mesh.ARRAY_NORMAL] = nrms
+		arrays[Mesh.ARRAY_COLOR] = cols
+		arrays[Mesh.ARRAY_INDEX] = tri
+		mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+	_grass_props.mesh = mesh
+
+
+## 发射一簇干草：3 片交叉薄片（根窄梢宽、向上收尖），顶点色根深梢浅；法线统一朝上（软受光）。
+func _emit_grass(verts: PackedVector3Array, nrms: PackedVector3Array, cols: PackedColorArray, tri: PackedInt32Array, pos: Vector3, yaw: float, s: float, variant_seed: int) -> void:
+	var hgt := (0.26 + 0.18 * Blueprint.ihash(variant_seed, 11, GRASS_SALT + 10)) * s
+	var half := (0.036 + 0.020 * Blueprint.ihash(variant_seed, 13, GRASS_SALT + 11)) * s
+	var lean := (0.06 + 0.07 * Blueprint.ihash(variant_seed, 17, GRASS_SALT + 12)) * s
+	var dry := Blueprint.ihash(variant_seed, 19, GRASS_SALT + 13)
+	# 干草配色（A8）：枯黄。GrassProps 走 unshaded（见 _grass_mat 注释），顶点色即最终亮度，
+	# 故取「沙地略暗一档」的中调：太亮会成白棍，太暗会成黑点。
+	var base_c := Color(0.13 + 0.04 * dry, 0.115 + 0.03 * dry, 0.055 + 0.015 * dry, 1.0)
+	var tip_c := Color(0.26 + 0.05 * dry, 0.23 + 0.045 * dry, 0.105 + 0.02 * dry, 1.0)
+	for p in 3:
+		var ang := yaw + float(p) * 1.0471976
+		var dx := cos(ang)
+		var dz := sin(ang)
+		# 垂直薄片方向 + 倾斜方向
+		var px := -dz * half
+		var pz := dx * half
+		var lx := dx * lean
+		var lz := dz * lean
+		var b0 := verts.size()
+		verts.append(Vector3(pos.x - px, pos.y, pos.z - pz))
+		verts.append(Vector3(pos.x + px, pos.y, pos.z + pz))
+		verts.append(Vector3(pos.x + px * 0.35 + lx, pos.y + hgt, pos.z + pz * 0.35 + lz))
+		verts.append(Vector3(pos.x - px * 0.35 + lx, pos.y + hgt, pos.z - pz * 0.35 + lz))
+		for _i in 4:
+			nrms.append(Vector3.UP)
+		cols.append(base_c)
+		cols.append(base_c)
+		cols.append(tip_c)
+		cols.append(tip_c)
+		tri.append(b0)
+		tri.append(b0 + 1)
+		tri.append(b0 + 2)
+		tri.append(b0)
+		tri.append(b0 + 2)
+		tri.append(b0 + 3)
 
 
 ## 重建六棱板网格：逐格顶面（中心 + 6 角扇形；坡度法线/顶点色）+ 落差边剖面
@@ -633,7 +835,17 @@ func _rebuild_hex() -> void:
 	var verts := PackedVector3Array()
 	var nrms := PackedVector3Array()
 	var cols := PackedColorArray()
+	var uvs := PackedVector2Array()
 	var idx := PackedInt32Array()
+	# 逐格复用（避免 4096 次小数组分配）
+	var wall := PackedByteArray()
+	var tlo := PackedFloat64Array()
+	var inb := PackedByteArray()
+	var nbr := PackedInt32Array()
+	wall.resize(6)
+	tlo.resize(6)
+	inb.resize(6)
+	nbr.resize(6)
 	for y in n:
 		for x in n:
 			var w := core.cell_to_world(x, y)
@@ -660,46 +872,110 @@ func _rebuild_hex() -> void:
 			# 2026-10-21：色阶按「原始连续高度」取（field_h），只让几何走并台量化值。
 			# 否则块高跨档会让 _col_lo/_col_hi（差 2.4 倍）整块跳色，出现刺眼的大色补丁。
 			var col := _field_color(field_h[y * n + x], solid, slope, x, y, _plate_id[y * n + x] if _plate_id.size() == n * n else -1)
-			# 顶面：中心 + 6 角（CW 环序 C0..C5），扇形 6 三角
+			# —— 棱边判定（顶面 AO 与棱墙共用；墙仅由高格一侧拥有）——
+			for k3 in 6:
+				var nx3 := Grid.nx(x, y, k3)
+				var ny3 := Grid.ny(x, y, k3)
+				if nx3 >= 0 and ny3 >= 0 and nx3 < n and ny3 < n:
+					inb[k3] = 1
+					nbr[k3] = ny3 * n + nx3
+					var t3 := _cell_top[ny3 * n + nx3]
+					tlo[k3] = t3
+					wall[k3] = 1 if t > t3 + EDGE_MIN_DH else 0
+				else:
+					inb[k3] = 0
+					nbr[k3] = -1
+					var ca3: Vector2 = core.HEX_CORNERS[HEX_EDGE_A[k3]]
+					var cb3: Vector2 = core.HEX_CORNERS[HEX_EDGE_B[k3]]
+					tlo[k3] = minf(ground_h(w.x + ca3.x, w.z + ca3.y), ground_h(w.x + cb3.x, w.z + cb3.y)) - WALL_EMBED
+					# 2026-10-23 负高度：界外地面可能高于本格顶（本格是低侧）。此时不画反向剖面
+					# （否则剖面末点被抬回 t_lo-0.01 → 高于顶面的向上尖楔），由更高的界外地面自闭合。
+					wall[k3] = 1 if t > tlo[k3] + EDGE_MIN_DH else 0
+			# —— 顶面：中心 + 内环(0.55r) + 角环，逐顶点世界取色/起伏/AO ——
+			# 角环高度差恒为 0：相邻格共享角点，大平面内不会出现拼板缝；棱墙仍以角环高为顶。
+			# 角点色用「共享该角的 3 格 field_h 均值」→ 三格各自算出的结果相同（无色差缝）。
+			var h0 := field_h[y * n + x]
+			var low: bool = grid != null and grid.get_h(x, y) < 0 # 负高度坑底（色阶走低洼沙色，不刷岩面）
 			var base := verts.size()
-			verts.append(Vector3(w.x, t, w.z))
-			nrms.append(nrm)
-			cols.append(col)
+			var r0 := _top_ripple(w.x, w.z)
+			verts.append(Vector3(w.x, t + r0.x, w.z))
+			nrms.append((nrm + Vector3(-r0.y, 0.0, -r0.z)).normalized())
+			cols.append(_field_color_at(w.x, w.z, h0, solid, slope, low))
+			uvs.append(Vector2(1.0, 0.0))
 			for i in 6:
+				var ew: Array = HEX_CORNER_EDGES[i]
+				var e0: int = ew[0]
+				var e1: int = ew[1]
+				var hsum := h0
+				var hcnt := 1
+				if nbr[e0] >= 0:
+					hsum += field_h[nbr[e0]]
+					hcnt += 1
+				if nbr[e1] >= 0:
+					hsum += field_h[nbr[e1]]
+					hcnt += 1
+				var hc := hsum / float(hcnt)
 				var c2: Vector2 = core.HEX_CORNERS[i]
-				verts.append(Vector3(w.x + c2.x, t, w.z + c2.y))
+				var ax := w.x + c2.x * 0.55
+				var az := w.z + c2.y * 0.55
+				var r1 := _top_ripple(ax, az)
+				verts.append(Vector3(ax, t + r1.x * 0.62, az))
+				nrms.append((nrm + Vector3(-r1.y, 0.0, -r1.z) * 0.62).normalized())
+				cols.append(_field_color_at(ax, az, lerpf(h0, hc, 0.55), solid, slope, low))
+				var ao_in := 1.0 - TOP_AO_INNER * (float(wall[e0]) + float(wall[e1])) * 0.5
+				uvs.append(Vector2(ao_in, 0.0))
+			for i in 6:
+				var c3: Vector2 = core.HEX_CORNERS[i]
+				var bx := w.x + c3.x
+				var bz := w.z + c3.y
+				var ew2: Array = HEX_CORNER_EDGES[i]
+				var e0b: int = ew2[0]
+				var e1b: int = ew2[1]
+				var hsum2 := h0
+				var hcnt2 := 1
+				if nbr[e0b] >= 0:
+					hsum2 += field_h[nbr[e0b]]
+					hcnt2 += 1
+				if nbr[e1b] >= 0:
+					hsum2 += field_h[nbr[e1b]]
+					hcnt2 += 1
+				verts.append(Vector3(bx, t, bz))
 				nrms.append(nrm)
-				cols.append(col)
+				cols.append(_field_color_at(bx, bz, hsum2 / float(hcnt2), solid, slope, low))
+				var ao_out := 1.0 - TOP_AO_CORNER * (float(wall[e0b]) + float(wall[e1b])) * 0.5
+				uvs.append(Vector2(maxf(ao_out, 0.35), 0.0))
+			# 中心 → 内环扇形（顶点序号：base=中心，base+1+i=内环，base+7+i=角环）
 			for i2 in 6:
 				idx.append(base)
 				idx.append(base + 1 + i2)
 				idx.append(base + 1 + (i2 + 1) % 6)
+			# 内环 → 角环环带
+			for i2 in 6:
+				var j2 := (i2 + 1) % 6
+				idx.append(base + 1 + i2)
+				idx.append(base + 7 + i2)
+				idx.append(base + 7 + j2)
+				idx.append(base + 1 + i2)
+				idx.append(base + 7 + j2)
+				idx.append(base + 1 + j2)
 			# 棱边剖面（2026-10-17 自然化 T1）：圆唇 + 斜壁/边坡 + 微扰；高格一侧拥有该边。
 			for k2 in 6:
+				if wall[k2] == 0:
+					continue # 同高/我低（低侧由对面格画）
 				var ca: Vector2 = core.HEX_CORNERS[HEX_EDGE_A[k2]]
 				var cb: Vector2 = core.HEX_CORNERS[HEX_EDGE_B[k2]]
 				var ax := w.x + ca.x
 				var az := w.z + ca.y
 				var bx := w.x + cb.x
 				var bz := w.z + cb.y
-				var nx2 := Grid.nx(x, y, k2)
-				var ny2 := Grid.ny(x, y, k2)
-				var t_lo := 0.0
-				var both := false
-				var inside := nx2 >= 0 and ny2 >= 0 and nx2 < n and ny2 < n
-				if inside:
-					var t2 := _cell_top[ny2 * n + nx2]
-					if t <= t2 + EDGE_MIN_DH:
-						continue # 同高/我低（低侧由对面格画）
-					t_lo = t2
-				else:
-					t_lo = minf(ground_h(ax, az), ground_h(bx, bz)) - WALL_EMBED # 界外：埋入场外地面
-					both = true
-				var kind := edge_kind_at(x, y, k2) if inside else EDGE_CLIFF
+				var t_lo := tlo[k2]
+				var both := inb[k2] == 0
+				var kind := edge_kind_at(x, y, k2) if both == false else EDGE_CLIFF
 				var prof := edge_profile(x, y, k2, t, t_lo, kind)
 				var wd := Vector3(cb.x - ca.x, 0.0, cb.y - ca.y)
 				var wn := Vector3(wd.z, 0.0, -wd.x).normalized() # 面朝邻居（外法线）
 				var wdn := wd.normalized() # 沿边方向（非顶层点外延闭角用）
+				@warning_ignore("integer_division")
 				var n_strip := prof.size() / 2 - 1
 				for sj in n_strip:
 					var r_u := prof[sj * 2]
@@ -730,6 +1006,7 @@ func _rebuild_hex() -> void:
 					for _i3 in 4:
 						nrms.append(sn)
 						cols.append(scol)
+						uvs.append(Vector2(1.0, 0.0))
 					idx.append(wb)
 					idx.append(wb + 1)
 					idx.append(wb + 2)
@@ -746,6 +1023,7 @@ func _rebuild_hex() -> void:
 						for _i4 in 4:
 							nrms.append(sn2)
 							cols.append(scol)
+							uvs.append(Vector2(1.0, 0.0))
 						idx.append(wb2)
 						idx.append(wb2 + 1)
 						idx.append(wb2 + 2)
@@ -758,6 +1036,7 @@ func _rebuild_hex() -> void:
 	arrays[Mesh.ARRAY_VERTEX] = verts
 	arrays[Mesh.ARRAY_NORMAL] = nrms
 	arrays[Mesh.ARRAY_COLOR] = cols
+	arrays[Mesh.ARRAY_TEX_UV] = uvs
 	arrays[Mesh.ARRAY_INDEX] = idx
 	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
 	if _hex == null:
@@ -767,6 +1046,7 @@ func _rebuild_hex() -> void:
 		field_root.add_child(_hex)
 	_hex.mesh = mesh
 	_rebuild_rock_props()
+	_rebuild_grass_props()
 
 
 ## 落差边分级（模拟高度差 = 可爬性真值；界外/实心恒崖壁）。
@@ -782,9 +1062,10 @@ func edge_kind_at(x: int, y: int, k: int) -> int:
 	if grid.at(x, y) == Grid.SOLID or grid.at(nx, ny) == Grid.SOLID:
 		return EDGE_CLIFF
 	var dh: int = grid.get_h(x, y) - grid.get_h(nx, ny)
-	if dh >= 2:
+	# 2026-10-23 高度域 -2..5：可爬性真值 = 落差 1..2 可爬（流场边权 +10/级），≥3 不可通行。
+	if dh >= 3:
 		return EDGE_CLIFF
-	if dh == 1:
+	if dh >= 1:
 		return EDGE_RAMP
 	# 2026-10-21 并台：同一模拟层内也会出现 0.30 的视觉台阶（PLATE_STEP 量化产物）。
 	# 差 1 档 → 缓坡（可走感连续）；差 2 档以上 → 当崖壁处理。
@@ -864,7 +1145,7 @@ func _edge_color(kind: int, sj: int, col: Color, h_mid: float, x: int, y: int, k
 		elif sj == 3: # 下段坡 + 渣坡裙脚：暖色碎渣带（掺沙纹，贴地碎屑感）
 			var banda := 0.5 + 0.5 * sin(h_mid * 6.1 + float(x) * 0.51 + float(y) * 0.37)
 			out = col.lerp(_col_lo, 0.26).darkened(0.06 - 0.08 * banda)
-			out = Color(maxf(out.r, 0.22), maxf(out.g, 0.17), maxf(out.b, 0.12), out.a)
+			out = Color(maxf(out.r, 0.30), maxf(out.g, 0.25), maxf(out.b, 0.16), out.a)
 			a = minf(col.a + 0.18, 1.0)
 		else:
 			out = col.lerp(_col_rock, 0.26)
@@ -872,12 +1153,12 @@ func _edge_color(kind: int, sj: int, col: Color, h_mid: float, x: int, y: int, k
 			var tone := 0.96 + 0.11 * band + 0.07 * band2
 			if tag < 0.24:
 				tone += 0.08 # 明面（亮岩带）
-			out = Color(maxf(out.r * tone, 0.24), maxf(out.g * tone, 0.19), maxf(out.b * tone, 0.13), out.a) # 暖色地板防死黑
+			out = Color(maxf(out.r * tone, 0.32), maxf(out.g * tone, 0.27), maxf(out.b * tone, 0.19), out.a) # 暖色地板防死黑
 			a = minf(col.a + 0.35, 1.0)
 	else: # EDGE_MICRO
 		var bandm := 0.5 + 0.5 * sin(h_mid * 7.3 + float(x) * 0.6 + float(y) * 0.45 + float(sj) * 2.1)
 		var inm := col.lerp(_col_rock, 0.22).darkened(0.12 - 0.08 * bandm)
-		out = Color(maxf(inm.r, 0.18), maxf(inm.g, 0.14), maxf(inm.b, 0.10), inm.a)
+		out = Color(maxf(inm.r, 0.26), maxf(inm.g, 0.21), maxf(inm.b, 0.15), inm.a)
 		a = minf(col.a + 0.30, 1.0)
 	var kj := 0.97 + 0.06 * Blueprint.ihash(x * 29 + k * 11 + sj * 3, y * 23 + sj * 5, 4457)
 	return Color(clampf(out.r * kj, 0.0, 1.0), clampf(out.g * kj, 0.0, 1.0), clampf(out.b * kj, 0.0, 1.0), a)
@@ -905,6 +1186,48 @@ func _rim_scale(x: int, y: int) -> float:
 	return s
 
 
+## 顶面缓丘：世界坐标连续双波（返回 (高度, d/dx, d/dz)）。
+## 角点必须始终为 0（调用方只取中心/内环 → 相邻格共享角点高度恒等，无拼板台阶）。
+func _top_ripple(px: float, pz: float) -> Vector3:
+	var a := TOP_RIPPLE_A
+	var b := TOP_RIPPLE_B
+	var c1 := cos(px * 0.47 + 0.8) * cos(pz * 0.41 - 0.35)
+	var c2 := cos((px + pz) * 1.03 + 1.7)
+	var h := a * sin(px * 0.47 + 0.8) * cos(pz * 0.41 - 0.35) + b * sin((px + pz) * 1.03 + 1.7)
+	var dx := a * 0.47 * c1 + b * 1.03 * c2
+	var dz := -a * 0.41 * sin(px * 0.47 + 0.8) * sin(pz * 0.41 - 0.35) + b * 1.03 * c2
+	return Vector3(h, dx, dz)
+
+
+## 场内顶点色（A8 逐顶点版）：输入世界坐标 → 相邻格共享角点颜色恒等，消除逐格色块。
+## 与 _field_color 的差别：色斑/层理/明度全部用世界坐标正弦（连续），不再按格/块哈希。
+## low = 负高度坑底（2026-10-23）：抬高坡度岩权会把坑底刷成深色岩块，视觉上读成「凸起的石板」；
+## 这里压回低岩权并掺一点低洼沙色 → 坑底仍是沙地，靠坑壁阴影读下沉。
+func _field_color_at(px: float, pz: float, h: float, solid: bool, slope: float, low: bool = false) -> Color:
+	var patch := 0.5 + 0.5 * sin(px * 0.21 + pz * 0.17 + 1.1) * sin(pz * 0.19 - px * 0.13 + 0.4)
+	if solid:
+		var rk := 0.94 + 0.10 * patch
+		return Color(clampf(_col_rock.r * rk, 0.0, 1.0), clampf(_col_rock.g * rk, 0.0, 1.0), clampf(_col_rock.b * rk, 0.0, 1.0), 1.0)
+	var t := 0.0
+	if h >= _band_hi:
+		t = 1.0
+	elif h > _band_lo:
+		t = (h - _band_lo) / maxf(_band_hi - _band_lo, 0.001)
+	var base: Color
+	if t < 0.5:
+		base = _col_lo.lerp(_col_mid, Blueprint.smooth01(t * 2.0))
+	else:
+		base = _col_mid.lerp(_col_hi, Blueprint.smooth01((t - 0.5) * 2.0))
+	base = base.lerp(_col_lo, 0.05 * clampf((patch - 0.5) * 2.0, 0.0, 1.0))
+	var strata := 0.5 + 0.5 * sin(h * 5.3 + px * 0.27 + pz * 0.19)
+	var k := (0.985 + 0.035 * (patch - 0.5) * 2.0) * (0.99 + 0.02 * strata)
+	var rock_mix := clampf((slope - 0.45) / 1.2, 0.0, 0.72)
+	if low:
+		rock_mix = minf(rock_mix, 0.18)
+		base = base.lerp(_col_lo, 0.18)
+	return Color(clampf(base.r * k, 0.0, 1.0), clampf(base.g * k, 0.0, 1.0), clampf(base.b * k, 0.0, 1.0), rock_mix)
+
+
 ## 场内顶点色：高程三档连续混色 + 坡度岩石化 + 层理与确定性明度抖动（对齐宣传图崖面观感）。
 func _field_color(h: float, solid: bool, slope: float, cx: int, cy: int, pid: int = -1) -> Color:
 	if solid:
@@ -926,7 +1249,9 @@ func _field_color(h: float, solid: bool, slope: float, cx: int, cy: int, pid: in
 	var hy := cy
 	if pid >= 0:
 		hx = pid % 97
+		@warning_ignore("integer_division")
 		hy = pid / 97
+	@warning_ignore("integer_division")
 	var patch := Blueprint.ihash(hx / 4, hy / 4, 4441) # 块状干燥色斑（破单色台面）
 	# 2026-10-21 并台后：色斑/明度按「块」取值，块会变得很大，幅度必须比逐格时代小，
 	# 否则相邻块之间会出现明显的亮暗补丁（0.13/±9% → 0.07/±3%）。

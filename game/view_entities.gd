@@ -654,7 +654,10 @@ func sync(world: World, tick_alpha: float = 0.0, delta: float = 0.0) -> void:
 				entry = { "node": node, "body": binst, "body_root": body_root, "kind": kind,
 						"cd": int(b["cooldown"]), "lod": binst.get_meta("lod", {}),
 						"fx": null, "ring": null, "cell": Vector2i(int(b["x"]), int(b["y"])),
-						"build_total": maxi(int(b["build_left"]), 1), "rise_ms": -1, "rise_k": 1.0 }
+						"build_total": maxi(int(b["build_left"]), 1), "rise_ms": -1, "rise_k": 1.0,
+						"player": models.find_player(binst) }
+				if kind == Sim.B_CORE:
+					models.play(entry["player"], "Idle", true) # 核心玉柱呼吸（2026-10-22 骨骼动画）
 				if kind == Sim.B_TOWER:
 					entry["fx"] = _make_build_fx(int(b["x"]), int(b["y"]))
 					placed_tower = true
@@ -671,6 +674,7 @@ func sync(world: World, tick_alpha: float = 0.0, delta: float = 0.0) -> void:
 				var cdn: int = int(b["cooldown"])
 				if cdn > int(entry["cd"]):
 					tower_fired = true
+					models.play(entry["player"], "Fire", false) # 开火后坐
 				entry["cd"] = cdn
 			if int(b["kind"]) == Sim.B_CORE:
 				# 核心受击=血量下降；音效 30t 节流防多敌同啃叠音，震屏 10t 独立节流（要更密的反馈）
@@ -678,6 +682,7 @@ func sync(world: World, tick_alpha: float = 0.0, delta: float = 0.0) -> void:
 				if _core_hp >= 0 and chp < _core_hp:
 					if (world.tick_count - _core_shake_tick) > CORE_SHAKE_THROTTLE:
 						core.shake(CORE_SHAKE_AMP, CORE_SHAKE_DUR)
+						models.play(entry["player"], "Hit", false) # 受击抖玉
 						_core_shake_tick = world.tick_count
 					if (world.tick_count - _core_hit_tick) > CORE_HIT_THROTTLE:
 						audio.play_sound("core_hit.mp3", 0.8)
@@ -724,7 +729,6 @@ func sync(world: World, tick_alpha: float = 0.0, delta: float = 0.0) -> void:
 			if entry2["fx"] != null:
 				(entry2["fx"] as Node).free()
 			if int(entry2["kind"]) == Sim.B_WALL:
-				var c2: Vector2i = entry2["cell"]
 				building_nodes.erase(bid2)
 				removed_any = true
 				continue

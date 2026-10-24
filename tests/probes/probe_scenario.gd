@@ -60,25 +60,30 @@ func _initialize() -> void:
 	check(sc.waves.size() == 25, "waves count")
 	check(total == 200 and first == 60 and last == 4860 and max_batch == 14 and finale == 82, "waves contract")
 
-	# --- height_at 锚点 ---
+	# --- 地形锚点（2026-10-23 随机高度：三类基地地貌 + 统计带）---
 	var cx: int = sc.core.x
-	check(sc.height_at(cx, 6) == 3, "h core peak")
-	check(sc.height_at(cx, 12) == 2, "h core step mid")
-	check(sc.height_at(cx + 2, 12) == 2, "h core step edge")
-	check(sc.height_at(cx + 3, 12) == 1, "h north bank")
-	check(sc.height_at(cx, 20) == 1, "h bank mid")
-	check(sc.height_at(choke0.x, sc.ridge_y) == 1, "h choke west mouth")
-	check(sc.height_at(choke1.x, sc.ridge_y) == 1, "h choke east mouth")
-	# 咽喉下沿 h0：height_at 只在 y == ridge_y 的咽喉列给 h1（任务书 ridge_y+1 == 1 与实现不符，见报告）。
-	check(sc.height_at(choke1.x, sc.ridge_y + 1) == 0, "h choke east south h0")
-	check(sc.height_at(cx, sc.ridge_y) == 0, "h ridge at core x")
-	check(sc.height_at(cx, sc.ridge_y + 1) == 0, "h south of ridge")
-	check(sc.height_at(cx, 56) == 0, "h south lowland")
-	check(sc.height_at(sc.mesa.position.x, sc.mesa.position.y) == 1 \
-		and sc.height_at(sc.mesa.end.x - 1, sc.mesa.position.y) == 1 \
-		and sc.height_at(sc.mesa.position.x, sc.mesa.end.y - 1) == 1 \
-		and sc.height_at(sc.mesa.end.x - 1, sc.mesa.end.y - 1) == 1, "h mesa corners")
-	check(sc.height_at(0, 0) == 1, "h north bank corner")
+	check(sc.terrain_kind == MapGen.TERRAIN_SLOPE, "default terrain kind = slope")
+	check(sc.height_at(cx, 6) == 2, "h core slope h2")
+	check(sc.height_at(spawn0.x, spawn0.y) == 0 and sc.height_at(spawn1.x, spawn1.y) == 0, "h main spawns h0")
+	check(sc.height_at(sc.hero_spawn.x, sc.hero_spawn.y) == 0, "h hero 0")
+	check(sc.height_at(sc.mesa.position.x, sc.mesa.position.y) == 1, "h mesa h1")
+	var terr_nz := 0
+	var terr_neg := 0
+	var terr_hi := 0
+	for yy in sc.h:
+		for xx in sc.w:
+			var hv := sc.height_at(xx, yy)
+			if hv != 0:
+				terr_nz += 1
+			if hv < 0:
+				terr_neg += 1
+			if hv >= 3:
+				terr_hi += 1
+	var terr_nz_perm := terr_nz * 1000 / (sc.w * sc.h)
+	var terr_neg_perm := terr_neg * 1000 / (sc.w * sc.h)
+	check(terr_nz_perm >= MapGen.TERRAIN_NZ_LO and terr_nz_perm <= MapGen.TERRAIN_NZ_HI, "terrain nonzero %d‰ in band" % terr_nz_perm)
+	check(terr_neg_perm >= MapGen.TERRAIN_NEG_LO and terr_neg_perm <= MapGen.TERRAIN_NEG_HI, "terrain negative %d‰ in band" % terr_neg_perm)
+	check(terr_hi >= MapGen.TERRAIN_HI_MIN, "terrain has h>=3 (%d)" % terr_hi)
 
 	# --- build_grid 结构 ---
 	var g := sc.build_grid()
@@ -122,20 +127,30 @@ func _initialize() -> void:
 	check(ore_ok, "all ore cells cover")
 	check(g.at(sc.sparse_phase, 17) == Grid.COVER, "sparse row cover")
 	check(g.at(sc.sparse_phase + 1, 17) == Grid.OPEN, "sparse row neighbor open")
-	check(g.get_h(sc.core.x, sc.core.y) == 3 and g.get_h(sc.core.x, 12) == 2 \
-		and g.get_h(choke0.x, sc.ridge_y) == 1 and g.get_h(sc.mesa.position.x, sc.mesa.position.y) == 1, "heights landed")
+	check(g.get_h(sc.core.x, sc.core.y) == sc.height_at(sc.core.x, sc.core.y) \
+		and g.get_h(spawn0.x, spawn0.y) == 0 and g.get_h(spawn1.x, spawn1.y) == 0 \
+		and g.get_h(sc.hero_spawn.x, sc.hero_spawn.y) == 0 \
+		and g.get_h(sc.mesa.position.x, sc.mesa.position.y) == 1, "heights landed")
 
 	# --- 生成校验读取面（每次传新鲜网格）+ 负对照 ---
 	var cg := sc.check_grid(sc.build_grid())
 	check(cg == "", "check_grid legal: " + cg)
 	var pg := sc.check_plug_open(sc.build_grid())
 	check(pg == "", "check_plug_open legal: " + pg)
+	var ct := sc.check_terrain(sc.build_grid())
+	check(ct == "", "check_terrain legal: " + ct)
 	var opened := sc.build_grid()
 	sc.check_plug_open(opened)
 	check(sc.check_grid(opened) != "", "check_grid rejects opened plug")
+	# 矿可采负对照：某中场矿六邻全封 → check_terrain 必须非空
+	var ore_cut := sc.build_grid()
+	var mo: Vector2i = sc.mid_ore[2]
+	for k in 6:
+		ore_cut.set_cell(Grid.nx(mo.x, mo.y, k), Grid.ny(mo.x, mo.y, k), Grid.SOLID)
+	check(sc.check_terrain(ore_cut) != "", "check_terrain rejects sealed ore")
 
-	# --- 裸图流场路径合同（核心 → 主口 ∈ 标定带；盆地口封闭不可达）---
-	var ff := FlowField.new(sc.build_grid(), false)
+	# --- 裸图流场路径合同（等权步数；主口 ∈ 标定带；盆地口封闭不可达）---
+	var ff := FlowField.new(sc.build_grid(), true)
 	ff.begin([sc.core])
 	while not ff.done():
 		ff.step(1 << 20)
@@ -148,10 +163,10 @@ func _initialize() -> void:
 	check(d0 == d1, "main spawn paths equal d0=%d d1=%d" % [d0, d1])
 	check(d2 == -1, "spawn3 unreachable closed d2=%d" % d2)
 
-	# --- 指纹守门（0x7dea2b02）+ 确定性 + 负对照 ---
+	# --- 指纹守门（0x234abc91）+ 确定性 + 负对照 ---
 	var canon := Canon.new()
 	var fp: int = sc.fingerprint(canon)
-	check(fp == 0x7dea2b02, "fingerprint baseline (got 0x%x)" % fp)
+	check(fp == 0x234abc91, "fingerprint baseline (got 0x%x)" % fp)
 	check(fp == sc.fingerprint(canon), "fingerprint repeat call")
 	check(fp == Scenario.new().fingerprint(Canon.new()), "fingerprint fresh instance")
 	var mut := Scenario.new()
@@ -169,11 +184,19 @@ func _initialize() -> void:
 	check(sc.is_ore(33, 21) and sc.is_ore(5, 56) and sc.is_ore(7, 59), "is_ore true")
 	check(not sc.is_ore(sc.basin_plug.x, sc.basin_plug.y) and not sc.is_ore(4, 54) and not sc.is_ore(0, 0), "is_ore false plug/interior/border")
 
-	# --- 自由世界全扫（2026-10-19 世界生成 2.0：自由盐内收敛 + 各局校验合法 + 指纹互异）---
+	# --- 自由世界全扫（自由盐内收敛 + 各局校验合法 + 地形统计/可达 + 指纹互异）---
 	var fps := {}
 	var sweep_ok := true
 	var salt_max := 0
 	var mains3 := 0
+	var kinds := [0, 0, 0]
+	var nz_lo := 1 << 30
+	var nz_hi := 0
+	var neg_lo := 1 << 30
+	var neg_hi := 0
+	var path_lo := 1 << 30
+	var path_hi := 0
+	var cliff_sc: Scenario = null
 	for i in 48:
 		var s := 20261004 + i
 		var sx := Scenario.new(s)
@@ -185,12 +208,54 @@ func _initialize() -> void:
 			sweep_ok = false
 		if sx.check_plug_open(sx.build_grid()) != "":
 			sweep_ok = false
+		if sx.check_terrain(sx.build_grid()) != "":
+			sweep_ok = false
+		kinds[sx.terrain_kind] += 1
+		if cliff_sc == null and sx.terrain_kind == MapGen.TERRAIN_CLIFF:
+			cliff_sc = sx
 		if sx.spawns.size() == 4:
 			mains3 += 1
+		# 统计带实测范围
+		var nz2 := 0
+		var neg2 := 0
+		for yy in sx.h:
+			for xx in sx.w:
+				var hv2 := sx.height_at(xx, yy)
+				if hv2 != 0:
+					nz2 += 1
+				if hv2 < 0:
+					neg2 += 1
+		nz_lo = mini(nz_lo, nz2 * 1000 / (sx.w * sx.h))
+		nz_hi = maxi(nz_hi, nz2 * 1000 / (sx.w * sx.h))
+		neg_lo = mini(neg_lo, neg2 * 1000 / (sx.w * sx.h))
+		neg_hi = maxi(neg_hi, neg2 * 1000 / (sx.w * sx.h))
+		# 等权步数路径长
+		var ffe := FlowField.new(sx.build_grid(), true)
+		ffe.begin([sx.core])
+		while not ffe.done():
+			ffe.step(1 << 20)
+		for j in range(0, sx.spawns.size() - 1):
+			var pd: int = ffe.dist_at(sx.spawns[j].x, sx.spawns[j].y)
+			path_lo = mini(path_lo, pd)
+			path_hi = maxi(path_hi, pd)
 		fps[sx.fingerprint(canon)] = true
 	check(sweep_ok, "自由世界全扫合法（盐峰 %d）" % salt_max)
 	check(fps.size() >= 46, "布局指纹互异 %d/48 局" % fps.size())
 	check(mains3 >= 3, "三主口样本 %d/48" % mains3)
+	check(kinds[0] > 0 and kinds[1] > 0 and kinds[2] > 0, "三类地貌覆盖 %s" % str(kinds))
+	check(nz_lo >= MapGen.TERRAIN_NZ_LO and nz_hi <= MapGen.TERRAIN_NZ_HI, "非零占比 [%d,%d]‰ 越带" % [nz_lo, nz_hi])
+	check(neg_lo >= MapGen.TERRAIN_NEG_LO and neg_hi <= MapGen.TERRAIN_NEG_HI, "负高度占比 [%d,%d]‰ 越带" % [neg_lo, neg_hi])
+	check(path_lo >= Scenario.PATH_LO and path_hi <= Scenario.PATH_HI, "等权路径长 [%d,%d] 越带" % [path_lo, path_hi])
+	check(cliff_sc != null, "自由世界全扫含崖旁样本")
+	if cliff_sc != null:
+		var cg2 := cliff_sc.build_grid()
+		for climb2 in [2, 1]:
+			var ffc := FlowField.new(cg2, false, climb2)
+			ffc.begin([cliff_sc.core])
+			while not ffc.done():
+				ffc.step(1 << 20)
+			for j2 in range(0, cliff_sc.spawns.size() - 1):
+				check(ffc.dist_at(cliff_sc.spawns[j2].x, cliff_sc.spawns[j2].y) >= 0, "崖旁主口 %d 可达（climb=%d）" % [j2 + 1, climb2])
 
 	# --- 出怪点解析（wave_cell / basin_cell；三主口按表序轮转、双主口同历史口径）---
 	var two := Scenario.new(20261004)

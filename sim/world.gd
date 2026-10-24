@@ -50,17 +50,24 @@ var hero_cd_max: int = 0
 var wave_driver: Callable = Callable()
 var tower_cap: int = -1 # 塔位上限；-1 = 不限（经典模式）。肉鸽按层给出
 
-# 主场（目标=核心格）+ 围攻场（惰性，目标=全部存活建筑格）
+# 主场（目标=核心格）：虫群场 + 蛮兽场（爬升上限不同）
 var field: FlowField
 var field_goals: Array
 var field_rev: int
 var rebuilding: bool
 var rebuild_rev: int # 本轮摊销 begin 时的 grid.rev（中途变则整轮重启）
+var field_heavy: FlowField
+var field_heavy_rev: int
+var rebuilding_heavy: bool
+var rebuild_rev_heavy: int
 
-# 围攻场
+# 围攻场（按兵种爬升上限各一份）
 var siege: FlowField
 var siege_rev: int
 var siege_stamp: int
+var siege_heavy: FlowField
+var siege_heavy_rev: int
+var siege_heavy_stamp: int
 
 # 英雄（不进 units/buildings，独立实体；英雄场是派生态，不进指纹）
 var hero: Dictionary
@@ -95,11 +102,17 @@ func _init(psc: Scenario, pseed: int, prebuild_budget: int = 2048) -> void:
 	field_goals = [Vector2i(sc.core.x, sc.core.y)]
 	field_rev = -1
 	rebuilding = false
+	field_heavy = FlowField.new(grid, false, 1) # 蛮兽：只能爬 1 级
+	field_heavy_rev = -1
+	rebuilding_heavy = false
 	_rebuild_field_sync()
 
 	siege = null
 	siege_rev = -1
 	siege_stamp = -1
+	siege_heavy = null
+	siege_heavy_rev = -1
+	siege_heavy_stamp = -1
 
 	hero = { "x": sc.hero_spawn.x, "y": sc.hero_spawn.y, "tx": -1, "ty": -1, "skill_cd": 0 }
 	hero_field = FlowField.new(grid, true) # 英雄翻崖：无视高度
@@ -115,7 +128,7 @@ func _init(psc: Scenario, pseed: int, prebuild_budget: int = 2048) -> void:
 	place_building(Sim.B_CORE, sc.core.x, sc.core.y)
 
 
-## 同步重建主场流场（初始化时调用；运行时走摊销补场）
+## 同步重建两个主场流场（初始化/存档前调用；运行时走摊销补场）
 func _rebuild_field_sync() -> void:
 	field.begin(field_goals)
 	while not field.done():
@@ -123,6 +136,12 @@ func _rebuild_field_sync() -> void:
 	field_rev = grid.rev
 	rebuild_rev = grid.rev
 	rebuilding = false
+	field_heavy.begin(field_goals)
+	while not field_heavy.done():
+		field_heavy.step(1 << 30)
+	field_heavy_rev = grid.rev
+	rebuild_rev_heavy = grid.rev
+	rebuilding_heavy = false
 
 
 # ---------------- 唯一变更入口 ----------------
@@ -197,6 +216,7 @@ func spawn_unit(x: int, y: int, speed_ticks: int, kind: int) -> void:
 		"atk_cd": 0,
 		"atk_target": -1,
 		"traveled": 0,
+		"climb_wait": 0,
 	}
 	next_unit_id += 1
 	units.append(unit)
@@ -320,6 +340,7 @@ func tick() -> void:
 
 	# ① 摊销补场：补场中途改图（rev 变化）则整轮重启 begin——
 	# 旧拓扑下已定稿的距离不能冒充当前拓扑的结果（否则完成时 field_rev 会谎报已同步）
+	# 两个主场各自独立摊销；任一 rev 变都只影响它自己那轮的整轮重启。
 	if rebuilding and grid.rev != rebuild_rev:
 		rebuilding = false
 	if grid.rev != field_rev or rebuilding:
@@ -331,6 +352,17 @@ func tick() -> void:
 		if field.done():
 			rebuilding = false
 			field_rev = rebuild_rev
+	if rebuilding_heavy and grid.rev != rebuild_rev_heavy:
+		rebuilding_heavy = false
+	if grid.rev != field_heavy_rev or rebuilding_heavy:
+		if not rebuilding_heavy:
+			field_heavy.begin(field_goals)
+			rebuilding_heavy = true
+			rebuild_rev_heavy = grid.rev
+		field_heavy.step(rebuild_budget)
+		if field_heavy.done():
+			rebuilding_heavy = false
+			field_heavy_rev = rebuild_rev_heavy
 
 	run_waves()
 	move_units()
@@ -389,37 +421,56 @@ func _find_spawn_cell(sx: int, sy: int) -> Vector2i:
 	return Vector2i(Lua64.mod(fb, grid.w), Lua64.idiv(fb, grid.w))
 
 
-## 单位移动：沿主场流场走一格；被封分支处理啃建筑/转围攻
+## 兵种爬升上限（climb_max）：单位 kind → 可跨的最大高度差
+func climb_max_for(kind: int) -> int:
+	return int(Sim.ENEMIES[kind - 1].get("climb_max", 2))
+
+
+## 按兵种选主场：蛮兽（climb_max ≤ 1）走 field_heavy，其余走 field
+func field_for(kind: int) -> FlowField:
+	return field_heavy if climb_max_for(kind) <= 1 else field
+
+
+## 单位移动：沿对应主场流场走一格；封路分支处理啃建筑/转围攻
 func move_units() -> void:
 	for ui in units.size():
 		var unit: Dictionary = units[ui]
 		if unit["atk_cd"] > 0:
 			unit["atk_cd"] = unit["atk_cd"] - 1
+		# 爬坡后摇：等待期间只递减计数，本 tick 不发步点
+		var wait: int = int(unit.get("climb_wait", 0))
+		if wait > 0:
+			unit["climb_wait"] = wait - 1
+			continue
 		var spd: int = unit["speed_ticks"]
 		var slow_left: int = int(unit.get("slow", 0))
 		if slow_left > 0:
 			unit["slow"] = slow_left - 1
 			spd = spd * 2 # 减速：步点间隔翻倍（经典模式无 slow 键 ⇒ 恒走原值）
 		if (tick_count + unit["id"]) % spd == 0: # 未到步点则跳过
-			var dir := field.dir_at(unit["x"], unit["y"])
+			var ufield := field_for(int(unit["kind"]))
+			var dir := ufield.dir_at(unit["x"], unit["y"])
 			if dir >= 0:
 				var nx: int = Grid.nx(unit["x"], unit["y"], dir)
 				var ny: int = Grid.ny(unit["x"], unit["y"], dir)
 				if grid.passable(nx, ny):
+					var dh: int = grid.get_h(nx, ny) - grid.get_h(unit["x"], unit["y"])
 					unit["x"] = nx
 					unit["y"] = ny
+					if dh > 0:
+						unit["climb_wait"] = dh * Sim.CLIMB_EXTRA_TICKS
 					unit["traveled"] = unit["traveled"] + 1
 					unit["stuck_ticks"] = 0
 					unit["atk_target"] = -1
 				else:
 					stuck_branch(unit)
-			elif field.dist_at(unit["x"], unit["y"]) == 0:
+			elif ufield.dist_at(unit["x"], unit["y"]) == 0:
 				pass # 已抵达目标格（核心脚下），正常待机
 			else:
 				stuck_branch(unit)
 
 
-## 被封分支：贴脸有建筑就啃；啃不到且真被围死 → 沿围攻场推进。
+## 被封分支：贴脸有建筑就啃；啃不到且真被围死 → 沿对应围攻场推进。
 func stuck_branch(unit: Dictionary) -> void:
 	unit["stuck_ticks"] = unit["stuck_ticks"] + 1
 	unit["atk_target"] = find_attack_target(unit)
@@ -430,36 +481,55 @@ func stuck_branch(unit: Dictionary) -> void:
 			unit["atk_cd"] = e["cooldown"]
 		return
 	# 通往核心的路被彻底封死 → 转围攻：朝最近建筑推进，直到贴脸能啃
-	ensure_siege()
-	var sdir := siege.dir_at(unit["x"], unit["y"])
+	var sfield := ensure_siege(int(unit["kind"]))
+	var sdir := sfield.dir_at(unit["x"], unit["y"])
 	if sdir < 0:
 		return # 全场无可攻目标（核心已毁等）→ 原地待命
 	var mx: int = Grid.nx(unit["x"], unit["y"], sdir)
 	var my: int = Grid.ny(unit["x"], unit["y"], sdir)
 	if grid.passable(mx, my):
+		var dh: int = grid.get_h(mx, my) - grid.get_h(unit["x"], unit["y"])
 		unit["x"] = mx
 		unit["y"] = my
+		if dh > 0:
+			unit["climb_wait"] = dh * Sim.CLIMB_EXTRA_TICKS
 		unit["traveled"] = unit["traveled"] + 1 # 被围死后的绕行也是"在玩家地图上走路"，照计路程
 		unit["atk_target"] = find_attack_target(unit)
 
 
-## 围攻场：目标 = 全部存活建筑格（含核心）。拓扑或建筑表变化时才重建。
-func ensure_siege() -> void:
-	if siege == null:
-		siege = FlowField.new(grid)
+## 围攻场：目标 = 全部存活建筑格（含核心）。按兵种爬升上限选场；拓扑或建筑表变化时才重建。
+## @return 该兵种对应的围攻场
+func ensure_siege(kind: int) -> FlowField:
+	var heavy := climb_max_for(kind) <= 1
+	if heavy:
+		if siege_heavy == null:
+			siege_heavy = FlowField.new(grid, false, 1)
+	else:
+		if siege == null:
+			siege = FlowField.new(grid)
+	var f: FlowField = siege_heavy if heavy else siege
 	var stamp := next_building_id
-	if siege_rev == grid.rev and siege_stamp == stamp:
-		return
+	if heavy:
+		if siege_heavy_rev == grid.rev and siege_heavy_stamp == stamp:
+			return f
+	else:
+		if siege_rev == grid.rev and siege_stamp == stamp:
+			return f
 	var goals := []
 	for i in buildings.size():
 		var b: Dictionary = buildings[i]
 		if b["hp"] > 0:
 			goals.append(Vector2i(b["x"], b["y"]))
-	siege.begin(goals)
-	while not siege.done():
-		siege.step(1 << 30)
-	siege_rev = grid.rev
-	siege_stamp = stamp
+	f.begin(goals)
+	while not f.done():
+		f.step(1 << 30)
+	if heavy:
+		siege_heavy_rev = grid.rev
+		siege_heavy_stamp = stamp
+	else:
+		siege_rev = grid.rev
+		siege_stamp = stamp
+	return f
 
 
 ## 震荡波：半径（平方距离口径，与拓扑无关）内敌人沿背离英雄方向击退 1 格；落点须可通行、
@@ -531,21 +601,23 @@ func find_attack_target(unit: Dictionary) -> int:
 		var ny: int = Grid.ny(unit["x"], unit["y"], k)
 		var b = building_at(nx, ny)
 		if b != null and b["hp"] > 0:
-			var score := score_around(nx, ny)
+			var score := score_around(nx, ny, int(unit["kind"]))
 			if score < best_score:
 				best_score = score
 				best = b
 	return best["id"] if best != null else -1
 
 
-## 围点评分 = 自身与六邻到目标的最小流场距离（NEAREST 塔选围攻点的依据）
-func score_around(x: int, y: int) -> int:
+## 围点评分 = 自身与六邻到目标的最小流场距离（NEAREST 塔选围攻点的依据）。
+## 距离取该兵种对应的主场场（爬升上限不同 → 场不同）。
+func score_around(x: int, y: int, kind: int) -> int:
+	var f := field_for(kind)
 	var best := INT64_MAX
-	var self_d := field.dist_at(x, y)
+	var self_d := f.dist_at(x, y)
 	if self_d >= 0:
 		best = self_d
 	for k in 6:
-		var d := field.dist_at(Grid.nx(x, y, k), Grid.ny(x, y, k))
+		var d := f.dist_at(Grid.nx(x, y, k), Grid.ny(x, y, k))
 		if d >= 0 and d < best:
 			best = d
 	return best
@@ -692,7 +764,7 @@ func judge() -> void:
 		outcome = LOST # 超时＝敌按时刻表长完，守方判负
 
 
-# ---------------- 规范状态编码（STATE_SCHEMA=6）----------------
+# ---------------- 规范状态编码（STATE_SCHEMA=7）----------------
 # tick | rng | grid | 供给/结局/开门/战果 | 单位表按 id 升序 | 建筑表按 id 升序。
 # 流场是派生态，不进指纹。
 ## 规范状态编码：字段序 = tick|rng|grid|供给/结局/开门/战果|单位表|建筑表（指纹口径）
@@ -706,7 +778,7 @@ func canonical_bytes() -> Canon.Buf:
 	for i in grid.w * grid.h:
 		b.put_u8(grid.cells[i])
 	for i in grid.w * grid.h:
-		b.put_u8(grid.hgt[i]) # v5：高度层（玩家可改造，进指纹）
+		b.put_u8(Grid.h_to_u8(grid.hgt[i])) # 高度层（玩家可改造，进指纹；u8 偏移编码支持负高度）
 	b.put_i32(supply)
 	b.put_u8(outcome)
 	b.put_u8(1 if route_opened else 0)
@@ -726,6 +798,7 @@ func canonical_bytes() -> Canon.Buf:
 		b.put_i32(u["atk_cd"])
 		b.put_i32(u["atk_target"])
 		b.put_i32(u["traveled"]) # v3：绕行路程
+		b.put_i32(u["climb_wait"]) # v7：爬坡后摇剩余 tick
 
 	b.put_u32(buildings.size())
 	for i in buildings.size():

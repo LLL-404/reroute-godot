@@ -11,7 +11,19 @@ func register(kit: TestKit) -> void:
 	kit.test("constants", func():
 		kit.eq(Grid.OPEN, 0, "OPEN")
 		kit.eq(Grid.COVER, 1, "COVER")
-		kit.eq(Grid.SOLID, 2, "SOLID"))
+		kit.eq(Grid.SOLID, 2, "SOLID")
+		kit.eq(Grid.H_OFFSET, 2, "H_OFFSET = -Sim.H_MIN"))
+
+	kit.test("height-u8-roundtrip", func():
+		var ok := true
+		for h in range(-2, 6):
+			var v := Grid.h_to_u8(h)
+			if v < 0 or v > 255 or Grid.u8_to_h(v) != h:
+				ok = false
+		kit.ok(ok, "h_to_u8/u8_to_h 往返覆盖 -2..5")
+		kit.eq(Grid.h_to_u8(-2), 0, "h-2 → 0")
+		kit.eq(Grid.h_to_u8(5), 7, "h5 → 7")
+		kit.eq(Grid.u8_to_h(0), -2, "0 → h-2"))
 
 	kit.test("new-open-fill", func():
 		var g := Grid.new(4, 3)

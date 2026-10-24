@@ -12,6 +12,19 @@ const OPEN := 0
 const COVER := 1
 const SOLID := 2
 
+# 高度 u8 偏移编码（存档/canonical 用）：h ∈ [H_MIN, H_MAX] → v ∈ [0, H_MAX-H_MIN]
+const H_OFFSET := 2 # = -Sim.H_MIN
+
+
+## 高度 → 无符号字节值（负数不截断）
+static func h_to_u8(h: int) -> int:
+	return h + H_OFFSET
+
+
+## 无符号字节值 → 高度
+static func u8_to_h(v: int) -> int:
+	return v - H_OFFSET
+
 # odd-r 邻接增量表：[行奇偶（0=偶行/1=奇行）][方向 k]。DY 与行奇偶无关。
 # 偶行：E(+1,0) NE(0,-1) NW(-1,-1) W(-1,0) SW(-1,+1) SE(0,+1)
 # 奇行：E(+1,0) NE(+1,-1) NW(0,-1) W(-1,0) SW(0,+1) SE(+1,+1)
@@ -57,7 +70,7 @@ var h: int
 var stride: int
 var cells: Array # 0..w*h-1，下标 = y*w + x
 var pmap: Array # padded 通行镜像，1=通行；界外/未写 = null（当阻挡）
-var hgt: Array # 高度层 0..5（未加帧）
+var hgt: Array # 高度层 -2..5（未加帧）
 var hp: Array # padded 高度镜像（流场热循环）
 var rev: int
 var height_rev: int # 仅运行时改高递增；视图用它检测等量反向改高

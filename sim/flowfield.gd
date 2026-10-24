@@ -7,12 +7,15 @@ extends RefCounted
 #   · 六边网格边永远共享整条边，无需贴角禁穿判定（方形时代的 side_a/side_b 规则随拓扑废止）；
 #   · DirAt 平手取方向序号最小（严格 < 判定）；
 #   · 纯整数运算，无浮点无 libm。
-# 距离上界（可证明）：最短路径绝不重复经过任一格（边权恒正）→ 至多 w*h−1 步 ×10。
+# 距离上界（可证明）：最短路径绝不重复经过任一格（边权恒正）→ 至多 w*h−1 步，
+# 单步最贵 = STRAIGHT + climb_max×CLIMB_COST（爬升每级额外计费）。
 const STRAIGHT := 10
+const CLIMB_COST := 10 # 必须与 Sim.CLIMB_COST 一致（FlowField 不依赖 Sim）
 const INT64_MAX := 9223372036854775807
 
 var grid: Grid
 var ignore_h: bool
+var climb_max: int
 var dist: Array # padded 距离，-1 = 不可达（未写 = null 视同不可达）
 var settled: Array
 var max_d: int
@@ -30,9 +33,11 @@ var pops: int
 
 
 ## 初始化：padded 距离/定稿表 + 6 向邻居增量（按行奇偶）+ 桶头；begin 前 dist 全 -1
-func _init(pgrid: Grid, pignore_h: bool = false) -> void:
+## pclimb_max = 本单位可爬升的最大高度差（虫群 2 / 蛮兽 1；英雄场由 ignore_h 接管）。
+func _init(pgrid: Grid, pignore_h: bool = false, pclimb_max: int = 2) -> void:
 	grid = pgrid
 	ignore_h = pignore_h
+	climb_max = pclimb_max
 	var stride: int = grid.stride
 	var pad_n: int = stride * (grid.h + 2)
 	dist = []
@@ -42,7 +47,8 @@ func _init(pgrid: Grid, pignore_h: bool = false) -> void:
 		dist.append(-1)
 		settled.append(0)
 		par.append((Lua64.idiv(i, stride) - 1) & 1)
-	max_d = STRAIGHT * grid.w * grid.h
+	var max_edge := STRAIGHT if pignore_h else STRAIGHT + pclimb_max * CLIMB_COST
+	max_d = max_edge * grid.w * grid.h
 	head = []
 	for d in max_d + 1:
 		head.append(-1)
@@ -104,7 +110,8 @@ func step(budget: int) -> void:
 			relax(cell, cur) # 陈旧项：首次出桶已定稿，跳过
 
 
-## 定稿 p 并六向扩张：实走边 p→nb 爬 ≤1、下崖任意（单向崖）；ignore_h 免高度检查
+## 定稿 p 并六向扩张：实走边 p→nb 爬 ≤climb_max、下崖任意（单向崖）；ignore_h 免高度检查。
+## 边权 = STRAIGHT + 爬升量×CLIMB_COST（爬升量 = hp[p]-hp[nb]，下坡/平地记 0）。
 func relax(p: int, d: int) -> void:
 	settled[p] = 1
 	var pmap := grid.pmap
@@ -114,10 +121,12 @@ func relax(p: int, d: int) -> void:
 	for k in 6:
 		var nb: int = p + off[k]
 		if pmap[nb] == 1:
-			# 扩张边 = nb→p（nb 处单位跨入 p）：爬 ≤1、下崖任意（单向崖）
-			if ignore or (hp[p] - hp[nb] <= 1):
+			# 扩张边 = nb→p（nb 处单位跨入 p）：爬 ≤climb_max、下崖任意（单向崖）
+			if ignore or (hp[p] - hp[nb] <= climb_max):
 				if settled[nb] == 0:
 					var nd := d + STRAIGHT
+					if not ignore:
+						nd += maxi(hp[p] - hp[nb], 0) * CLIMB_COST
 					if dist[nb] == -1 or nd < dist[nb]:
 						dist[nb] = nd
 						push(nd, nb)
@@ -155,7 +164,7 @@ func dist_at(x: int, y: int) -> int:
 
 
 ## 朝目标的下降方向 0..5（方向序下标）；已在目标/不可达/不可通行返回 -1。平手取方向序号最小（确定性）。
-## 实走边 = p→nb：爬 ≤1、下崖任意（单向崖）；英雄场 ignore_h 免查。
+## 实走边 = p→nb：爬 ≤climb_max、下崖任意（单向崖）；英雄场 ignore_h 免查。
 func dir_at(x: int, y: int) -> int:
 	if not grid.passable(x, y):
 		return -1
@@ -172,7 +181,7 @@ func dir_at(x: int, y: int) -> int:
 	for k in 6:
 		var nb: int = p + off[k]
 		if pmap[nb] == 1:
-			if ignore or (hp[nb] - hp[p] <= 1):
+			if ignore or (hp[nb] - hp[p] <= climb_max):
 				var nd: int = dist[nb]
 				if nd >= 0 and nd < best_d:
 					best_d = nd
@@ -194,6 +203,6 @@ func fallback_near(x: int, y: int) -> int:
 					var ny := y + dy
 					if grid.passable(nx, ny):
 						var to := grid.pad_idx(nx, ny)
-						if dist[to] >= 0 and (ignore_h or hp[to] - hp[from] <= 1):
+						if dist[to] >= 0 and (ignore_h or hp[to] - hp[from] <= climb_max):
 							return ny * grid.w + nx
 	return -1

@@ -17,7 +17,7 @@ func register(kit: TestKit) -> void:
 		kit.eq(Sim.CONVOY_SHIFT, 3, "CONVOY_SHIFT")
 		kit.eq(Sim.FILL_COST, 15, "FILL_COST")
 		kit.eq(Sim.LOWER_COST, 10, "LOWER_COST")
-		kit.eq(Sim.H_MIN, 0, "H_MIN")
+		kit.eq(Sim.H_MIN, -2, "H_MIN")
 		kit.eq(Sim.H_MAX, 5, "H_MAX")
 		kit.eq(Sim.B_WALL, 1, "B_WALL")
 		kit.eq(Sim.B_TOWER, 2, "B_TOWER")
@@ -117,19 +117,10 @@ func register(kit: TestKit) -> void:
 		kit.eq(sc._hill_arr.size(), 285, "微丘数")
 		kit.eq(sc._sparse_arr.size(), 9, "散土数")
 		kit.eq(sc._sparse_arr[0], Vector2i(13, 30), "散土首格")
-		# 山头高度分带（按六边距离取 d3/d4 格，不手算坐标）
-		var d3 := Vector2i(-1, -1)
-		var d4 := Vector2i(-1, -1)
-		for y in sc.h:
-			for x in sc.w:
-				var d := Grid.hex_dist(x, y, sc.core.x, sc.core.y)
-				if d == 3 and d3.x < 0:
-					d3 = Vector2i(x, y)
-				if d == 4 and d4.x < 0:
-					d4 = Vector2i(x, y)
-		kit.eq(sc.height_at(sc.core.x, sc.core.y), 3, "核心山头 h3")
-		kit.eq(sc.height_at(d3.x, d3.y), 2, "山头 d3 = h2")
-		kit.eq(sc.height_at(d4.x, d4.y), 1, "山头 d4 = h1")
+		# 地形（2026-10-23 随机高度）：基地地貌三选一，不再有三级同心山头
+		kit.eq(sc.terrain_kind, MapGen.TERRAIN_SLOPE, "地形类型（山腰）")
+		kit.eq(sc.height_at(sc.core.x, sc.core.y), 2, "山腰核心 h2")
+		kit.eq(sc.check_terrain(sc.build_grid()), "", "地形校验全绿")
 		var hcell: Vector2i = sc._hill_arr[0]
 		kit.eq(sc.height_at(hcell.x, hcell.y), 1, "微丘 h1")
 		# 建图落格
@@ -141,16 +132,16 @@ func register(kit: TestKit) -> void:
 		kit.eq(g.at(sc._sparse_arr[0].x, sc._sparse_arr[0].y), Grid.COVER, "散土覆盖")
 		kit.eq(g.get_h(sc._hill_arr[0].x, sc._hill_arr[0].y), 1, "微丘落盘")
 		kit.eq(sc.check_grid(g), "", "结构校验全绿")
-		# 路径长（核心流场 → 主口；盆地口密闭）
-		var ff := FlowField.new(sc.build_grid(), false)
+		# 路径长（等权步数场：核心 → 主口；盆地口密闭）
+		var ff := FlowField.new(sc.build_grid(), true)
 		ff.begin([sc.core])
 		while not ff.done():
 			ff.step(1 << 20)
 		kit.eq(ff.dist_at(sc.spawns[0].x, sc.spawns[0].y), 470, "主口 1 路径长")
 		kit.eq(ff.dist_at(sc.spawns[1].x, sc.spawns[1].y), 530, "主口 2 路径长")
 		kit.eq(ff.dist_at(sc.spawns[2].x, sc.spawns[2].y), -1, "盆地口密闭")
-		# 指纹（自由分支铸造值；默认图 0x7dea2b02 不受影响）
-		kit.eq(sc.fingerprint(Canon.new()), 0xf5f49e0c, "自由路径指纹"))
+		# 指纹（自由分支铸造值；默认图不受影响）
+		kit.eq(sc.fingerprint(Canon.new()), 0x91e7640e, "自由路径指纹（2026-10-24 地形算法重做后重录）"))
 
 	kit.test("waves-contract", func():
 		var sc := Scenario.new()
@@ -176,21 +167,72 @@ func register(kit: TestKit) -> void:
 		kit.eq(max_batch, 14, "单批上限")
 		kit.eq(finale, 82, "末波开闸总量"))
 
-	kit.test("height-template", func():
+	kit.test("terrain-contract", func():
 		var sc := Scenario.new()
-		kit.eq(sc.height_at(sc.core.x, 6), 3, "核心山头 h3")
-		kit.eq(sc.height_at(sc.core.x, 12), 2, "山头南台阶 h2")
-		kit.eq(sc.height_at(sc.core.x + 2, 12), 2, "台阶右缘 h2")
-		kit.eq(sc.height_at(sc.core.x + 3, 12), 1, "台阶外落 h1")
-		kit.eq(sc.height_at(sc.core.x, 20), 1, "北岸台地 h1")
-		kit.eq(sc.height_at(sc.chokes[0].x, sc.ridge_y), 1, "咽喉谷口 h1")
-		kit.eq(sc.height_at(sc.core.x, sc.ridge_y), 0, "脊带非谷口 h0")
-		kit.eq(sc.height_at(sc.core.x, sc.ridge_y + 1), 0, "岩脊线南 h0")
-		kit.eq(sc.height_at(sc.core.x, 56), 0, "南岸低地 h0")
-		kit.eq(sc.height_at(sc.mesa.position.x, sc.mesa.position.y), 1, "微丘 h1")
-		kit.eq(sc.height_at(sc.mesa.position.x + 1, sc.mesa.position.y + 1), 1, "微丘右下 h1")
-		kit.eq(sc.height_at(sc.mesa.position.x + 2, sc.mesa.position.y), 0, "微丘外 h0")
-		kit.eq(sc.height_at(0, 0), 1, "西北角 h1"))
+		var g := sc.build_grid()
+		kit.eq(sc.check_terrain(g), "", "地形校验全绿")
+		# 统计带（64×64 全格口径）：非零 150..450‰、负值 20..100‰、h≥3 至少 1
+		var nz := 0
+		var neg := 0
+		var hi := 0
+		for y in sc.h:
+			for x in sc.w:
+				var v := sc.height_at(x, y)
+				if v != 0:
+					nz += 1
+				if v < 0:
+					neg += 1
+				if v >= 3:
+					hi += 1
+		var nz_perm := nz * 1000 / (sc.w * sc.h)
+		var neg_perm := neg * 1000 / (sc.w * sc.h)
+		kit.ok(nz_perm >= MapGen.TERRAIN_NZ_LO and nz_perm <= MapGen.TERRAIN_NZ_HI, "非零占比 %d‰ 越带" % nz_perm)
+		kit.ok(neg_perm >= MapGen.TERRAIN_NEG_LO and neg_perm <= MapGen.TERRAIN_NEG_HI, "负高度占比 %d‰ 越带" % neg_perm)
+		kit.ok(hi >= MapGen.TERRAIN_HI_MIN, "无 h≥3 格")
+		# 基地地貌断言（按类型分支，不硬编码种子）
+		var plain_zero := true
+		var cliff_high := false
+		var slope_nonzero := false
+		for y in sc.h:
+			for x in sc.w:
+				var d := Grid.hex_dist(x, y, sc.core.x, sc.core.y)
+				var v2 := sc.height_at(x, y)
+				if sc.terrain_kind == MapGen.TERRAIN_PLAIN and d <= 5 and v2 != 0:
+					plain_zero = false
+				if sc.terrain_kind == MapGen.TERRAIN_CLIFF and d >= 4 and d <= 6 and v2 >= 3:
+					cliff_high = true
+				if sc.terrain_kind == MapGen.TERRAIN_SLOPE and d <= 3 and v2 != 0:
+					slope_nonzero = true
+		if sc.terrain_kind == MapGen.TERRAIN_PLAIN:
+			kit.ok(plain_zero, "平原核心 5 圈非全 0")
+		elif sc.terrain_kind == MapGen.TERRAIN_CLIFF:
+			kit.ok(cliff_high, "崖旁核心 4..6 圈无 h≥3")
+		else:
+			kit.ok(slope_nonzero, "山腰核心 3 圈全 0")
+		# 净空：主口 3×3 = 0、外圈 0..1；英雄位 0；矿与六邻 0..1
+		for i in range(0, sc.spawns.size() - 1):
+			var s: Vector2i = sc.spawns[i]
+			for dy in range(-1, 2):
+				for dx in range(-1, 2):
+					kit.eq(sc.height_at(s.x + dx, s.y + dy), 0, "主口净空高度 (%d,%d)" % [s.x + dx, s.y + dy])
+			if not sc._freeform:
+				kit.eq(g.get_h(s.x, s.y), 0, "出怪口落盘 h0")
+		kit.eq(sc.height_at(sc.hero_spawn.x, sc.hero_spawn.y), 0, "英雄位 h0")
+		for o in sc.ore_cells:
+			var v3 := sc.height_at(o.x, o.y)
+			kit.ok(v3 >= 0 and v3 <= 1, "矿格高度越界 (%d,%d)=%d" % [o.x, o.y, v3])
+			for k in 6:
+				var v4 := sc.height_at(Grid.nx(o.x, o.y, k), Grid.ny(o.x, o.y, k))
+				kit.ok(v4 >= 0 and v4 <= 1, "矿邻格高度越界 (%d,%d)=%d" % [o.x, o.y, v4]))
+
+	kit.test("terrain-ore-negative-control", func():
+		var sc := Scenario.new()
+		var g := sc.build_grid()
+		kit.eq(sc.check_terrain(g), "", "基线地形合法")
+		var o: Vector2i = sc.mid_ore[2]
+		for k in 6:
+			g.set_cell(Grid.nx(o.x, o.y, k), Grid.ny(o.x, o.y, k), Grid.SOLID)
+		kit.ok(sc.check_terrain(g) != "", "矿六邻全封未被拒"))
 
 	kit.test("build-grid-structure", func():
 		var sc := Scenario.new()
@@ -217,16 +259,17 @@ func register(kit: TestKit) -> void:
 		kit.eq(g.at(2, 17), Grid.COVER, "稀疏表土（可挖不给矿）")
 		kit.eq(g.at(3, 17), Grid.OPEN, "表土纹理间断")
 		kit.ok(g.rev > 0, "建图有实心/覆盖写入")
-		kit.eq(g.get_h(sc.core.x, 6), 3, "高度落盘：核心山头")
-		kit.eq(g.get_h(sc.core.x, 12), 2, "高度落盘：台阶")
-		kit.eq(g.get_h(sc.chokes[0].x, sc.ridge_y), 1, "高度落盘：谷口")
-		kit.eq(g.get_h(sc.core.x, sc.ridge_y + 1), 0, "高度落盘：脊南")
+		kit.eq(g.get_h(sc.core.x, 6), sc.height_at(sc.core.x, 6), "高度落盘：核心格 = 地貌高度")
+		kit.eq(g.get_h(sc.spawns[0].x, sc.spawns[0].y), 0, "高度落盘：主口 1 h0")
+		kit.eq(g.get_h(sc.spawns[1].x, sc.spawns[1].y), 0, "高度落盘：主口 2 h0")
+		kit.eq(g.get_h(sc.hero_spawn.x, sc.hero_spawn.y), 0, "高度落盘：英雄位 h0")
+		kit.eq(g.get_h(sc.mesa.position.x, sc.mesa.position.y), 1, "高度落盘：台地 h1")
 		kit.eq(sc.check_grid(g), "", "结构校验全绿"))
 
 	kit.test("path-length-calibration", func():
 		var sc := Scenario.new()
 		var g := sc.build_grid()
-		var ff := FlowField.new(g, false)
+		var ff := FlowField.new(g, true) # 等权步数口径（不吃爬坡代价）
 		ff.begin([sc.core])
 		while not ff.done():
 			ff.step(1 << 20)
@@ -234,6 +277,86 @@ func register(kit: TestKit) -> void:
 			var d := ff.dist_at(sc.spawns[i].x, sc.spawns[i].y)
 			kit.ok(d >= Scenario.PATH_LO and d <= Scenario.PATH_HI, "主口 %d 路径长 %d 越标定带 [%d,%d]" % [i + 1, d, Scenario.PATH_LO, Scenario.PATH_HI])
 		kit.eq(ff.dist_at(sc.spawns[2].x, sc.spawns[2].y), -1, "盆地口密闭不可达"))
+
+	kit.test("64-seed-terrain-sweep", func():
+		var kinds := [0, 0, 0]
+		var nz_lo := 1 << 30
+		var nz_hi := 0
+		var neg_lo := 1 << 30
+		var neg_hi := 0
+		var path_lo := 1 << 30
+		var path_hi := 0
+		for i in 64:
+			var s := Scenario.DEFAULT_SEED + i
+			var sc := Scenario.new(s)
+			kit.eq(sc.check_grid(sc.build_grid()), "", "种子 %d 结构校验" % s)
+			kit.eq(sc.check_plug_open(sc.build_grid()), "", "种子 %d 插口开门" % s)
+			var ct := sc.check_terrain(sc.build_grid())
+			kit.eq(ct, "", "种子 %d 地形校验：%s" % [s, ct])
+			kinds[sc.terrain_kind] += 1
+			# 三类地貌的基地断言
+			var plain_zero := true
+			var cliff_high := false
+			var slope_nonzero := false
+			var nz := 0
+			var neg := 0
+			for y in sc.h:
+				for x in sc.w:
+					var d := Grid.hex_dist(x, y, sc.core.x, sc.core.y)
+					var v := sc.height_at(x, y)
+					if v != 0:
+						nz += 1
+					if v < 0:
+						neg += 1
+					if sc.terrain_kind == MapGen.TERRAIN_PLAIN and d <= 5 and v != 0:
+						plain_zero = false
+					if sc.terrain_kind == MapGen.TERRAIN_CLIFF and d >= 4 and d <= 6 and v >= 3:
+						cliff_high = true
+					if sc.terrain_kind == MapGen.TERRAIN_SLOPE and d <= 3 and v != 0:
+						slope_nonzero = true
+			if sc.terrain_kind == MapGen.TERRAIN_PLAIN:
+				kit.ok(plain_zero, "种子 %d 平原核心 5 圈非全 0" % s)
+			elif sc.terrain_kind == MapGen.TERRAIN_CLIFF:
+				kit.ok(cliff_high, "种子 %d 崖旁核心 4..6 圈无 h≥3" % s)
+			else:
+				kit.ok(slope_nonzero, "种子 %d 山腰核心 3 圈全 0" % s)
+			nz_lo = mini(nz_lo, nz * 1000 / (sc.w * sc.h))
+			nz_hi = maxi(nz_hi, nz * 1000 / (sc.w * sc.h))
+			neg_lo = mini(neg_lo, neg * 1000 / (sc.w * sc.h))
+			neg_hi = maxi(neg_hi, neg * 1000 / (sc.w * sc.h))
+			# 等权步数路径长（所有主口）
+			var ff := FlowField.new(sc.build_grid(), true)
+			ff.begin([sc.core])
+			while not ff.done():
+				ff.step(1 << 20)
+			for j in range(0, sc.spawns.size() - 1):
+				var d2: int = ff.dist_at(sc.spawns[j].x, sc.spawns[j].y)
+				kit.ok(d2 >= Scenario.PATH_LO and d2 <= Scenario.PATH_HI, "种子 %d 主口 %d 路径长 %d 越带" % [s, j + 1, d2])
+				path_lo = mini(path_lo, d2)
+				path_hi = maxi(path_hi, d2)
+		kit.ok(kinds[0] > 0 and kinds[1] > 0 and kinds[2] > 0, "三类地貌覆盖 %s" % str(kinds))
+		kit.ok(nz_lo >= MapGen.TERRAIN_NZ_LO and nz_hi <= MapGen.TERRAIN_NZ_HI, "非零占比 [%d,%d]‰ 越带" % [nz_lo, nz_hi])
+		kit.ok(neg_lo >= MapGen.TERRAIN_NEG_LO and neg_hi <= MapGen.TERRAIN_NEG_HI, "负高度占比 [%d,%d]‰ 越带" % [neg_lo, neg_hi])
+		kit.ok(path_lo >= Scenario.PATH_LO and path_hi <= Scenario.PATH_HI, "路径长 [%d,%d] 越带" % [path_lo, path_hi]))
+
+	kit.test("cliff-entrance-reachable", func():
+		var sc: Scenario = null
+		for i in 64:
+			var s := Scenario.DEFAULT_SEED + i
+			var c := Scenario.new(s)
+			if c.terrain_kind == MapGen.TERRAIN_CLIFF:
+				sc = c
+				break
+		kit.ok(sc != null, "64 种子内无崖旁样本")
+		if sc != null:
+			var g := sc.build_grid()
+			for climb in [2, 1]:
+				var ff := FlowField.new(g, false, climb)
+				ff.begin([sc.core])
+				while not ff.done():
+					ff.step(1 << 20)
+				for j in range(0, sc.spawns.size() - 1):
+					kit.ok(ff.dist_at(sc.spawns[j].x, sc.spawns[j].y) >= 0, "崖旁基地主口 %d 不可达（climb=%d）" % [j + 1, climb]))
 
 	kit.test("is-ore", func():
 		var sc := Scenario.new()
@@ -252,7 +375,7 @@ func register(kit: TestKit) -> void:
 		var a := Scenario.new()
 		var b := Scenario.new()
 		kit.eq(a.fingerprint(canon), b.fingerprint(canon), "同种子两次指纹不一致")
-		kit.eq(a.fingerprint(canon), 0x7dea2b02, "指纹 vs 引擎现值")
+		kit.eq(a.fingerprint(canon), 0x234abc91, "指纹 vs 引擎现值（2026-10-24 第五次基线）")
 		var third := Scenario.new(20261004)
 		kit.ok(a.fingerprint(canon) != third.fingerprint(canon), "换种子指纹没变")
 		var mutated := Scenario.new()

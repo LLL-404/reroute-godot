@@ -1,0 +1,53 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://game/privacy_gate.gd" id="1_gate"]
+
+[node name="PrivacyGate" type="CanvasLayer"]
+script = ExtResource("1_gate")
+
+[node name="PrivacyRoot" type="Control" parent="."]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 0
+
+[node name="bg" type="ColorRect" parent="PrivacyRoot"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="CenterContainer" type="CenterContainer" parent="PrivacyRoot"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="card" type="PanelContainer" parent="PrivacyRoot/CenterContainer"]
+
+[node name="VBoxContainer" type="VBoxContainer" parent="PrivacyRoot/CenterContainer/card"]
+
+[node name="title" type="Label" parent="PrivacyRoot/CenterContainer/card/VBoxContainer"]
+text = "隐私政策"
+horizontal_alignment = 1
+
+[node name="ColorRect" type="ColorRect" parent="PrivacyRoot/CenterContainer/card/VBoxContainer"]
+
+[node name="body" type="Label" parent="PrivacyRoot/CenterContainer/card/VBoxContainer"]
+autowrap_mode = 3
+
+[node name="btn_privacy_link" type="Button" parent="PrivacyRoot/CenterContainer/card/VBoxContainer"]
+text = "查看完整隐私政策"
+focus_mode = 0
+
+[node name="btn_privacy_agree" type="Button" parent="PrivacyRoot/CenterContainer/card/VBoxContainer"]
+text = "同意并继续"
+focus_mode = 0
+
+[node name="btn_privacy_decline" type="Button" parent="PrivacyRoot/CenterContainer/card/VBoxContainer"]
+text = "不同意，退出游戏"
+focus_mode = 0

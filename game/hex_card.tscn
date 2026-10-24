@@ -1,0 +1,49 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://game/ui_icon.gd" id="1_icon"]
+
+[node name="hex_card" type="Control"]
+
+[node name="glow" type="Panel" parent="."]
+mouse_filter = 2
+
+[node name="face" type="PanelContainer" parent="."]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="Margin" type="MarginContainer" parent="face"]
+mouse_filter = 2
+
+[node name="col" type="VBoxContainer" parent="face/Margin"]
+mouse_filter = 2
+
+[node name="bar" type="ColorRect" parent="face/Margin/col"]
+mouse_filter = 2
+
+[node name="kind" type="Label" parent="face/Margin/col"]
+mouse_filter = 2
+
+[node name="card_name" type="Label" parent="face/Margin/col"]
+mouse_filter = 2
+
+[node name="icon" type="Control" parent="face/Margin/col"]
+mouse_filter = 2
+script = ExtResource("1_icon")
+
+[node name="desc" type="Label" parent="face/Margin/col"]
+mouse_filter = 2
+autowrap_mode = 3
+
+[node name="spring" type="Control" parent="face/Margin/col"]
+mouse_filter = 2
+size_flags_vertical = 3
+
+[node name="rule" type="ColorRect" parent="face/Margin/col"]
+mouse_filter = 2
+
+[node name="rarity" type="Label" parent="face/Margin/col"]
+mouse_filter = 2

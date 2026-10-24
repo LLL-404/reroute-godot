@@ -1,0 +1,96 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://game/screens.gd" id="1_screens"]
+
+[node name="Screens" type="CanvasLayer"]
+script = ExtResource("1_screens")
+
+[node name="ScreenHost" type="Control" parent="."]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="Veil" type="Control" parent="."]
+visible = false
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="bg" type="ColorRect" parent="Veil"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="veil_label" type="Label" parent="Veil"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="ConfirmLayer" type="Control" parent="."]
+visible = false
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 0
+
+[node name="veil" type="ColorRect" parent="ConfirmLayer"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="fx" type="Control" parent="ConfirmLayer"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="Center" type="CenterContainer" parent="ConfirmLayer"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="card" type="PanelContainer" parent="ConfirmLayer/Center"]
+
+[node name="Margin" type="MarginContainer" parent="ConfirmLayer/Center/card"]
+
+[node name="col" type="VBoxContainer" parent="ConfirmLayer/Center/card/Margin"]
+alignment = 1
+
+[node name="confirm_text" type="Label" parent="ConfirmLayer/Center/card/Margin/col"]
+autowrap_mode = 3
+horizontal_alignment = 1
+
+[node name="row" type="HBoxContainer" parent="ConfirmLayer/Center/card/Margin/col"]
+alignment = 1
+
+[node name="btn_confirm_ok" type="Button" parent="ConfirmLayer/Center/card/Margin/col/row"]
+text = "确定"
+focus_mode = 0
+
+[node name="btn_confirm_cancel" type="Button" parent="ConfirmLayer/Center/card/Margin/col/row"]
+text = "取消"
+focus_mode = 0

@@ -45,6 +45,10 @@ var chokes: Array # [Vector2i(口心 x, 口行 y) × 2]（西、东；口行 = �
 var sparse_phase: int # 表土纹理相位（y=17 行，x % 9 == phase 为覆盖格）
 var mesa: Rect2i # 南场微丘（2×2，h1）
 var resample_salt: int # 实际采用的盐（诊断用；不进指纹：布局由参数完全决定）
+var gen_failed := false # 换盐耗尽仍无合法布局（本实例已回落到默认图；玩家种子由调用方顺延）
+var terrain_kind: int # 基地地貌（MapGen.TERRAIN_PLAIN/CLIFF/SLOPE）
+var _height: Array = [] # 生成高度数组（64×64；空 = 旧模板回落）
+var _terrain_valid := false # 生成器地形统计自检结果（false = 换盐重采样）
 var _p: Dictionary # 本局布局参数（MapGen 产物；模板几何静态面的查询源）
 var _barrier: Dictionary # 屏障 SOLID 集合（已扣咽喉缺口；"x,y" 键；legacy 专用）
 var _freeform := false # 自由路径标记（默认/legacy = false；分派 build/校验/指纹/出怪点）
@@ -94,19 +98,42 @@ func _init(p_seed: int = DEFAULT_SEED) -> void:
 		[4860, 1, Sim.E_BEHEMOTH, 4],
 		[4860, 2, Sim.E_BEHEMOTH, 4],
 	]
+	if _resolve_layout(p_seed):
+		return
+	# 换盐耗尽：不崩对象（玩家种子由调用方顺延），标记失败并回落到默认图保证实例可用；
+	# 此时本图 ≠ 请求种子，调用方应提示实际采用的种子。
+	gen_failed = true
+	push_error("[scenario] 布局 %d 次重采样仍不合法 seed=%d" % [RESAMPLE_MAX, p_seed])
+	_resolve_layout(DEFAULT_SEED)
+
+
+## 按 seed 解析布局：缓存命中直接应用；否则逐盐生成 → 生成器自检筛 → 附地形 → 应用 → 校验，
+## 成功写缓存并记 resample_salt 返回 true；64 盐耗尽返回 false（不 assert、不写缓存）。
+func _resolve_layout(p_seed: int) -> bool:
 	if Scenario._layout_cache.has(p_seed):
 		var cached: Array = Scenario._layout_cache[p_seed]
 		_apply_layout(cached[0])
 		resample_salt = cached[1]
-		return
+		return true
 	for attempt in RESAMPLE_MAX:
-		var params := MapGen.generate(p_seed, attempt, p_seed == DEFAULT_SEED)
+		var params := MapGen.generate_layout(p_seed, attempt, p_seed == DEFAULT_SEED)
+		# 2026-10-24 性能：生成器自检（岩/丘/散土占比）与地形无关，先用它筛掉这批废盐
+		# （实测约占失败盐的八成）→ 省掉每次约 150ms 的地形场计算；选盐与产物完全不变。
+		if not bool(params.get("valid", true)):
+			continue
+		params = MapGen.attach_terrain(p_seed, attempt, params, p_seed == DEFAULT_SEED)
 		_apply_layout(params)
 		if _validate_layout():
 			resample_salt = attempt
 			Scenario._layout_cache[p_seed] = [params, attempt]
-			return
-	assert(false, "[scenario] 布局 %d 次重采样仍不合法 seed=%d（生成器/不变量坏了）" % [RESAMPLE_MAX, p_seed])
+			return true
+	return false
+
+
+## 该种子能否长出合法布局（开局选种用；命中缓存时几乎零成本）。
+## 用临时实例探一次：失败实例已回落到默认图并置 gen_failed，故只看标记。
+static func usable(p_seed: int) -> bool:
+	return not Scenario.new(p_seed).gen_failed
 
 
 ## 布局参数 → 实例字段（纯赋值，不校验）。自由路径与旧模板分派。
@@ -121,6 +148,19 @@ func _apply_layout(p: Dictionary) -> void:
 func _apply_legacy(p: Dictionary) -> void:
 	var cx: int = p["core_x"]
 	_p = p
+	# 重采样可能先试过自由路径：回落到 legacy 时必须清掉自由路径标记与地貌集合，
+	# 否则 build_grid/校验/指纹会拿上一轮的自由地貌当 legacy 用。
+	_freeform = false
+	_gen_invalid = false
+	_rock_arr = []
+	_hill_arr = []
+	_sparse_arr = []
+	_rock = {}
+	_hill = {}
+	_sparse = {}
+	terrain_kind = int(p.get("terrain_kind", MapGen.TERRAIN_PLAIN))
+	_height = p.get("heights", [])
+	_terrain_valid = bool(p.get("terrain_valid", false))
 	template_id = int(p.get("template", 0))
 	ridge_y = p["ridge_y"]
 	var gr: Array = MapGen.gate_rows(p)
@@ -167,6 +207,9 @@ func _apply_freeform(p: Dictionary) -> void:
 	_freeform = true
 	_gen_invalid = not bool(p.get("valid", true))
 	_p = p
+	terrain_kind = int(p.get("terrain_kind", MapGen.TERRAIN_PLAIN))
+	_height = p.get("heights", [])
+	_terrain_valid = bool(p.get("terrain_valid", false))
 	template_id = -1
 	ridge_y = -1 # 自由路径无单一脊线（视觉锚点回落预设，见 main._visual_anchor）
 	chokes = []
@@ -223,10 +266,10 @@ func _barrier_top(x: int) -> int:
 	return ridge_y
 
 
-## 高度模板（默认/legacy）：北岸台地 h1；核心山头 h3 + 南向两级台阶（h2）；咽喉口行爬出 h1
-## （随列屏障顶行，北岸台地边界随之弯曲/升降）；南岸低地/咽喉谷道/盆地坑 h0；南场微丘（2×2）h1。
-## 自由路径：核心山头 = 六边半径 2/3/4 三级（h3/h2/h1）+ 噪声微丘 h1（可爬坡）。
+## 高度读取：生成期高度数组优先（2026-10-23 随机地形）；数组缺失时保留旧模板口径作保险。
 func height_at(x: int, y: int) -> int:
+	if _height.size() == w * h:
+		return int(_height[y * w + x])
 	if _freeform:
 		var d := Grid.hex_dist(x, y, core.x, core.y)
 		if d <= 2:
@@ -342,9 +385,7 @@ func check_grid(g: Grid) -> String:
 					continue
 				if g.at(c.x + dx, y) != Grid.OPEN:
 					return "咽喉缺口未开 (%d,%d)" % [c.x + dx, y]
-		if g.get_h(c.x, c.y) != 1:
-			return "咽喉口高度破例 x=%d" % c.x
-	# 3) 主出怪口 3×3 净空、英雄位通行、核心占位与山头
+	# 3) 主出怪口 3×3 净空、英雄位通行、核心占位
 	for i in range(0, 2):
 		var s: Vector2i = spawns[i]
 		for dy in range(-1, 2):
@@ -357,8 +398,6 @@ func check_grid(g: Grid) -> String:
 		return "英雄位被封 (%d,%d)" % [hero_spawn.x, hero_spawn.y]
 	if g.at(core.x, core.y) != Grid.SOLID:
 		return "核心格非实心"
-	if g.get_h(core.x, core.y) != 3:
-		return "核心山头 h3 破例"
 	# 4) 矿：数目 / 占格 / 不压脊
 	if mid_ore.size() != 5 or basin_ore.size() < 10:
 		return "矿数破例 mid=%d basin=%d" % [mid_ore.size(), basin_ore.size()]
@@ -421,8 +460,6 @@ func _check_freeform(g: Grid) -> String:
 		return "英雄位被封 (%d,%d)" % [hero_spawn.x, hero_spawn.y]
 	if g.at(core.x, core.y) != Grid.SOLID:
 		return "核心格非实心"
-	if g.get_h(core.x, core.y) != 3:
-		return "核心山头 h3 破例"
 	# 3) 矿：数目 / 占格 / 不压岩
 	if mid_ore.size() != 5 or basin_ore.size() < 10:
 		return "矿数破例 mid=%d basin=%d" % [mid_ore.size(), basin_ore.size()]
@@ -498,18 +535,124 @@ func check_plug_open(g: Grid) -> String:
 	return "插口挖开后盆地口仍不可达"
 
 
-## 核心为源的临时流场跑到收敛（布局自校验的距离场）
+## 核心为源的等权步数场（ignore_h=true，布局自校验的距离场）：
+## 路径长/连通性/盆地密闭一律用「步数」口径，不吃爬坡代价（难度标定不漂移）。
 func _dist_from_core(g: Grid) -> FlowField:
-	var ff := FlowField.new(g, false)
+	var ff := FlowField.new(g, true)
 	ff.begin([core])
 	while not ff.done():
 		ff.step(1 << 20)
 	return ff
 
 
-## 布局自校验：建图合法 + 插口挖开后盆地口可达（默认种子必须全过）
+## 地形专项校验（公开读取面；返回 "" = 合法）：
+## 生成器自检标记、统计带（非零/负值/h≥3）、基地地貌断言、虫群与蛮兽双可达、矿可采。
+func check_terrain(g: Grid) -> String:
+	if _gen_invalid or not _terrain_valid:
+		return "地形自检未过"
+	var nz := 0
+	var neg := 0
+	var hi := 0
+	for y in h:
+		for x in w:
+			var v := height_at(x, y)
+			if v != 0:
+				nz += 1
+			if v < 0:
+				neg += 1
+			if v >= 3:
+				hi += 1
+	var nz_perm := nz * 1000 / (w * h)
+	var neg_perm := neg * 1000 / (w * h)
+	if nz_perm < MapGen.TERRAIN_NZ_LO or nz_perm > MapGen.TERRAIN_NZ_HI:
+		return "地形非零占比越带 %d‰" % nz_perm
+	if neg_perm < MapGen.TERRAIN_NEG_LO or neg_perm > MapGen.TERRAIN_NEG_HI:
+		return "地形负高度占比越带 %d‰" % neg_perm
+	if hi < MapGen.TERRAIN_HI_MIN:
+		return "地形无 h≥3 格"
+	# 基地地貌断言
+	var plain_zero := true
+	var cliff_high := false
+	var slope_nonzero := false
+	for y in h:
+		for x in w:
+			var d := Grid.hex_dist(x, y, core.x, core.y)
+			var v2 := height_at(x, y)
+			if terrain_kind == MapGen.TERRAIN_PLAIN and d <= 5 and v2 != 0:
+				plain_zero = false
+			if terrain_kind == MapGen.TERRAIN_CLIFF and d >= 4 and d <= 6 and v2 >= 3:
+				cliff_high = true
+			if terrain_kind == MapGen.TERRAIN_SLOPE and d <= 3 and v2 != 0:
+				slope_nonzero = true
+	if terrain_kind == MapGen.TERRAIN_PLAIN and not plain_zero:
+		return "平原核心 5 圈非全 0"
+	if terrain_kind == MapGen.TERRAIN_CLIFF and not cliff_high:
+		return "崖旁核心 4..6 圈无 h≥3"
+	if terrain_kind == MapGen.TERRAIN_SLOPE and not slope_nonzero:
+		return "山腰核心 3 圈全 0"
+	# 双兵种可达：核心流场跑到收敛，所有主口（不含盆地口）dist ≥ 0
+	var nm: int = spawns.size() - 1
+	for climb in [2, 1]:
+		var ff := FlowField.new(g, false, climb)
+		ff.begin([core])
+		while not ff.done():
+			ff.step(1 << 20)
+		for i in nm:
+			var sp: Vector2i = spawns[i]
+			if ff.dist_at(sp.x, sp.y) < 0:
+				return "主口 %d 不可达（climb=%d）" % [i + 1, climb]
+	# 矿可采：六邻至少一格可通行且虫群可达；盆地矿在「只挖开插口」的临时图上复核
+	var swarm := FlowField.new(g, false, 2)
+	swarm.begin([core])
+	while not swarm.done():
+		swarm.step(1 << 20)
+	for o in mid_ore:
+		if not _ore_open(swarm, o):
+			return "中场矿不可采 (%d,%d)" % [o.x, o.y]
+	var g2 := build_grid()
+	g2.set_cell(basin_plug.x, basin_plug.y, Grid.OPEN)
+	var swarm2 := FlowField.new(g2, false, 2)
+	swarm2.begin([core])
+	while not swarm2.done():
+		swarm2.step(1 << 20)
+	for o in basin_ore:
+		if not _ore_open(swarm2, o):
+			return "盆地矿不可采 (%d,%d)" % [o.x, o.y]
+	return ""
+
+
+## 矿格可采：沿矿格簇（同一片连续矿）找六邻中「可通行且虫群可达」的一格。
+## 单格六邻口径对 3×4 矿块的中心格必然为矿（不可通行），故按矿簇连通判定：
+## 先挖外圈、再挖内芯——与游戏「英雄需站到邻格」的挖矿规则一致。
+func _ore_open(ff: FlowField, o: Vector2i) -> bool:
+	var seen := {}
+	var q: Array = [o]
+	var head := 0
+	seen[str(o.x) + "," + str(o.y)] = true
+	while head < q.size():
+		var c: Vector2i = q[head]
+		head += 1
+		for k in 6:
+			var ox := Grid.nx(c.x, c.y, k)
+			var oy := Grid.ny(c.x, c.y, k)
+			if not ff.grid.inb(ox, oy):
+				continue
+			if ff.grid.passable(ox, oy):
+				if ff.dist_at(ox, oy) >= 0:
+					return true
+			elif ff.grid.at(ox, oy) == Grid.COVER and is_ore(ox, oy):
+				var key := str(ox) + "," + str(oy)
+				if not seen.has(key):
+					seen[key] = true
+					q.append(Vector2i(ox, oy))
+	return false
+
+
+## 布局自校验：建图合法 + 地形合法 + 插口挖开后盆地口可达（默认种子必须全过）
 func _validate_layout() -> bool:
 	if check_grid(build_grid()) != "":
+		return false
+	if check_terrain(build_grid()) != "":
 		return false
 	return check_plug_open(build_grid()) == ""
 
@@ -549,6 +692,7 @@ func fingerprint(canon: Canon) -> int:
 	b.put_i32(hard_cap_tick)
 	b.put_i32(trickle_every)
 	b.put_i32(wave_scale_pct)
+	b.put_u8(terrain_kind)
 	for y in h: # 高度模板入指纹（换地形必须换基线）
 		for x in w:
 			b.put_u8(height_at(x, y))
@@ -609,7 +753,8 @@ func _fingerprint_freeform(b) -> int:
 	b.put_i32(hard_cap_tick)
 	b.put_i32(trickle_every)
 	b.put_i32(wave_scale_pct)
-	for y in h: # 高度（核心山头 + 微丘）入指纹
+	b.put_u8(terrain_kind)
+	for y in h: # 高度（生成地形 + 微丘）入指纹
 		for x in w:
 			b.put_u8(height_at(x, y))
 	b.put_u32(waves.size())

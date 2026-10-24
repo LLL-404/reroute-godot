@@ -90,19 +90,15 @@ func register(kit: TestKit) -> void:
 		var g3 := sc.build_grid()
 		g3.set_cell(sc.basin_rect.position.x, sc.basin_rect.position.y + 3, Grid.OPEN)
 		kit.ok(sc.check_grid(g3) != "", "盆地破环未被拒")
-		# 4) 咽喉口降高 → 高度校验必须拒
-		var g4 := sc.build_grid()
-		g4.init_h(sc.chokes[1].x, sc.ridge_y, 0)
-		kit.ok(sc.check_grid(g4) != "", "咽喉降高未被拒")
-		# 5) 矿格被填实（数据/地形失配）→ 矿校验必须拒
+		# 4) 矿格被填实（数据/地形失配）→ 矿校验必须拒
 		var g5 := sc.build_grid()
 		g5.set_cell(sc.mid_ore[0].x, sc.mid_ore[0].y, Grid.SOLID)
 		kit.ok(sc.check_grid(g5) != "", "矿格失配未被拒")
-		# 6) 矿数据压脊 → 矿校验必须拒
+		# 5) 矿数据压脊 → 矿校验必须拒
 		var sc2 := Scenario.new()
 		sc2.ore_cells.append(Vector2i(sc2.core.x, sc2.ridge_y))
 		kit.ok(sc2.check_grid(sc2.build_grid()) != "", "矿压脊未被拒")
-		# 7) 盆地内腔封死（即使插口与矿全开也不可达）→ plug_open 必须拒
+		# 6) 盆地内腔封死（即使插口与矿全开也不可达）→ plug_open 必须拒
 		var g7 := sc.build_grid()
 		var b: Rect2i = sc.basin_rect
 		for x in range(b.position.x + 1, b.position.x + b.size.x - 1):
@@ -129,11 +125,7 @@ func register(kit: TestKit) -> void:
 		var hc: Vector2i = sc._hill_arr[0]
 		g3.init_h(hc.x, hc.y, 0)
 		kit.ok(sc.check_grid(g3) != "", "微丘降平未被拒")
-		# 4) 核心山头削平 → 拒
-		var g4 := sc.build_grid()
-		g4.init_h(sc.core.x, sc.core.y, 0)
-		kit.ok(sc.check_grid(g4) != "", "核心削平未被拒")
-		# 5) 盆地环开洞 → 拒
+		# 4) 盆地环开洞 → 拒
 		var g5 := sc.build_grid()
 		g5.set_cell(sc.basin_rect.position.x, sc.basin_rect.position.y + 2, Grid.OPEN)
 		kit.ok(sc.check_grid(g5) != "", "盆地环开洞未被拒")

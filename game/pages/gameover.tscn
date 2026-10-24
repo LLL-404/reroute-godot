@@ -1,0 +1,55 @@
+[gd_scene format=3]
+
+[node name="page_gameover" type="Control"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 0
+
+[node name="bg" type="ColorRect" parent="."]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="fx" type="Control" parent="."]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="Center" type="CenterContainer" parent="."]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="card" type="PanelContainer" parent="Center"]
+
+[node name="Margin" type="MarginContainer" parent="Center/card"]
+
+[node name="col" type="VBoxContainer" parent="Center/card/Margin"]
+alignment = 1
+
+[node name="go_title" type="Label" parent="Center/card/Margin/col"]
+horizontal_alignment = 1
+
+[node name="go_body" type="Label" parent="Center/card/Margin/col"]
+autowrap_mode = 3
+horizontal_alignment = 1
+
+[node name="btn_again" type="Button" parent="Center/card/Margin/col"]
+text = "再来一局"
+focus_mode = 0
+
+[node name="btn_to_title2" type="Button" parent="Center/card/Margin/col"]
+text = "回标题"
+focus_mode = 0
