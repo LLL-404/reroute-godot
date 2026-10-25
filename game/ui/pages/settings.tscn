@@ -186,6 +186,14 @@ focus_mode = 0
 text = "120"
 focus_mode = 0
 
+[node name="RowShake" type="HBoxContainer" parent="Center/Card/Margin/Col/SettingsScrollWrap/SettingsScroll/SettingsBody"]
+
+[node name="Lbl" type="Label" parent="Center/Card/Margin/Col/SettingsScrollWrap/SettingsScroll/SettingsBody/RowShake"]
+text = "屏幕震动"
+
+[node name="ChkShake" type="CheckButton" parent="Center/Card/Margin/Col/SettingsScrollWrap/SettingsScroll/SettingsBody/RowShake"]
+focus_mode = 0
+
 [node name="GroupQuality" type="HBoxContainer" parent="Center/Card/Margin/Col/SettingsScrollWrap/SettingsScroll/SettingsBody"]
 mouse_filter = 2
 

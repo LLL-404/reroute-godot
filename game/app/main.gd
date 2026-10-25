@@ -105,6 +105,7 @@ func _boot() -> void:
 	else:
 		UserSettings.apply_all(_settings) # 启动即应用玩家设置（音量 bus / 显示模式 / 分辨率 / 垂直同步）
 		view.apply_video(_settings) # 画质/渲染缩放/AA/阴影/雾/景深/亮度
+		view.core.shake_on = bool(_settings.get("screen_shake", true)) # 震屏跟随玩家开关（探针分支恒关，保截图口径）
 		hud.apply_ui_scale(int(_settings.get("ui_pct", 100)))
 		shell.apply_ui_scale(int(_settings.get("ui_pct", 100)))
 	if not _is_probe_run:
@@ -237,6 +238,7 @@ func _setup_shell() -> void:
 		"ui_changed": Callable(self, "_on_ui_changed"),
 		"get_seed_text": Callable(self, "_seed_text"),
 		"seed_changed": Callable(self, "_on_seed_changed"),
+		"shake_toggled": Callable(self, "_on_shake_toggled"),
 	}, hud)
 
 
@@ -568,10 +570,20 @@ func _android_back_handle() -> void:
 		shell.handle_key(KEY_ESCAPE)
 
 
-## 系统通知入口：Android 返回手势统一路由（其余通知忽略）
+## 系统通知入口：Android 返回手势统一路由 + 失焦自动暂停（其余通知忽略）
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_WM_GO_BACK_REQUEST:
 		_android_back_handle()
+	elif what == NOTIFICATION_APPLICATION_PAUSED:
+		# 移动端切后台/来电：对局中自动暂停（specs/mobile-ux-spec §3；桌面 FOCUS_OUT 故意不接）
+		if shell != null and not paused and shell.current_page() == "":
+			pause_game()
+
+
+## 设置页震屏开关回调：写配置 + 接线视图层（探针环境仍强制关闭）
+func _on_shake_toggled(on: bool) -> void:
+	_settings["screen_shake"] = on
+	view.core.shake_on = on and not _is_probe_run
 
 
 ## HUD 回调：顶栏模式按钮 → 设置操作模式（肉鸽模式点两次「塔」= 轮换已解锁塔种）

@@ -60,6 +60,7 @@ static func default_cfg() -> Dictionary:
 		"render_pct": 85 if android else 100,
 		"ui_pct": 100,
 		"bright_pct": 100,
+		"screen_shake": true, # 震屏开关（specs/mobile-ux-spec §4；探针环境另有强制关闭）
 		"runs": 0,
 		"privacy_agreed": false,
 		"seed_text": "", # 世界种子输入原样（空串 = 每局随机；文字由 SeedCode 哈希）
@@ -113,6 +114,7 @@ static func load_cfg() -> Dictionary:
 		cfg["render_pct"] = clampi(int(cf.get_value("video", "render_pct", preset["render_pct"])), 50, 100)
 		cfg["ui_pct"] = clampi(int(cf.get_value("video", "ui_pct", cfg["ui_pct"])), 80, 130)
 		cfg["bright_pct"] = clampi(int(cf.get_value("video", "bright_pct", cfg["bright_pct"])), 70, 130)
+		cfg["screen_shake"] = bool(cf.get_value("video", "screen_shake", cfg["screen_shake"]))
 		cfg["runs"] = maxi(0, int(cf.get_value("progress", "runs", cfg["runs"])))
 		cfg["privacy_agreed"] = bool(cf.get_value("privacy", "agreed", cfg["privacy_agreed"]))
 		cfg["seed_text"] = clean_seed_text(str(cf.get_value("game", "seed_text", cfg["seed_text"])))
@@ -144,6 +146,7 @@ static func save_cfg(cfg: Dictionary) -> void:
 	cf.set_value("video", "render_pct", clampi(int(cfg.get("render_pct", def["render_pct"])), 50, 100))
 	cf.set_value("video", "ui_pct", clampi(int(cfg.get("ui_pct", def["ui_pct"])), 80, 130))
 	cf.set_value("video", "bright_pct", clampi(int(cfg.get("bright_pct", def["bright_pct"])), 70, 130))
+	cf.set_value("video", "screen_shake", bool(cfg.get("screen_shake", def["screen_shake"])))
 	cf.set_value("progress", "runs", maxi(0, int(cfg.get("runs", prev_runs))))
 	cf.set_value("privacy", "agreed", bool(cfg.get("privacy_agreed", prev_agreed)))
 	cf.set_value("game", "seed_text", clean_seed_text(str(cfg.get("seed_text", "")))) # 写盘前统一清洗

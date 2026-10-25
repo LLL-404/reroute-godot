@@ -3234,6 +3234,29 @@ screens.tscn 确认层内 `veil → ConfirmVeil`（避免与根下 `Veil` 同名
 ②类型默认名（`CenterContainer/VBoxContainer/ColorRect/Margin`）保留不重命名；
 ③`btn_hover/btn_pressed` 等是 ui_style 色板键与主题覆盖名，非节点名，未动。
 
+### 11.42 移动端 UX 三小件（2026-10-25，specs/mobile-ux-spec 落地）
+
+**返回键配置显式化**：`project.godot` 增 `config/quit_on_go_back=false`——返回路由 §11.8 早有
+（双入口去抖全语义），但默认 true 时系统返回直接退出、`NOTIFICATION_WM_GO_BACK_REQUEST`
+不派发，路由从未真正接管。实机三态回归（MuMu keyevent 4）待下次出包随验。
+
+**失焦自动暂停**：`_notification` 增 `NOTIFICATION_APPLICATION_PAUSED` 分支——对局中
+（page=="" 且未暂停）自动 `pause_game()`；桌面 FOCUS_OUT 故意不接（alt-tab 是主动行为）。
+
+**震屏开关**：`user_settings` 新键 `screen_shake`（默认开，video 段落盘）；设置页显示组
+`RowShake/ChkShake`（CheckButton 不入按钮矩阵，豁免在案）；`cb["shake_toggled"]` 接线
+`view.core.shake_on = 开关 && !探针环境`（探针豁免优先，保截图口径）。
+
+**触控判据扩面**：`probe_touch` 矩阵纳入指挥坞 8 钮（72S×68S 全达标）`56→64`；
+顶栏热度/暂停（60×30S）与撤销 pill（140×30S，实测为 Button 型）按规格红线记录豁免。
+
+**探针增量**：`probe_save` +5（震屏默认开/落盘/接线关/探针豁免优先/失焦自动暂停+恢复）、
+`probe_touch` 矩阵 +8。
+
+**闸**：单测 126/0；headless 8/8（golden 零漂移、scenario fp=0x234abc91）；窗口 15/15；
+`check_shots` PASS（settings.png 含新行过阈值）；`check_ui_lint` PASS。
+证据 `logs/gates-20261025-mobileux/`。规格修订记录：`cashline/docs/specs/mobile-ux-spec.md` 变更记录。
+
 ## 12. AI 任务卡模板（派活时照抄）
 
 ```markdown

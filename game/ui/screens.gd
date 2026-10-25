@@ -454,6 +454,26 @@ func _dress_option_row(body: VBoxContainer, key: String, supported: Array, candi
 	return row
 
 
+## 设置页开关行绑定（row_<key>/Lbl + Chk<key> Pascal 化）：96 宽标签 + CheckButton。
+func _dress_check_row(body: VBoxContainer, key: String, fn: Callable) -> void:
+	var row: HBoxContainer = body.get_node(_pn("row_" + key))
+	row.add_theme_constant_override("separation", int(10 * S))
+	var lbl: Label = row.get_node("Lbl")
+	_dress_label(lbl, 12.5 * S, C["muted"])
+	lbl.custom_minimum_size = Vector2(96.0 * S, 0)
+	var chk: CheckButton = row.get_node("Chk" + str(key).capitalize())
+	chk.focus_mode = Control.FOCUS_NONE
+	chk.add_theme_font_size_override("font_size", int(12.5 * S))
+	chk.toggled.connect(fn)
+
+
+## 震屏开关：写 cfg → 落盘 → 通知 main 接线视图层（specs/mobile-ux-spec §4）
+func _on_shake_toggled(on: bool) -> void:
+	_cfg["screen_shake"] = on
+	_apply_settings()
+	cb["shake_toggled"].call(on)
+
+
 ## 设置页分组标题绑定：左金标 + 组名 + 右侧通栏细线。
 func _dress_group_header(row: HBoxContainer) -> void:
 	row.add_theme_constant_override("separation", int(9 * S))
@@ -674,6 +694,7 @@ func _bind_settings(p: Control) -> void:
 	for v in UserSettings.fps_opts():
 		fps_supported.append(int(v))
 	_dress_option_row(body, "fps", fps_supported, [0, 30, 60, 120])
+	_dress_check_row(body, "shake", _on_shake_toggled)
 
 	# —— 画质 ——（预设 = 一键模板；子项可单独改，改动即时生效）
 	_dress_option_row(body, "quality", [0, 1, 2, 3], [0, 1, 2, 3])
@@ -801,6 +822,9 @@ func _load_settings_into_ui() -> void:
 			sld.set_value_no_signal(int(_cfg.get(key, 100)))
 		if lbl != null:
 			lbl.text = str(int(_cfg.get(key, 100)))
+	var chk_shake: CheckButton = page.find_child("ChkShake", true, false)
+	if chk_shake != null:
+		chk_shake.set_pressed_no_signal(bool(_cfg.get("screen_shake", true)))
 	_refresh_chips()
 
 

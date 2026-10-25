@@ -69,7 +69,14 @@ func _initialize() -> void:
 		var btn2: Button = b
 		check(btn2.custom_minimum_size.y >= min_h and btn2.custom_minimum_size.x >= min_w,
 			"按钮 confirm/%s 触达尺寸 %.0fx%.0f" % [btn2.name, btn2.custom_minimum_size.x, btn2.custom_minimum_size.y])
-	cmp_int(total, 56, "按钮矩阵总数（6+5+2+7+34+2；34 含 §11.34 隐私说明钮，title +1 = §11.35 期他会话新增肉鸽入口 btn_rogue）")
+	for b in hud.get_node("ActionLayer").find_children("", "Button", true, false):
+		if b.name == "UndoPill":
+			continue # 次要操作豁免：140×30S 限时撤销 pill（specs/mobile-ux-spec §5）
+		total += 1
+		var btn3: Button = b
+		check(btn3.custom_minimum_size.y >= min_h and btn3.custom_minimum_size.x >= min_w,
+			"按钮 hud/%s 触达尺寸 %.0fx%.0f" % [btn3.name, btn3.custom_minimum_size.x, btn3.custom_minimum_size.y])
+	cmp_int(total, 64, "按钮矩阵总数（6+5+2+7+34+2 + 指挥坞 8；顶栏热度/暂停 30S 高状态钮豁免——specs/mobile-ux-spec §5 修订）")
 
 	# ---- 6. 触屏拖线（D1-4/6）：按下→拖动（含偏线绕行）→抬起；与鼠标路径世界状态逐字节一致 ----
 	main.view.stop_all_audio()

@@ -163,6 +163,13 @@ func _initialize() -> void:
 	await _click_btn(page_set, "BtnDisplayMode0")
 	check(int(UserSettings.load_cfg()["display_mode"]) == 0, "窗口化显示模式落盘")
 	check(DisplayServer.window_get_mode() == DisplayServer.WINDOW_MODE_WINDOWED, "显示模式回窗口化")
+	var chk_shake: CheckButton = page_set.find_child("ChkShake", true, false)
+	check(chk_shake != null and chk_shake.button_pressed == true, "震屏默认开（mobile-ux §4）")
+	chk_shake.button_pressed = false
+	check(bool(UserSettings.load_cfg()["screen_shake"]) == false, "关震屏即落盘")
+	check(main.view.core.shake_on == false, "关震屏 → 视图层接线关闭")
+	chk_shake.button_pressed = true
+	check(main.view.core.shake_on == false, "重开震屏但探针环境豁免优先（截图口径优先于玩家开关）")
 	for _i in 20:
 		await process_frame
 	root.get_texture().get_image().save_png("res://shots/settings.png")
@@ -196,6 +203,11 @@ func _initialize() -> void:
 	main._last_back_ms = 0
 	main._android_back_handle()
 	check(shell.current_page() == "" and main.paused == false, "返回键@暂停 → 继续")
+	main._notification(main.NOTIFICATION_APPLICATION_PAUSED)
+	check(main.paused == true and shell.current_page() == "pause", "失焦自动暂停（mobile-ux §3 模拟通知）")
+	main._last_back_ms = 0
+	main._android_back_handle()
+	check(shell.current_page() == "" and main.paused == false, "失焦暂停后返回键 → 继续")
 	main._last_back_ms = 0
 	var act := InputEventAction.new()
 	act.action = &"ui_cancel"
