@@ -23,9 +23,9 @@ func _initialize() -> void:
 	w.apply_command({ "kind": "dig", "x": sc.basin_plug.x, "y": sc.basin_plug.y })
 	check(w.route_opened == true, "dig plug opens route")
 	w.apply_command({ "kind": "wall", "x": sc.core.x, "y": 20 })
-	check(w.supply == 315 and w.grid.at(sc.core.x, 20) == Grid.SOLID, "wall build")
+	check(w.supply == 320 and w.grid.at(sc.core.x, 20) == Grid.SOLID, "wall build")
 	w.apply_command({ "kind": "wall", "x": sc.core.x, "y": sc.core.y })
-	check(w.supply == 315, "wall on core rejected")
+	check(w.supply == 320, "wall on core rejected")
 	w.apply_command({ "kind": "spawn", "x": sc.spawns[0].x, "y": sc.spawns[0].y })
 	check(w.units.size() == 1 and w.units[0]["speed_ticks"] == 4, "spawn")
 	w.apply_command({ "kind": "spawn", "x": sc.core.x, "y": sc.core.y })
@@ -59,7 +59,7 @@ func _initialize() -> void:
 
 	# schema 字节
 	var buf := a.canonical_bytes()
-	check(buf.data[0] == 0 and buf.data[1] == 0 and buf.data[2] == 0 and buf.data[3] == 8, "STATE_SCHEMA bytes")
+	check(buf.data[0] == 0 and buf.data[1] == 0 and buf.data[2] == 0 and buf.data[3] == 9, "STATE_SCHEMA bytes")
 
 	# 终局冻结
 	var f := World.new(sc, 1)

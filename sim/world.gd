@@ -272,8 +272,35 @@ func live_buildings() -> int:
 	return n
 
 
-## 放置建筑（含施工时间、立即挡路）；核心额外记录
-func place_building(bkind: int, x: int, y: int) -> Dictionary:
+## 存活墙数——墙阶梯价判定用
+func live_walls() -> int:
+	var n := 0
+	for i in buildings.size():
+		var b: Dictionary = buildings[i]
+		if b["hp"] > 0 and int(b["kind"]) == Sim.B_WALL:
+			n += 1
+	return n
+
+
+## 墙当前单价（阶梯价）：<20 面 5，之后基准价 10；达 35 面上限返回 -1（不可再建）。
+## 拆墙回收名额（存活数口径），拆建循环因退款折半而无利可图。
+func wall_price() -> int:
+	var n := live_walls()
+	if n >= Sim.WALL_TIER_CAP:
+		return -1
+	return Sim.WALL_TIER_CHEAP_COST if n < Sim.WALL_TIER_CHEAP else int(Sim.BUILDINGS[Sim.B_WALL - 1]["cost"])
+
+
+## 建筑当前造价（墙走阶梯价，其余走表价）；-1 = 不可建（墙数上限）
+func build_price(bkind: int) -> int:
+	if bkind == Sim.B_WALL:
+		return wall_price()
+	var def: Dictionary = bdef(bkind)
+	return int(def.get("cost", -1))
+
+
+## 放置建筑（含施工时间、立即挡路）；核心额外记录。paid = 实付造价（墙为阶梯价当次值）
+func place_building(bkind: int, x: int, y: int, paid: int = -1) -> Dictionary:
 	var def: Dictionary = bdef(bkind)
 	# 第 1 波之前施工时间减半（切片 1 的教学让步）
 	var build: int = def["build_ticks"]
@@ -288,6 +315,7 @@ func place_building(bkind: int, x: int, y: int) -> Dictionary:
 		"build_left": build,
 		"cooldown": 0,
 		"placed_tick": tick_count, # 仅撤销窗口用；不进 canonical/save
+		"paid": int(def["cost"]) if paid < 0 else paid, # v9：实付造价（退款口径）
 	}
 	next_building_id += 1
 	buildings.append(b)
@@ -298,12 +326,14 @@ func place_building(bkind: int, x: int, y: int) -> Dictionary:
 	return b
 
 
-## 尝试建造（供给/通行/占用/英雄守卫通过后扣费放置）
+## 尝试建造（供给/通行/占用/英雄守卫通过后扣费放置；墙走阶梯价、达上限拒建）
 func try_build(bkind: int, x: int, y: int) -> void:
 	if tower_cap >= 0 and bkind != Sim.B_CORE and live_buildings() >= tower_cap:
 		return # 肉鸽塔位已满（经典模式 tower_cap=-1，此分支永不触发）
-	var def: Dictionary = bdef(bkind)
-	if supply < def["cost"]:
+	var cost := build_price(bkind)
+	if cost < 0:
+		return # 墙数达上限（WALL_TIER_CAP）
+	if supply < cost:
 		return
 	if not grid.passable(x, y):
 		return
@@ -313,24 +343,24 @@ func try_build(bkind: int, x: int, y: int) -> void:
 		return # 任何时刻不得有单位处于阻挡格内
 	if x == hero["x"] and y == hero["y"]:
 		return # 不得压在英雄脚下
-	supply -= def["cost"]
-	place_building(bkind, x, y)
+	supply -= cost
+	place_building(bkind, x, y, cost)
 
 
-## 拆除建筑（核心不可拆；施工完退 50%，否则退 80%）
+## 拆除建筑（核心不可拆；施工完退实付价 50%，否则退 80%）
 func try_remove(x: int, y: int) -> void:
 	var b = building_at(x, y)
 	if b == null or b["kind"] == Sim.B_CORE or b["hp"] <= 0:
 		return
-	var def: Dictionary = bdef(int(b["kind"]))
-	var refund := Lua64.idiv(def["cost"] * (50 if b["build_left"] <= 0 else 80), 100)
+	var paid := int(b.get("paid", int(bdef(int(b["kind"]))["cost"])))
+	var refund := Lua64.idiv(paid * (50 if b["build_left"] <= 0 else 80), 100)
 	supply += refund
 	by_cell.erase(grid.idx(x, y))
 	grid.set_cell(x, y, Grid.OPEN)
 	b["hp"] = 0 # 待清理；已付的建造时间不退
 
 
-## 撤销刚落下的建筑（5 秒窗口、未受损、非核心）：全额退款并恢复通行。
+## 撤销刚落下的建筑（5 秒窗口、未受损、非核心）：按实付价全额退款并恢复通行。
 ## 只由 main 的「撤销上一步」调用；不进黄金回放命令表，故不影响 16 指纹。
 func try_undo_build(x: int, y: int) -> void:
 	var b = building_at(x, y)
@@ -342,7 +372,7 @@ func try_undo_build(x: int, y: int) -> void:
 	var def: Dictionary = bdef(int(b["kind"]))
 	if int(b["hp"]) < int(def["hp"]):
 		return # 已被啃过：走普通拆除退款，避免满血价撤销
-	supply += int(def["cost"])
+	supply += int(b.get("paid", int(def["cost"])))
 	by_cell.erase(grid.idx(x, y))
 	grid.set_cell(x, y, Grid.OPEN)
 	b["hp"] = 0
@@ -809,7 +839,7 @@ func judge() -> void:
 		outcome = LOST # 超时＝敌按时刻表长完，守方判负
 
 
-# ---------------- 规范状态编码（STATE_SCHEMA=8）----------------
+# ---------------- 规范状态编码（STATE_SCHEMA=9）----------------
 # tick | rng | grid | 供给/结局/开门/战果 | 单位表按 id 升序 | 建筑表按 id 升序。
 # 流场是派生态，不进指纹。
 ## 规范状态编码：字段序 = tick|rng|grid|供给/结局/开门/战果|单位表|建筑表（指纹口径）
@@ -856,6 +886,7 @@ func canonical_bytes() -> Canon.Buf:
 		b.put_i32(s["hp"])
 		b.put_i32(s["build_left"])
 		b.put_i32(s["cooldown"])
+		b.put_i32(s["paid"]) # v9：实付造价（墙为阶梯价当次值，退款口径）
 
 	b.put_u8(1) # 英雄恒在（Jam 版无死亡）
 	b.put_i32(hero["x"])

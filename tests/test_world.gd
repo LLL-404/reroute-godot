@@ -68,7 +68,7 @@ func register(kit: TestKit) -> void:
 		var w := World.new(sc, 1)
 		var spot := Vector2i(sc.core.x, 20)
 		w.apply_command({ "kind": "wall", "x": spot.x, "y": spot.y })
-		kit.eq(w.supply, Sim.START_SUPPLY - 10, "墙费 10")
+		kit.eq(w.supply, Sim.START_SUPPLY - 5, "首面墙阶梯价 5")
 		kit.eq(w.grid.at(spot.x, spot.y), Grid.SOLID, "墙落地挡路")
 		kit.ok(w.by_cell.get(w.grid.idx(spot.x, spot.y)) != null, "墙登记 by_cell")
 		var s := w.supply
@@ -79,6 +79,33 @@ func register(kit: TestKit) -> void:
 		w.apply_command({ "kind": "wall", "x": spot.x, "y": spot.y })
 		kit.eq(w.supply, s, "拒绝的建造零扣费")
 		kit.eq(w.buildings.size(), 2, "只有核心 + 一面墙"))
+
+	kit.test("wall-tier-pricing", func():
+		var w := World.new(StubScenario.new({ "size": 45 }), 1)
+		w.supply = 999999
+		var spent := 0
+		for i in Sim.WALL_TIER_CHEAP: # 前 20 面：单价 5
+			w.try_build(Sim.B_WALL, i + 2, 10)
+			spent += Sim.WALL_TIER_CHEAP_COST
+		kit.eq(w.live_walls(), 20, "20 面已建")
+		kit.eq(w.supply, 999999 - spent, "前 20 面半价")
+		kit.eq(w.wall_price(), 10, "第 21 面恢复基准价")
+		w.try_build(Sim.B_WALL, Sim.WALL_TIER_CHEAP + 2, 10) # 第 21 面
+		var b21: Dictionary = w.buildings[w.buildings.size() - 1]
+		kit.eq(int(b21["paid"]), 10, "第 21 面实付 10")
+		for i in Sim.WALL_TIER_CAP - Sim.WALL_TIER_CHEAP - 1: # 建满 35 面
+			w.try_build(Sim.B_WALL, Sim.WALL_TIER_CHEAP + 3 + i, 10)
+		kit.eq(w.live_walls(), Sim.WALL_TIER_CAP, "35 面达上限")
+		kit.eq(w.wall_price(), -1, "上限后不可再建")
+		var fp := w.fingerprint()
+		w.try_build(Sim.B_WALL, 2, 12)
+		kit.eq(w.fingerprint(), fp, "超上限建造零副作用")
+		kit.eq(w.live_walls(), Sim.WALL_TIER_CAP, "仍是 35 面")
+		w.supply = 0
+		w.try_remove(Sim.WALL_TIER_CHEAP + 2, 10) # 拆实付 10 的第 21 面
+		kit.eq(w.supply, 5, "退款 = 实付 10 的 50%")
+		kit.eq(w.live_walls(), Sim.WALL_TIER_CAP - 1, "名额回收")
+		kit.eq(w.wall_price(), 10, "回收后可再建（基准价）"))
 
 	kit.test("spawn-and-tick", func():
 		var sc := Scenario.new()
@@ -107,19 +134,19 @@ func register(kit: TestKit) -> void:
 	kit.test("remove-refund", func():
 		var w := World.new(StubScenario.new(), 1)
 		w.apply_command({ "kind": "wall", "x": 3, "y": 3 })
-		kit.eq(w.supply, 290, "墙扣 10")
+		kit.eq(w.supply, 295, "首面墙阶梯价扣 5")
 		w.apply_command({ "kind": "remove", "x": 3, "y": 3 })
-		kit.eq(w.supply, 295, "即时建筑退 50% = 5")
+		kit.eq(w.supply, 297, "即时建筑退实付 5 的 50% = 2")
 		kit.eq(w.grid.at(3, 3), Grid.OPEN, "拆除后通行")
 		kit.ok(w.by_cell.get(w.grid.idx(3, 3)) == null, "by_cell 清除")
 		w.apply_command({ "kind": "remove", "x": 3, "y": 3 })
-		kit.eq(w.supply, 295, "重复拆除零副作用")
+		kit.eq(w.supply, 297, "重复拆除零副作用")
 		w.apply_command({ "kind": "tower", "x": 5, "y": 5 })
-		kit.eq(w.supply, 235, "塔扣 60")
+		kit.eq(w.supply, 237, "塔扣 60")
 		w.apply_command({ "kind": "remove", "x": 5, "y": 5 })
-		kit.eq(w.supply, 283, "施工中退 80% = 48")
+		kit.eq(w.supply, 285, "施工中退 80% = 48")
 		w.apply_command({ "kind": "remove", "x": 0, "y": 0 })
-		kit.eq(w.supply, 283, "核心不可拆")
+		kit.eq(w.supply, 285, "核心不可拆")
 		kit.ok(w.building_at(0, 0) != null, "核心仍在"))
 
 	# ---------------- 地形改造 ----------------
@@ -570,7 +597,7 @@ func register(kit: TestKit) -> void:
 		kit.eq(b.data[0], 0, "STATE_SCHEMA 大端字节 1")
 		kit.eq(b.data[1], 0, "STATE_SCHEMA 大端字节 2")
 		kit.eq(b.data[2], 0, "STATE_SCHEMA 大端字节 3")
-		kit.eq(b.data[3], 8, "STATE_SCHEMA = 8"))
+		kit.eq(b.data[3], 9, "STATE_SCHEMA = 9"))
 
 	kit.test("compact-keeps-order", func():
 		var w := World.new(StubScenario.new(), 1)

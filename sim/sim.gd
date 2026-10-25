@@ -28,6 +28,13 @@ const B_WALL := 1
 const B_TOWER := 2
 const B_CORE := 3
 
+# 墙阶梯价（2026-10-25 刀②）：存活墙数 < WALL_TIER_CHEAP 面单价 WALL_TIER_CHEAP_COST，
+# 之后恢复基准价（BUILDINGS.cost）；达 WALL_TIER_CAP 后不可再建。
+# 早期封墙半价买容错（配合 effdetour 让运河起手成立），无限海墙被硬顶住。
+const WALL_TIER_CHEAP := 20
+const WALL_TIER_CHEAP_COST := 5
+const WALL_TIER_CAP := 35
+
 # 敌军 2 原型：啃墙的（蛮兽）+ 跑快的（虫群）。speed = 走一格要几 tick（越大越慢）。
 const ENEMIES := [
 	{ "name": "swarm", "hp": 30, "speed_ticks": 4, "damage": 8, "cooldown": 12, "reward": 3, "climb_max": 2 },

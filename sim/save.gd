@@ -13,7 +13,8 @@ extends RefCounted
 # v2（2026-10-16 世界生成）：state 增 sc_seed（布局种子），读档按种子重建校验；旧档自然拒载。
 # v3（2026-10-23 挖坑/爬坡）：高度改 u8 偏移编码（支持 -2..5），单位行增 climb_wait（11 字段）。
 # v4（2026-10-25 改道经济换轨）：单位行增 bare_dist（12 字段），旧档拒载。
-const FORMAT_VERSION := 4
+# v5（2026-10-25 墙阶梯价）：建筑行增 paid（8 字段），旧档拒载。
+const FORMAT_VERSION := 5
 
 
 ## 世界 → 存档字典。run_index 供读档还原蓝图视觉（Blueprint.pick(run_index) 派生）。
@@ -36,7 +37,7 @@ static func encode(world: World, run_index: int) -> Dictionary:
 		])
 	var builds: Array = []
 	for b in world.buildings:
-		builds.append([b["id"], b["kind"], b["x"], b["y"], b["hp"], b["build_left"], b["cooldown"]])
+		builds.append([b["id"], b["kind"], b["x"], b["y"], b["hp"], b["build_left"], b["cooldown"], b["paid"]])
 	var wave := 0
 	for wv in world.sc.waves:
 		if int(wv[0]) <= world.tick_count:
@@ -139,11 +140,12 @@ static func decode(d) -> World:
 	world.by_cell = {}
 	world.core = {}
 	for row in st["buildings"]:
-		if typeof(row) != TYPE_ARRAY or row.size() != 7:
+		if typeof(row) != TYPE_ARRAY or row.size() != 8:
 			return null
 		var b := {
 			"id": int(row[0]), "kind": int(row[1]), "x": int(row[2]), "y": int(row[3]),
 			"hp": int(row[4]), "build_left": int(row[5]), "cooldown": int(row[6]),
+			"paid": int(row[7]),
 		}
 		world.buildings.append(b)
 		world.by_cell[world.grid.idx(b["x"], b["y"])] = b

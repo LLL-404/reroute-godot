@@ -43,7 +43,7 @@ func register(kit: TestKit) -> void:
 	kit.test("encode-fields", func():
 		var w := World.new(Scenario.new(), 123)
 		var d := Save.encode(w, 2)
-		kit.eq(d["format"], 4, "格式版本")
+		kit.eq(d["format"], 5, "格式版本")
 		kit.eq(d["schema"], Canon.STATE_SCHEMA, "状态版本")
 		kit.eq(d["sc_fp"], 2432575960, "剧本指纹 0x90fe29d8")
 		kit.eq(d["meta"]["run"], 2, "meta.run")

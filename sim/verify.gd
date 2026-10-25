@@ -81,6 +81,10 @@ static func check_invariants(world: World) -> String:
 		var bd := int(u.get("bare_dist", -1))
 		if bd < -1 or bd > 4096:
 			return "不变式6破例：单位 %d 裸图基线 %d 越界 tick=%d" % [u["id"], bd, world.tick_count]
+	for b in world.buildings:
+		var pd := int(b.get("paid", 0))
+		if pd < 0 or pd > 999:
+			return "不变式7破例：建筑 %d 实付价 %d 越界 tick=%d" % [int(b["id"]), pd, world.tick_count]
 	return ""
 
 

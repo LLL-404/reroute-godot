@@ -6,9 +6,10 @@ extends RefCounted
 # v6（2026-10-17）：六边形拓扑上线——字段布局不变，但移动/寻路语义变 ⇒ 旧档（v5 方形）拒载。
 # v7：高度域扩到 -2..5 + 爬坡代价/额外等待 ⇒ 旧档（v6）拒载。
 # v8（2026-10-25）：改道经济换轨——击杀赏金改「有效绕行」口径，单位加 bare_dist ⇒ 旧档拒载。
+# v9（2026-10-25 墙阶梯价）：建筑加 paid（实付造价，退款口径）⇒ 旧档拒载。
 # 常量来源：Lua 版 scripts/sim/canon.lua 逐行对照；>=2^63 的期望值已转带符号十进制
 # （GDScript 大 hex 字面量会被钳位，见 lua64.gd 头注）。
-const STATE_SCHEMA := 8
+const STATE_SCHEMA := 9
 const FNV_OFFSET := 2166136261 # 0x811C9DC5
 const FNV_PRIME := 16777619 # 0x01000193
 const MASK32 := 4294967296 # 0x100000000
