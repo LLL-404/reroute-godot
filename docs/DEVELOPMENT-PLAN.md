@@ -3458,7 +3458,14 @@ WON、convoy 679-680、全图矿采空。12 断言全绿——运河「高资本
 
 **闸**：单测 **134/134**（+3：worker-mining-cycle / worker-sealed-idles / worker-no-build-underfoot；
 dig-ore-and-cover 重写）；headless 9/9（golden/scene/blueprint/sim/grid/flow/scenario/world/dig_intent）；
-窗口 sync/smoke/shots/hud/input/ui_flow/touch/save 全绿 + `check_shots` PASS。
+窗口 sync/smoke/shots/hud/input/ui_flow/touch/save/audio/asset/model/orient/intro/seed/privacy
++ rogue/rogue_ui（肉鸽共享回归）全绿 + `check_shots` PASS。
+
+**双端包重出（2026-10-25 第二轮）**：exe 109,550,080B 复签 **Valid** + pck 109,978,532B
+（包内 selfcheck **33/0 PASS**）；zip 192 条目 testzip None；APK **312,332,745B** apksigner
+`CN=Reroute, OU=GameJam`（指纹一致）。SHA-256：pck `4b154e26db1b92b9…` / zip `2437f6a726db7198…` /
+apk `5d121034ec7b771f…`。注：Android 导出单次 ~10min，590s 超时会截断——重跑同命令即补完
+（第一次截断已出大半产物）。
 
 **分叉台账**（DECISIONS 同步）：dig 保留开路 / 爬 2 级 / 卡死待命 / 2 人固定无招募 /
 自动派工（手动派工模式留 v2）/ 肉鸽共享（R10 未实装无联动伤）。
