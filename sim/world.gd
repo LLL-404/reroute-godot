@@ -235,6 +235,7 @@ func spawn_unit(x: int, y: int, speed_ticks: int, kind: int) -> void:
 		"traveled": 0,
 		"climb_wait": 0,
 		"bare_dist": bare_field_for(kind).dist_at(x, y), # v8：出生格裸图基线（不可达 -1）
+		"stun": 0, # v10：震荡波眩晕剩余 tick（0=无）
 	}
 	next_unit_id += 1
 	units.append(unit)
@@ -510,6 +511,11 @@ func bounty_of(u: Dictionary) -> int:
 func move_units() -> void:
 	for ui in units.size():
 		var unit: Dictionary = units[ui]
+		# 眩晕（完全冻结）：不动、不啃、攻击冷却也不走，只递减眩晕计数
+		var stun: int = int(unit.get("stun", 0))
+		if stun > 0:
+			unit["stun"] = stun - 1
+			continue
 		if unit["atk_cd"] > 0:
 			unit["atk_cd"] = unit["atk_cd"] - 1
 		# 爬坡后摇：等待期间只递减计数，本 tick 不发步点
@@ -607,8 +613,9 @@ func ensure_siege(kind: int) -> FlowField:
 	return f
 
 
-## 震荡波：半径（平方距离口径，与拓扑无关）内敌人沿背离英雄方向击退 1 格；落点须可通行、
-## 无单位且高度边合法（可震下崖、不可推上崖）。不改地形、不耗 Rng；冷却期命令为 Nop（零副作用）。
+## 震荡波：半径（平方距离口径，与拓扑无关）内敌人击退 2 格并眩晕（STUN_TICKS 完全冻结）；
+## 每步落点须可通行、无单位且高度边合法（可震下崖、不可推上崖），方向按当前位逐格重算。
+## 不改地形、不耗 Rng；冷却期命令为 Nop（零副作用）。
 ## 六边击退方向 = 轴向差的主轴符号（|dq|→|dr|→|ds| 平手优先，确定性）。
 func cast_shock() -> void:
 	hero["skill_cd"] = hero_cd_max
@@ -619,23 +626,29 @@ func cast_shock() -> void:
 		var dy: int = u["y"] - hero["y"]
 		var d2: int = dx * dx + dy * dy
 		if u["hp"] > 0 and d2 > 0 and d2 <= r2:
-			var ua := Grid.to_axial(u["x"], u["y"])
-			var ha := Grid.to_axial(hero["x"], hero["y"])
-			var dq: int = ua.x - ha.x
-			var dr: int = ua.y - ha.y
-			var ds: int = -(dq + dr)
-			var k := 0
-			if absi(dq) >= absi(dr) and absi(dq) >= absi(ds):
-				k = 0 if dq > 0 else 3 # E / W
-			elif absi(dr) >= absi(ds):
-				k = 5 if dr > 0 else 2 # SE / NW
-			else:
-				k = 4 if ds > 0 else 1 # SW / NE
-			var nx: int = Grid.nx(u["x"], u["y"], k)
-			var ny: int = Grid.ny(u["x"], u["y"], k)
-			if grid.passable(nx, ny) and cell_vacant(nx, ny) and grid.get_h(nx, ny) - grid.get_h(u["x"], u["y"]) <= 1:
-				u["x"] = nx
-				u["y"] = ny
+			u["stun"] = Sim.STUN_TICKS
+			for _step in 2:
+				var k := _push_dir(u["x"], u["y"])
+				var nx: int = Grid.nx(u["x"], u["y"], k)
+				var ny: int = Grid.ny(u["x"], u["y"], k)
+				if grid.passable(nx, ny) and cell_vacant(nx, ny) and grid.get_h(nx, ny) - grid.get_h(u["x"], u["y"]) <= 1:
+					u["x"] = nx
+					u["y"] = ny
+
+
+## 击退方向：单位与英雄轴向差的主轴符号（背离英雄），平手按 |dq|→|dr|→|ds| 优先
+func _push_dir(x: int, y: int) -> int:
+	var ua := Grid.to_axial(x, y)
+	var ha := Grid.to_axial(hero["x"], hero["y"])
+	var dq: int = ua.x - ha.x
+	var dr: int = ua.y - ha.y
+	var ds: int = -(dq + dr)
+	if absi(dq) >= absi(dr) and absi(dq) >= absi(ds):
+		return 0 if dq > 0 else 3 # E / W
+	elif absi(dr) >= absi(ds):
+		return 5 if dr > 0 else 2 # SE / NW
+	else:
+		return 4 if ds > 0 else 1 # SW / NE
 
 
 ## 英雄步进（固定次序 ③b）：冷却每 tick 走一；有目标且到步点则沿英雄场走一格。
@@ -839,7 +852,7 @@ func judge() -> void:
 		outcome = LOST # 超时＝敌按时刻表长完，守方判负
 
 
-# ---------------- 规范状态编码（STATE_SCHEMA=9）----------------
+# ---------------- 规范状态编码（STATE_SCHEMA=10）----------------
 # tick | rng | grid | 供给/结局/开门/战果 | 单位表按 id 升序 | 建筑表按 id 升序。
 # 流场是派生态，不进指纹。
 ## 规范状态编码：字段序 = tick|rng|grid|供给/结局/开门/战果|单位表|建筑表（指纹口径）
@@ -875,6 +888,7 @@ func canonical_bytes() -> Canon.Buf:
 		b.put_i32(u["traveled"]) # v3：绕行路程
 		b.put_i32(u["climb_wait"]) # v7：爬坡后摇剩余 tick
 		b.put_i32(u["bare_dist"]) # v8：出生格裸图基线路程（不可达 -1）
+		b.put_i32(u["stun"]) # v10：眩晕剩余 tick
 
 	b.put_u32(buildings.size())
 	for i in buildings.size():

@@ -85,6 +85,10 @@ static func check_invariants(world: World) -> String:
 		var pd := int(b.get("paid", 0))
 		if pd < 0 or pd > 999:
 			return "不变式7破例：建筑 %d 实付价 %d 越界 tick=%d" % [int(b["id"]), pd, world.tick_count]
+	for u in world.units:
+		var st := int(u.get("stun", 0))
+		if st < 0 or st > Sim.STUN_TICKS:
+			return "不变式8破例：单位 %d 眩晕 %d 越界 tick=%d" % [u["id"], st, world.tick_count]
 	return ""
 
 

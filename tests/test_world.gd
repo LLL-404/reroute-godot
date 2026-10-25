@@ -398,14 +398,32 @@ func register(kit: TestKit) -> void:
 		w.apply_command({ "kind": "spawn", "x": 6, "y": 1, "speed": 1000 })
 		w.apply_command({ "kind": "spawn", "x": 1, "y": 1, "speed": 1000 })
 		w.apply_command({ "kind": "shock" })
-		kit.eq(w.units[0]["x"], 3, "半径内击退 1 格")
+		kit.eq(w.units[0]["x"], 3, "第二格被单位占据：只退 1 格")
 		kit.eq(w.units[1]["x"], 4, "落点爬崖被拒（可震下崖不可推上崖）")
 		kit.eq(w.units[2]["x"], 6, "半径外不动")
 		kit.eq(w.units[3]["x"], 1, "同格不震（d2=0）")
+		kit.eq(w.units[0]["stun"], Sim.STUN_TICKS, "命中即眩晕")
+		kit.eq(w.units[2]["stun"], 0, "半径外不眩晕")
 		kit.eq(w.hero["skill_cd"], Sim.HERO["skill_cooldown"], "震荡波置冷却")
 		w.apply_command({ "kind": "shock" })
 		kit.eq(w.hero["skill_cd"], Sim.HERO["skill_cooldown"], "冷却期重复施放被拒")
 		kit.eq(w.units[0]["x"], 3, "冷却期零击退"))
+
+	kit.test("shock-push-two-steps", func():
+		var w := World.new(StubScenario.new(), 1)
+		w.apply_command({ "kind": "spawn", "x": 3, "y": 1, "speed": 1000 })
+		w.apply_command({ "kind": "shock" })
+		kit.eq(w.units[0]["x"], 5, "无阻挡时击退 2 格")
+		kit.eq(w.units[0]["traveled"], 0, "击退不计路程")
+		# 眩晕完全冻结：不移动、不啃、攻击冷却也不走
+		w.units[0]["atk_cd"] = 7 # 白盒
+		w.units[0]["stun"] = 2 # 白盒
+		var fx: int = w.units[0]["x"]
+		var fy: int = w.units[0]["y"]
+		_run(w, 2)
+		kit.eq(w.units[0]["stun"], 0, "2 tick 后眩晕解除")
+		kit.eq(w.units[0]["atk_cd"], 7, "冻结期 atk_cd 不走")
+		kit.eq(w.units[0]["x"], fx, "冻结期不动"))
 
 	kit.test("build-blocked-on-hero", func():
 		var w := World.new(StubScenario.new(), 1)
@@ -597,7 +615,7 @@ func register(kit: TestKit) -> void:
 		kit.eq(b.data[0], 0, "STATE_SCHEMA 大端字节 1")
 		kit.eq(b.data[1], 0, "STATE_SCHEMA 大端字节 2")
 		kit.eq(b.data[2], 0, "STATE_SCHEMA 大端字节 3")
-		kit.eq(b.data[3], 9, "STATE_SCHEMA = 9"))
+		kit.eq(b.data[3], 10, "STATE_SCHEMA = 10"))
 
 	kit.test("compact-keeps-order", func():
 		var w := World.new(StubScenario.new(), 1)

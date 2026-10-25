@@ -50,4 +50,7 @@ const CONVOY_SHIFT := 3
 const BOUNTY_CAP_MULT := 2
 
 # 英雄（切片 1 最小形态：点地移动 + 单技能震荡波）。
-const HERO := { "speed_ticks": 3, "skill_radius": 3, "skill_cooldown": 400 }
+# 2026-10-25 刀④强化：半径 3→4、冷却 400→300、击退 1→2 格、新增眩晕（完全冻结）——
+# 「易空放」主因是缺范围指示（表现层修），数值强化让罩到就有真实回报。
+const HERO := { "speed_ticks": 3, "skill_radius": 4, "skill_cooldown": 300 }
+const STUN_TICKS := 40 # 震荡波命中眩晕：不动/不啃/atk_cd 不走（完全冻结）

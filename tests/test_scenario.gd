@@ -61,8 +61,8 @@ func register(kit: TestKit) -> void:
 
 	kit.test("hero-table", func():
 		kit.eq(Sim.HERO["speed_ticks"], 3, "hero speed_ticks")
-		kit.eq(Sim.HERO["skill_radius"], 3, "hero skill_radius")
-		kit.eq(Sim.HERO["skill_cooldown"], 400, "hero skill_cooldown"))
+		kit.eq(Sim.HERO["skill_radius"], 4, "hero skill_radius（刀④ 3→4）")
+		kit.eq(Sim.HERO["skill_cooldown"], 300, "hero skill_cooldown（刀④ 400→300）"))
 
 	kit.test("layout-snapshot", func():
 		var sc := Scenario.new()
