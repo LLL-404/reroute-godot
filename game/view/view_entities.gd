@@ -74,6 +74,8 @@ var hero_range_root: Node3D = null # 英雄模式范围预览圈（震荡波半�
 var _hero_range_on := false
 var _hero_range_at := Vector2i(-1, -1)
 var sim_world: World = null # sync 每帧缓存（英雄圈跟随/浮字口径用）
+var worker_nodes: Dictionary = {} # 工人表现（采矿改形 C）：id -> { node, px, py, lx, ly, mt }
+var _worker_mat: StandardMaterial3D = null
 var _wall_mat: Material = null
 var _wall_cells: Dictionary = {} # cellkey -> Vector2i（当局活墙格）
 var _wall_edges: Dictionary = {} # cellkey -> Node3D（边缘段容器，挂 wall_edges_root 下）
@@ -154,6 +156,7 @@ func build_terrain(pgrid: Grid) -> void:
 	building_nodes = {}
 	unit_nodes = {}
 	death_fx = []
+	worker_nodes = {}
 	ring = null
 	hero = null
 	ghost = null
@@ -945,6 +948,7 @@ func sync(world: World, tick_alpha: float = 0.0, delta: float = 0.0) -> void:
 				_float_bounty(scr, "+" + str(total))
 			unit_nodes.erase(uid2)
 	_apply_swarm_offsets(world, delta, cam_ok, cam_pos)
+	update_workers(world, alpha)
 	update_death_fx(world.tick_count)
 	update_shock_ring(world)
 
@@ -1172,6 +1176,56 @@ func update_shock_ring(world: World) -> void:
 			var end_r: float = maxf(float(world.hero_radius), 0.3)
 			var s := 0.3 + (end_r - 0.3) * k
 			rn.scale = Vector3(s, 1.0, s)
+
+
+# ---- 工人表现（采矿改形 C）----
+
+## 工人节点：金色小方块贴地滑行（步点 3t/格插值），载量越高个子越高——
+## 矿车在路上跑这件事必须看得见（经济与「放墙」咬合的可读性口径）。
+func update_workers(world: World, alpha: float) -> void:
+	var seen := {}
+	for w in world.workers:
+		var wid := int(w["id"])
+		seen[wid] = true
+		var e: Dictionary = worker_nodes.get(wid)
+		if e == null:
+			var node := MeshInstance3D.new()
+			node.name = "Worker%d" % wid
+			node.mesh = core.box_mesh
+			node.material_override = _worker_material()
+			node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			unit_root.add_child(node)
+			e = { "node": node, "px": int(w["x"]), "py": int(w["y"]), "lx": int(w["x"]), "ly": int(w["y"]), "mt": world.tick_count }
+			worker_nodes[wid] = e
+		var cx := int(w["x"])
+		var cy := int(w["y"])
+		if cx != int(e["lx"]) or cy != int(e["ly"]):
+			e["px"] = e["lx"]
+			e["py"] = e["ly"]
+			e["lx"] = cx
+			e["ly"] = cy
+			e["mt"] = world.tick_count
+		var phase := clampf((float(world.tick_count - int(e["mt"])) + alpha) / float(Sim.WORKER_SPEED_TICKS), 0.0, 1.0)
+		var wp0 := core.cell_to_world(int(e["px"]), int(e["py"]))
+		var wp1 := core.cell_to_world(cx, cy)
+		var gy := lerpf(terrain.ground_y(int(e["px"]), int(e["py"])), terrain.ground_y(cx, cy), phase)
+		var nd: MeshInstance3D = e["node"]
+		nd.position = Vector3(lerpf(wp0.x, wp1.x, phase), gy + 0.35, lerpf(wp0.z, wp1.z, phase))
+		var load_k := 0.6 + 0.4 * float(int(w["carrying"])) / float(Sim.WORKER_LOAD)
+		nd.scale = Vector3(0.32, 0.18 + 0.5 * load_k, 0.32)
+	for wid2 in worker_nodes.keys():
+		if not seen.has(wid2):
+			(worker_nodes[wid2]["node"] as Node3D).queue_free()
+			worker_nodes.erase(wid2)
+
+
+func _worker_material() -> StandardMaterial3D:
+	if _worker_mat == null:
+		var m := StandardMaterial3D.new()
+		m.albedo_color = Color8(232, 196, 120) # 金：矿车
+		m.roughness = 0.55
+		_worker_mat = m
+	return _worker_mat
 
 
 # ---- 赏金浮字 / 统计 ----
