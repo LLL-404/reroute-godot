@@ -9,8 +9,8 @@
 > 口径：数量类陈述一律以 `assets/` 实测为准，不凭记忆。
 
 > 新鲜度：self :: 许可不明一律不准进包
-> 新鲜度：code reroute-godot/game/ui_style.gd :: res://assets/fonts/NotoSansSC-Regular.otf
-> 新鲜度：code reroute-godot/game/selfcheck.gd :: 中文字体打进包且关键字形存在
+> 新鲜度：code reroute-godot/game/ui/ui_style.gd :: res://assets/fonts/NotoSansSC-Regular.otf
+> 新鲜度：code reroute-godot/game/app/selfcheck.gd :: 中文字体打进包且关键字形存在
 
 ---
 
