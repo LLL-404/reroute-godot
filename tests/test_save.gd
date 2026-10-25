@@ -45,7 +45,7 @@ func register(kit: TestKit) -> void:
 		var d := Save.encode(w, 2)
 		kit.eq(d["format"], 5, "格式版本")
 		kit.eq(d["schema"], Canon.STATE_SCHEMA, "状态版本")
-		kit.eq(d["sc_fp"], 2432575960, "剧本指纹 0x90fe29d8")
+		kit.eq(d["sc_fp"], 2137177064, "剧本指纹 0x7f62bbe8（末波阶段化）")
 		kit.eq(d["meta"]["run"], 2, "meta.run")
 		kit.eq(d["meta"]["tick"], 0, "meta.tick")
 		kit.eq(d["meta"]["wave"], 0, "meta.wave 开局 0")

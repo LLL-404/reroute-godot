@@ -89,14 +89,16 @@ func _init(p_seed: int = DEFAULT_SEED) -> void:
 		[3700, 2, Sim.E_SWARM, 14],
 		[3850, 1, Sim.E_SWARM, 10],
 		[3850, 2, Sim.E_BEHEMOTH, 3],
-		[4700, 1, Sim.E_SWARM, 14],
-		[4715, 1, Sim.E_SWARM, 14],
-		[4730, 1, Sim.E_SWARM, 12],
+		# 末波阶段化（2026-10-25 刀③）：82 只从 160t 窗口拉到 380t（批间隔 80t）、
+		# 蛮兽殿后——「末波是几何题不是经济题」的修正：分散的运河塔阵也有时间磨完
+		[4700, 1, Sim.E_SWARM, 12],
+		[4780, 1, Sim.E_SWARM, 12],
+		[4860, 1, Sim.E_SWARM, 12],
 		[4700, 2, Sim.E_SWARM, 12],
-		[4715, 2, Sim.E_SWARM, 12],
-		[4730, 2, Sim.E_SWARM, 10],
-		[4860, 1, Sim.E_BEHEMOTH, 4],
-		[4860, 2, Sim.E_BEHEMOTH, 4],
+		[4780, 2, Sim.E_SWARM, 12],
+		[4860, 2, Sim.E_SWARM, 14],
+		[5000, 1, Sim.E_BEHEMOTH, 4],
+		[5080, 2, Sim.E_BEHEMOTH, 4],
 	]
 	if _resolve_layout(p_seed):
 		return
@@ -618,6 +620,35 @@ func check_terrain(g: Grid) -> String:
 	for o in basin_ore:
 		if not _ore_open(swarm2, o):
 			return "盆地矿不可采 (%d,%d)" % [o.x, o.y]
+	# 矿台渐变带与矿口（2026-10-25）：中场矿 d=2 环高度 ∈ [-1,2]（矿带边界恒坡不崖），
+	# 且带中心六方向各走 5 格至少 2 向无 h≥2 墙（坡肩不许连圈把矿围成碗）
+	for o in mid_ore:
+		for dy in range(-2, 3):
+			for dx in range(-2, 3):
+				var gx: int = o.x + dx
+				var gy: int = o.y + dy
+				if gx < 0 or gy < 0 or gx >= w or gy >= h:
+					continue
+				if Grid.hex_dist(gx, gy, o.x, o.y) == 2:
+					var hv: int = height_at(gx, gy)
+					if hv < -1 or hv > 2:
+						return "矿台渐变带破例 (%d,%d) h=%d" % [gx, gy, hv]
+	var ctr: Vector2i = mid_ore[2]
+	var open_dirs := 0
+	for k in 6:
+		var cx := ctr.x
+		var cy := ctr.y
+		var walled := false
+		for _step in 5:
+			cx = Grid.nx(cx, cy, k)
+			cy = Grid.ny(cx, cy, k)
+			if cx < 0 or cy < 0 or cx >= w or cy >= h or height_at(cx, cy) >= 2:
+				walled = true
+				break
+		if not walled:
+			open_dirs += 1
+	if open_dirs < 2:
+		return "中场矿台被围死（开向 %d/6）" % open_dirs
 	return ""
 
 

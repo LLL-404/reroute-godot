@@ -58,7 +58,7 @@ func _initialize() -> void:
 			finale += cnt
 	check(waves_ok, "waves shape")
 	check(sc.waves.size() == 25, "waves count")
-	check(total == 200 and first == 60 and last == 4860 and max_batch == 14 and finale == 82, "waves contract")
+	check(total == 200 and first == 60 and last == 5080 and max_batch == 14 and finale == 82, "waves contract")
 
 	# --- 地形锚点（2026-10-23 随机高度：三类基地地貌 + 统计带）---
 	var cx: int = sc.core.x
@@ -163,10 +163,10 @@ func _initialize() -> void:
 	check(d0 == d1, "main spawn paths equal d0=%d d1=%d" % [d0, d1])
 	check(d2 == -1, "spawn3 unreachable closed d2=%d" % d2)
 
-	# --- 指纹守门（0x234abc91）+ 确定性 + 负对照 ---
+	# --- 指纹守门（0x90fe29d8）+ 确定性 + 负对照 ---
 	var canon := Canon.new()
 	var fp: int = sc.fingerprint(canon)
-	check(fp == 0x234abc91, "fingerprint baseline (got 0x%x)" % fp)
+	check(fp == 0x7f62bbe8, "fingerprint baseline (got 0x%x)" % fp)
 	check(fp == sc.fingerprint(canon), "fingerprint repeat call")
 	check(fp == Scenario.new().fingerprint(Canon.new()), "fingerprint fresh instance")
 	var mut := Scenario.new()

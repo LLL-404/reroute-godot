@@ -113,7 +113,7 @@ func register(kit: TestKit) -> void:
 		kit.eq(sc.mid_ore[4], Vector2i(45, 21), "中场矿右缘")
 		kit.eq(sc.basin_ore.size(), 12, "盆地矿数")
 		kit.eq(sc.ore_cells.size(), 17, "矿总表（盆地在前、中场在后）")
-		kit.eq(sc._rock_arr.size(), 217, "岩群数")
+		kit.eq(sc._rock_arr.size(), 216, "岩群数（2026-10-25 矿台扩圈后重钉）")
 		kit.eq(sc._hill_arr.size(), 285, "微丘数")
 		kit.eq(sc._sparse_arr.size(), 9, "散土数")
 		kit.eq(sc._sparse_arr[0], Vector2i(13, 30), "散土首格")
@@ -141,7 +141,7 @@ func register(kit: TestKit) -> void:
 		kit.eq(ff.dist_at(sc.spawns[1].x, sc.spawns[1].y), 530, "主口 2 路径长")
 		kit.eq(ff.dist_at(sc.spawns[2].x, sc.spawns[2].y), -1, "盆地口密闭")
 		# 指纹（自由分支铸造值；默认图不受影响）
-		kit.eq(sc.fingerprint(Canon.new()), 0x91e7640e, "自由路径指纹（2026-10-24 地形算法重做后重录）"))
+		kit.eq(sc.fingerprint(Canon.new()), 3771210114, "自由路径指纹（2026-10-25 末波阶段化后重录）"))
 
 	kit.test("waves-contract", func():
 		var sc := Scenario.new()
@@ -163,7 +163,7 @@ func register(kit: TestKit) -> void:
 		kit.eq(sc.waves.size(), 25, "波次条目数")
 		kit.eq(total, 200, "敌军总量")
 		kit.eq(first, 60, "首条 tick")
-		kit.eq(last, 4860, "末条 tick")
+		kit.eq(last, 5080, "末条 tick（阶段化后蛮兽殿后至 5080）")
 		kit.eq(max_batch, 14, "单批上限")
 		kit.eq(finale, 82, "末波开闸总量"))
 
@@ -223,7 +223,32 @@ func register(kit: TestKit) -> void:
 			kit.ok(v3 >= 0 and v3 <= 1, "矿格高度越界 (%d,%d)=%d" % [o.x, o.y, v3])
 			for k in 6:
 				var v4 := sc.height_at(Grid.nx(o.x, o.y, k), Grid.ny(o.x, o.y, k))
-				kit.ok(v4 >= 0 and v4 <= 1, "矿邻格高度越界 (%d,%d)=%d" % [o.x, o.y, v4]))
+				kit.ok(v4 >= 0 and v4 <= 1, "矿邻格高度越界 (%d,%d)=%d" % [o.x, o.y, v4])
+		# 矿台渐变带 + 矿口（2026-10-25）：中场矿 d2 环 ∈ [-1,2]（边界恒坡不崖），
+		# 带中心六方向各走 5 格至少 2 向无 h≥2 墙（坡肩不许连圈围矿）
+		for o in sc.mid_ore:
+			for dy in range(-2, 3):
+				for dx in range(-2, 3):
+					var gx: int = o.x + dx
+					var gy: int = o.y + dy
+					if Grid.hex_dist(gx, gy, o.x, o.y) == 2:
+						var v5 := sc.height_at(gx, gy)
+						kit.ok(v5 >= -1 and v5 <= 2, "矿台渐变带越界 (%d,%d)=%d" % [gx, gy, v5])
+		var ctr: Vector2i = sc.mid_ore[2]
+		var open_dirs := 0
+		for k in 6:
+			var cx := ctr.x
+			var cy := ctr.y
+			var walled := false
+			for _step in 5:
+				cx = Grid.nx(cx, cy, k)
+				cy = Grid.ny(cx, cy, k)
+				if cx < 0 or cy < 0 or cx >= sc.w or cy >= sc.h or sc.height_at(cx, cy) >= 2:
+					walled = true
+					break
+			if not walled:
+				open_dirs += 1
+		kit.ok(open_dirs >= 2, "中场矿台开向不足 %d/6" % open_dirs))
 
 	kit.test("terrain-ore-negative-control", func():
 		var sc := Scenario.new()
@@ -233,6 +258,34 @@ func register(kit: TestKit) -> void:
 		for k in 6:
 			g.set_cell(Grid.nx(o.x, o.y, k), Grid.ny(o.x, o.y, k), Grid.SOLID)
 		kit.ok(sc.check_terrain(g) != "", "矿六邻全封未被拒"))
+
+	kit.test("terrain-ore-terrace-negative-control", func():
+		# 矿台渐变带破例（d2 环抬到 h4）→ check_terrain 必须拒。
+		# _height 与布局缓存共享引用：先 duplicate 再改，别毒化同进程后续 Scenario。
+		var sc := Scenario.new()
+		kit.eq(sc.check_terrain(sc.build_grid()), "", "基线地形合法")
+		sc._height = sc._height.duplicate()
+		var o: Vector2i = sc.mid_ore[2]
+		for dy in range(-2, 3):
+			for dx in range(-2, 3):
+				if Grid.hex_dist(o.x + dx, o.y + dy, o.x, o.y) == 2:
+					sc._height[(o.y + dy) * sc.w + o.x + dx] = 4
+		kit.ok(sc.check_terrain(sc.build_grid()) != "", "矿台渐变带破例未被拒")
+		# 矿台围死（六方向 3..5 格全砌 h≥2，d1/d2 留合法）→ 必须拒
+		var sc2 := Scenario.new()
+		sc2._height = sc2._height.duplicate()
+		for k in 6:
+			var cx: int = sc2.mid_ore[2].x
+			var cy: int = sc2.mid_ore[2].y
+			var step := 0
+			for _walk in 5:
+				cx = Grid.nx(cx, cy, k)
+				cy = Grid.ny(cx, cy, k)
+				step += 1
+				if cx < 0 or cy < 0 or cx >= sc2.w or cy >= sc2.h or step <= 2:
+					continue
+				sc2._height[cy * sc2.w + cx] = maxi(int(sc2._height[cy * sc2.w + cx]), 2)
+		kit.ok(sc2.check_terrain(sc2.build_grid()) != "", "矿台围死未被拒"))
 
 	kit.test("build-grid-structure", func():
 		var sc := Scenario.new()
@@ -339,6 +392,56 @@ func register(kit: TestKit) -> void:
 		kit.ok(neg_lo >= MapGen.TERRAIN_NEG_LO and neg_hi <= MapGen.TERRAIN_NEG_HI, "负高度占比 [%d,%d]‰ 越带" % [neg_lo, neg_hi])
 		kit.ok(path_lo >= Scenario.PATH_LO and path_hi <= Scenario.PATH_HI, "路径长 [%d,%d] 越带" % [path_lo, path_hi]))
 
+	kit.test("cliff-forms-64-seed-sweep", func():
+		# 崖形摆布（2026-10-25 §11.45，软保证）：h≥3 连通分量 ≤3 格=孤峰、≥5 格=崖脉。
+		# 诊断实测 64/64 双形态齐备（地形 2.0 自然山体也有贡献），钉满带。
+		var both := 0
+		var misses: Array = []
+		for i in 64:
+			var s := Scenario.DEFAULT_SEED + i
+			var sc := Scenario.new(s)
+			var seen := {}
+			var n_butte := 0
+			var n_range := 0
+			for idx in sc.w * sc.h:
+				@warning_ignore("integer_division")
+				var bx: int = idx % sc.w
+				@warning_ignore("integer_division")
+				var by: int = idx / sc.w
+				if seen.has(idx) or sc.height_at(bx, by) < 3:
+					continue
+				var q: Array = [idx]
+				var comp := 0
+				seen[idx] = true
+				var head := 0
+				while head < q.size():
+					var cur: int = q[head]
+					head += 1
+					comp += 1
+					@warning_ignore("integer_division")
+					var cx: int = cur % sc.w
+					@warning_ignore("integer_division")
+					var cy: int = cur / sc.w
+					for k in 6:
+						var nx: int = Grid.nx(cx, cy, k)
+						var ny: int = Grid.ny(cx, cy, k)
+						if nx < 0 or ny < 0 or nx >= sc.w or ny >= sc.h:
+							continue
+						var ni: int = ny * sc.w + nx
+						if seen.has(ni) or sc.height_at(nx, ny) < 3:
+							continue
+						seen[ni] = true
+						q.append(ni)
+				if comp <= 3:
+					n_butte += 1
+				elif comp >= 5:
+					n_range += 1
+			if n_butte > 0 and n_range > 0:
+				both += 1
+			else:
+				misses.append([s, n_butte, n_range])
+		kit.eq(both, 64, "双形态命中率（孤峰+崖脉）缺：%s" % str(misses)))
+
 	kit.test("cliff-entrance-reachable", func():
 		var sc: Scenario = null
 		for i in 64:
@@ -375,7 +478,7 @@ func register(kit: TestKit) -> void:
 		var a := Scenario.new()
 		var b := Scenario.new()
 		kit.eq(a.fingerprint(canon), b.fingerprint(canon), "同种子两次指纹不一致")
-		kit.eq(a.fingerprint(canon), 0x234abc91, "指纹 vs 引擎现值（2026-10-24 第五次基线）")
+		kit.eq(a.fingerprint(canon), 2137177064, "指纹 vs 引擎现值（2026-10-25 末波阶段化九次基线）")
 		var third := Scenario.new(20261004)
 		kit.ok(a.fingerprint(canon) != third.fingerprint(canon), "换种子指纹没变")
 		var mutated := Scenario.new()
