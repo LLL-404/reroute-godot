@@ -13,7 +13,7 @@ func register(kit: TestKit) -> void:
 	kit.module("canon")
 
 	kit.test("schema", func():
-		kit.eq(Canon.STATE_SCHEMA, 10, "STATE_SCHEMA"))
+		kit.eq(Canon.STATE_SCHEMA, 11, "STATE_SCHEMA"))
 
 	kit.test("put-u8-wrap", func():
 		kit.seq(_bytes_of(func(b): b.put_u8(0x34)), [0x34], "put_u8 原值")

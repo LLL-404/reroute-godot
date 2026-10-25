@@ -89,6 +89,17 @@ static func check_invariants(world: World) -> String:
 		var st := int(u.get("stun", 0))
 		if st < 0 or st > Sim.STUN_TICKS:
 			return "不变式8破例：单位 %d 眩晕 %d 越界 tick=%d" % [u["id"], st, world.tick_count]
+	for wk in world.workers:
+		if not g.passable(int(wk["x"]), int(wk["y"])):
+			return "不变式9破例：工人 %d 位于阻挡格 (%d,%d) tick=%d" % [wk["id"], wk["x"], wk["y"], world.tick_count]
+		var cg := int(wk["carrying"])
+		if cg < 0 or cg > Sim.WORKER_LOAD:
+			return "不变式9破例：工人 %d 载量 %d 越界 tick=%d" % [wk["id"], cg, world.tick_count]
+	for i in world.sc.ore_cells.size():
+		var oc: Vector2i = world.sc.ore_cells[i]
+		var ol := int(world.ore_left.get(world.grid.idx(oc.x, oc.y), -1))
+		if ol < 0 or ol > Sim.ORE_STORE:
+			return "不变式9破例：矿格 %d 余量 %d 越界 tick=%d" % [i, ol, world.tick_count]
 	return ""
 
 

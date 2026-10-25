@@ -49,7 +49,7 @@ func _initialize() -> void:
 	world.hero["y"] = stand.y
 	main._tick_ore_intent()
 	check(world.grid.at(ore.x, ore.y) == Grid.OPEN, "到场后矿格挖开")
-	cmp_int(world.supply, sup0 + Sim.ORE_YIELD, "产出 = ORE_YIELD（%d）" % Sim.ORE_YIELD)
+	cmp_int(world.supply, sup0, "挖开不再即时入账（改形 C：矿由工人搬运）")
 	check(main._ore_intent.is_empty(), "意图已消费")
 
 	# ---- ⑤ 普通土方仍可隔空挖 ----

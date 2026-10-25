@@ -13,7 +13,11 @@ func register(kit: TestKit) -> void:
 	kit.test("sim-constants", func():
 		kit.eq(Sim.TICK_HZ, 20, "TICK_HZ")
 		kit.eq(Sim.START_SUPPLY, 300, "START_SUPPLY")
-		kit.eq(Sim.ORE_YIELD, 25, "ORE_YIELD")
+		kit.eq(Sim.ORE_STORE, 40, "ORE_STORE（改形 C）")
+		kit.eq(Sim.ORE_RATE, 5, "ORE_RATE")
+		kit.eq(Sim.ORE_RATE_TICKS, 20, "ORE_RATE_TICKS")
+		kit.eq(Sim.WORKER_COUNT, 2, "WORKER_COUNT")
+		kit.eq(Sim.WORKER_LOAD, 20, "WORKER_LOAD")
 		kit.eq(Sim.CONVOY_SHIFT, 3, "CONVOY_SHIFT")
 		kit.eq(Sim.FILL_COST, 15, "FILL_COST")
 		kit.eq(Sim.LOWER_COST, 10, "LOWER_COST")

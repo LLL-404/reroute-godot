@@ -81,6 +81,13 @@ var hero_field_rev: int
 var hero_goal_tx: int
 var hero_goal_ty: int
 
+# 工人采运（2026-10-25 采矿改形 C）：矿不即时入账，工人沿流场搬运回核心结算。
+# 独立实体（同英雄：不进 units/buildings，敌人不索敌、互相穿行、脚下不可建造）；
+# 行走沿主战场口径（爬 2 级），玩家放墙/改地形实时改写矿车行程——经济与「放墙」咬死。
+# 状态/载量/矿格余量进指纹（影响供给序列）；流场是派生态不进指纹。
+var workers: Array # { id, x, y, state, target, carrying, mine_cd, field, field_rev, field_goal, pick_rev }
+var ore_left: Dictionary # grid.idx -> 剩余储量（sc.ore_cells 全集初始化；位置序进指纹）
+
 
 ## 初始化世界状态：建网格、放核心、建主场流场
 func _init(psc: Scenario, pseed: int, prebuild_budget: int = 2048) -> void:
@@ -143,6 +150,13 @@ func _init(psc: Scenario, pseed: int, prebuild_budget: int = 2048) -> void:
 	wave_driver = Callable()
 	tower_cap = -1
 	place_building(Sim.B_CORE, sc.core.x, sc.core.y)
+	# 工人与矿格余量（核心落地后出生：第 id 个可行邻格，都是核心山头通行格）
+	ore_left = {}
+	for i in sc.ore_cells.size():
+		ore_left[grid.idx(sc.ore_cells[i].x, sc.ore_cells[i].y)] = Sim.ORE_STORE
+	workers = []
+	for i in Sim.WORKER_COUNT:
+		_spawn_worker(i)
 
 
 ## 同步重建两个主场流场（初始化/存档前调用；运行时走摊销补场）
@@ -171,8 +185,7 @@ func apply_command(cmd: Dictionary) -> void:
 	if kind == "dig":
 		if grid.at(cmd["x"], cmd["y"]) == Grid.COVER:
 			grid.set_cell(cmd["x"], cmd["y"], Grid.OPEN)
-			if sc.is_ore(cmd["x"], cmd["y"]):
-				supply += Sim.ORE_YIELD
+			# 采矿改形 C：挖开只露矿不开钱——入账由工人搬运回核心结算
 			if cmd["x"] == sc.basin_plug.x and cmd["y"] == sc.basin_plug.y:
 				route_opened = true
 	elif kind == "wall" or kind == "tower":
@@ -344,6 +357,9 @@ func try_build(bkind: int, x: int, y: int) -> void:
 		return # 任何时刻不得有单位处于阻挡格内
 	if x == hero["x"] and y == hero["y"]:
 		return # 不得压在英雄脚下
+	for wk in workers:
+		if int(wk["x"]) == x and int(wk["y"]) == y:
+			return # 不得压在工人脚下（矿车实体同英雄口径）
 	supply -= cost
 	place_building(bkind, x, y, cost)
 
@@ -416,6 +432,7 @@ func tick() -> void:
 	run_waves()
 	move_units()
 	hero_tick()
+	worker_tick()
 	towers_and_build()
 	compact()
 	judge()
@@ -680,6 +697,153 @@ func hero_tick() -> void:
 		hero["y"] = ny
 
 
+# ---------------- 工人采运（采矿改形 C；固定次序 ③c，英雄步进之后、塔开火之前）----------------
+
+## 出生：第 id 个可行核心邻格（都是核心山头通行格）；worker 字典含派生态
+## field/field_rev/field_goal/pick_rev（不进指纹，save 读档后重建）。
+func _spawn_worker(id: int) -> void:
+	var passables: Array = []
+	for k in 6:
+		var nx: int = Grid.nx(sc.core.x, sc.core.y, k)
+		var ny: int = Grid.ny(sc.core.x, sc.core.y, k)
+		if grid.passable(nx, ny):
+			passables.append(Vector2i(nx, ny))
+	var spot: Vector2i = passables[id % passables.size()] if not passables.is_empty() else Vector2i(sc.core.x, sc.core.y)
+	workers.append({
+		"id": id + 1,
+		"x": spot.x,
+		"y": spot.y,
+		"state": Sim.W_TO_MINE,
+		"target": -1, # sc.ore_cells 下标；-1 = 无活
+		"carrying": 0,
+		"mine_cd": 0,
+		"field": null,
+		"field_rev": -1,
+		"field_goal": -1,
+		"pick_rev": -1,
+	})
+
+
+## 每 tick 推进全部工人（确定性：表序即 id 序）
+func worker_tick() -> void:
+	for w in workers:
+		if int(w["state"]) == Sim.W_MINING:
+			_worker_mining(w)
+		elif int(w["state"]) == Sim.W_TO_CORE:
+			_worker_to_core(w)
+		else:
+			_worker_to_mine(w)
+
+
+## MINING：站定在目标矿格上开采；满载或矿枯 → 回城
+func _worker_mining(w: Dictionary) -> void:
+	var t := int(w["target"])
+	if t < 0:
+		w["state"] = Sim.W_TO_MINE
+		return
+	var c: Vector2i = sc.ore_cells[t]
+	if int(ore_left.get(grid.idx(c.x, c.y), 0)) <= 0 or grid.at(c.x, c.y) != Grid.OPEN:
+		w["state"] = Sim.W_TO_CORE if int(w["carrying"]) > 0 else Sim.W_TO_MINE
+		return
+	if int(w["carrying"]) >= Sim.WORKER_LOAD:
+		w["state"] = Sim.W_TO_CORE
+		return
+	var cd := int(w["mine_cd"]) - 1
+	if cd <= 0:
+		var take: int = mini(Sim.ORE_RATE, mini(int(ore_left[grid.idx(c.x, c.y)]), Sim.WORKER_LOAD - int(w["carrying"])))
+		ore_left[grid.idx(c.x, c.y)] = int(ore_left[grid.idx(c.x, c.y)]) - take
+		w["carrying"] = int(w["carrying"]) + take
+		cd = Sim.ORE_RATE_TICKS
+	w["mine_cd"] = cd
+
+
+## TO_CORE：沿主战场回核心；贴邻核心即入账（核心格实心，最近只能站到邻格）
+func _worker_to_core(w: Dictionary) -> void:
+	if int(w["carrying"]) <= 0:
+		w["state"] = Sim.W_TO_MINE
+		w["target"] = -1
+		return
+	if Grid.hex_dist(int(w["x"]), int(w["y"]), sc.core.x, sc.core.y) == 1:
+		supply += int(w["carrying"])
+		w["carrying"] = 0
+		w["state"] = Sim.W_TO_MINE
+		w["target"] = -1
+		return
+	_worker_step(w, field_for(Sim.E_SWARM))
+
+
+## TO_MINE：沿单目标场走向矿格；到场转 MINING；目标失效/不可达时重挑
+func _worker_to_mine(w: Dictionary) -> void:
+	var t := int(w["target"])
+	var t_bad: bool = t < 0 or int(ore_left.get(grid.idx(sc.ore_cells[t].x, sc.ore_cells[t].y), 0)) <= 0 \
+			or grid.at(sc.ore_cells[t].x, sc.ore_cells[t].y) != Grid.OPEN
+	if t_bad and int(w["pick_rev"]) != grid.rev:
+		_worker_pick(w)
+		w["pick_rev"] = grid.rev
+		t = int(w["target"])
+		if t < 0:
+			return # 无活可干：原地待命（rev 再变才重挑）
+	if int(w["field_rev"]) != grid.rev or int(w["field_goal"]) != t:
+		var f := FlowField.new(grid, false, 2) # 工人爬 2 级（虫群口径）
+		f.begin([Vector2i(sc.ore_cells[t].x, sc.ore_cells[t].y)])
+		while not f.done():
+			f.step(1 << 30)
+		w["field"] = f
+		w["field_rev"] = grid.rev
+		w["field_goal"] = t
+	var wf: FlowField = w["field"]
+	var d: int = wf.dist_at(int(w["x"]), int(w["y"]))
+	if d == 0:
+		w["state"] = Sim.W_MINING
+		w["mine_cd"] = 0
+	elif d < 0:
+		# 目标被墙隔断：本 rev 内重挑一次（pick 自带可达性校验），仍无解则待命等墙开
+		if int(w["pick_rev"]) != grid.rev:
+			w["pick_rev"] = grid.rev
+			_worker_pick(w)
+	else:
+		_worker_step(w, wf)
+
+
+## 选目标：已挖开且有余量的矿格中，取工人位置 hex_dist 最近者（平手取 ore_cells 序）；
+## 逐个建单目标场校验可达性（密封盆地/被墙隔断的自动跳过），首个可达者即目标。
+func _worker_pick(w: Dictionary) -> void:
+	w["target"] = -1
+	var cand: Array = []
+	for i in sc.ore_cells.size():
+		var c: Vector2i = sc.ore_cells[i]
+		if int(ore_left.get(grid.idx(c.x, c.y), 0)) > 0 and grid.at(c.x, c.y) == Grid.OPEN:
+			cand.append([Grid.hex_dist(int(w["x"]), int(w["y"]), c.x, c.y), i])
+	cand.sort_custom(func(a, b): return a[0] < b[0] or (a[0] == b[0] and a[1] < b[1]))
+	for cd in cand:
+		var i: int = cd[1]
+		var c: Vector2i = sc.ore_cells[i]
+		var f := FlowField.new(grid, false, 2)
+		f.begin([c])
+		while not f.done():
+			f.step(1 << 30)
+		if f.dist_at(int(w["x"]), int(w["y"])) >= 0:
+			w["target"] = i
+			w["field"] = f
+			w["field_rev"] = grid.rev
+			w["field_goal"] = i
+			return
+
+
+## 工人步进（步点口径同单位：(tick+id) % 速度 == 0）；沿给定场走一格（落点必须可通行）
+func _worker_step(w: Dictionary, f: FlowField) -> void:
+	if (tick_count + int(w["id"])) % Sim.WORKER_SPEED_TICKS != 0:
+		return
+	var dir: int = f.dir_at(int(w["x"]), int(w["y"]))
+	if dir < 0:
+		return # 待命（被封路等）
+	var nx: int = Grid.nx(int(w["x"]), int(w["y"]), dir)
+	var ny: int = Grid.ny(int(w["x"]), int(w["y"]), dir)
+	if grid.passable(nx, ny):
+		w["x"] = nx
+		w["y"] = ny
+
+
 ## 邻格里挑"拆掉最划算"的建筑：以该建筑周边的最小场距打分，平手取方向序最小。
 func find_attack_target(unit: Dictionary) -> int:
 	var best = null
@@ -852,7 +1016,7 @@ func judge() -> void:
 		outcome = LOST # 超时＝敌按时刻表长完，守方判负
 
 
-# ---------------- 规范状态编码（STATE_SCHEMA=10）----------------
+# ---------------- 规范状态编码（STATE_SCHEMA=11）----------------
 # tick | rng | grid | 供给/结局/开门/战果 | 单位表按 id 升序 | 建筑表按 id 升序。
 # 流场是派生态，不进指纹。
 ## 规范状态编码：字段序 = tick|rng|grid|供给/结局/开门/战果|单位表|建筑表（指纹口径）
@@ -909,6 +1073,18 @@ func canonical_bytes() -> Canon.Buf:
 	b.put_i32(hero["ty"])
 	b.put_i32(hero["skill_cd"])
 	b.put_i32(convoy_earned) # v4：绕行赏金累计
+	b.put_u32(workers.size()) # v11：工人采运
+	for w in workers:
+		b.put_i32(w["id"])
+		b.put_i32(w["x"])
+		b.put_i32(w["y"])
+		b.put_u8(w["state"])
+		b.put_i32(w["target"])
+		b.put_i32(w["carrying"])
+		b.put_i32(w["mine_cd"])
+	b.put_u32(sc.ore_cells.size()) # v11：矿格余量（sc.ore_cells 位置序）
+	for i in sc.ore_cells.size():
+		b.put_i32(int(ore_left.get(grid.idx(sc.ore_cells[i].x, sc.ore_cells[i].y), 0)))
 	return b
 
 

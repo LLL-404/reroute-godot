@@ -37,12 +37,41 @@ func register(kit: TestKit) -> void:
 		var w := World.new(sc, 1)
 		var ore: Vector2i = sc.mid_ore[0]
 		w.apply_command({ "kind": "dig", "x": ore.x, "y": ore.y })
-		kit.eq(w.supply, Sim.START_SUPPLY + Sim.ORE_YIELD, "挖矿 +25")
+		kit.eq(w.supply, Sim.START_SUPPLY, "挖矿不再即时入账（改形 C：矿由工人搬运）")
 		kit.eq(w.grid.at(ore.x, ore.y), Grid.OPEN, "矿格挖开")
+		kit.eq(int(w.ore_left[w.grid.idx(ore.x, ore.y)]), Sim.ORE_STORE, "矿格余量就绪")
 		var sparse := Vector2i(sc.sparse_phase, 17)
 		w.apply_command({ "kind": "dig", "x": sparse.x, "y": sparse.y })
-		kit.eq(w.supply, Sim.START_SUPPLY + Sim.ORE_YIELD, "非矿覆盖无收益")
+		kit.eq(w.supply, Sim.START_SUPPLY, "非矿覆盖无收益")
 		kit.eq(w.grid.at(sparse.x, sparse.y), Grid.OPEN, "表土挖开"))
+
+	kit.test("worker-mining-cycle", func():
+		var w := World.new(StubScenario.new({ "size": 20, "ore": [[4, 1]] }), 1)
+		kit.eq(w.workers.size(), Sim.WORKER_COUNT, "开局 2 工人")
+		for wk in w.workers:
+			kit.ok(w.grid.passable(int(wk["x"]), int(wk["y"])), "工人出生在通行格")
+		w.apply_command({ "kind": "dig", "x": 4, "y": 1 })
+		_run(w, 2000) # 足够走完 40 储量的完整采运
+		kit.eq(w.supply, Sim.START_SUPPLY + Sim.ORE_STORE, "40 储量全数搬运入账")
+		kit.eq(int(w.ore_left[w.grid.idx(4, 1)]), 0, "矿格采完枯竭"))
+
+	kit.test("worker-sealed-idles", func():
+		var solids := []
+		for c in [[16, 15], [14, 15], [15, 14], [15, 16], [16, 14], [16, 16]]:
+			solids.append(Vector2i(c[0], c[1]))
+		var w := World.new(StubScenario.new({ "size": 20, "ore": [[15, 15]], "solid": solids }), 1)
+		w.apply_command({ "kind": "dig", "x": 15, "y": 15 }) # 隔空挖开：工人进不去
+		_run(w, 600)
+		kit.eq(w.supply, Sim.START_SUPPLY, "密封矿不产供给（白嫖线死亡）")
+		kit.eq(int(w.ore_left[w.grid.idx(15, 15)]), Sim.ORE_STORE, "余量原封"))
+
+	kit.test("worker-no-build-underfoot", func():
+		var w := World.new(StubScenario.new({ "size": 20, "ore": [[4, 1]] }), 1)
+		var wx: int = int(w.workers[0]["x"])
+		var wy: int = int(w.workers[0]["y"])
+		w.supply = 999
+		w.try_build(Sim.B_WALL, wx, wy)
+		kit.ok(w.building_at(wx, wy) == null, "工人脚下不可建造"))
 
 	kit.test("dig-plug-opens-route", func():
 		var sc := Scenario.new()
@@ -615,7 +644,7 @@ func register(kit: TestKit) -> void:
 		kit.eq(b.data[0], 0, "STATE_SCHEMA 大端字节 1")
 		kit.eq(b.data[1], 0, "STATE_SCHEMA 大端字节 2")
 		kit.eq(b.data[2], 0, "STATE_SCHEMA 大端字节 3")
-		kit.eq(b.data[3], 10, "STATE_SCHEMA = 10"))
+		kit.eq(b.data[3], 11, "STATE_SCHEMA = 11"))
 
 	kit.test("compact-keeps-order", func():
 		var w := World.new(StubScenario.new(), 1)
@@ -631,18 +660,18 @@ func register(kit: TestKit) -> void:
 	kit.test("amortized-rebuild-restarts-on-midchange", func():
 		# 小预算摊销补场进行中连续改图：旧实现续用旧拓扑已定稿的距离，
 		# 完成时却把 field_rev 记成最新 rev（谎报已同步）。用「与全量重建逐格对照」锁死。
-		var w := World.new(StubScenario.new({ "size": 12 }), 7, 4)
+		var w := World.new(StubScenario.new({ "size": 12, "hero_spawn": Vector2i(3, 3) }), 7, 4)
 		w.supply = 999999
 		w.try_build(Sim.B_WALL, 7, 7) # 触发摊销（远离核心，不影响近端定稿区）
 		w.tick()
 		kit.ok(w.rebuilding, "小预算下摊销仍在进行")
-		w.try_build(Sim.B_WALL, 1, 0) # 中途改图：墙落进已定稿区（上 tick 已定稿 (0,0)(0,1)(1,0)(1,1)）
+		w.try_build(Sim.B_WALL, 1, 1) # 中途改图：墙落进已定稿区（上 tick 已定稿 (0,0)(0,1)(1,0)(1,1)；(1,0)/(0,1) 工人位、英雄已挪 (3,3)）
 		w.tick()
 		w.try_build(Sim.B_WALL, 0, 2) # 连续改图
 		while w.rebuilding:
 			w.tick()
 		kit.eq(w.field_rev, w.grid.rev, "完成后 field_rev = 当前 rev")
-		kit.eq(w.field.dist_at(1, 0), -1, "中途变墙的格不可达（旧实现残留 10）")
+		kit.eq(w.field.dist_at(1, 1), -1, "中途变墙的格不可达（旧实现残留 10）")
 		var ref := FlowField.new(w.grid)
 		ref.begin(w.field_goals)
 		while not ref.done():

@@ -4,7 +4,15 @@ extends RefCounted
 # 数值表：照搬 warden/Warden.Core/Defs.cs 与 SPEC-slice1 §4（合同镜像），
 # 按 GAMEJAM-2026-PLAN D6–D9 裁定收缩：128²→64²（2026-10-16 世界重做）、敌 3→2 原型、一局 4–6 分钟。
 const TICK_HZ := 20
-const ORE_YIELD := 25 # 挖开一个矿格 +供给
+# 采矿改形 C（2026-10-25）：挖开矿格不再即时入账——矿由工人沿流场搬运回核心结算。
+# 单格储量 ORE_STORE，工人每 ORE_RATE_TICKS 采 ORE_RATE 进随身载量，满 WORKER_LOAD 回核心入账；
+# 经济上限 17 格 × 40 = 680（原即时口径 425）。
+const ORE_STORE := 40
+const ORE_RATE := 5
+const ORE_RATE_TICKS := 20
+const WORKER_COUNT := 2
+const WORKER_SPEED_TICKS := 3
+const WORKER_LOAD := 20
 const START_SUPPLY := 300
 
 # 高度层（单向崖）：-2..5 整数（可挖出两层坑）；单位边可走 ⇔ 爬升 ≤ 兵种 climb_max
@@ -42,6 +50,12 @@ const ENEMIES := [
 ]
 const E_SWARM := 1
 const E_BEHEMOTH := 2
+
+# 工人状态机（采矿改形 C）：TO_MINE 走单目标场去矿格 → MINING 站定开采 →
+# TO_CORE 沿主战场回核心入账。工人是独立实体（同英雄：不进 units/buildings）。
+const W_TO_MINE := 0
+const W_MINING := 1
+const W_TO_CORE := 2
 
 # 改道经济（2026-10-25 换轨）：击杀赏金 = reward + 有效绕行折算。
 # 有效绕行 = traveled + 死位主场剩余距离 − 出生格裸图基线（任一端不可达记 0），

@@ -14,7 +14,7 @@ func _init(popts: Dictionary = {}) -> void:
 	w = size
 	h = size
 	core = Vector2i(0, 0)
-	hero_spawn = Vector2i(1, 1)
+	hero_spawn = opts.get("hero_spawn", Vector2i(1, 1))
 	spawns = [
 		Vector2i(size - 2, size - 2),
 		Vector2i(size - 1, size - 1),
@@ -27,6 +27,8 @@ func _init(popts: Dictionary = {}) -> void:
 	trickle_every = opts.get("trickle_every", 0)
 	wave_scale_pct = opts.get("wave_scale_pct", 100)
 	ore_cells = []
+	for o in opts.get("ore", []):
+		ore_cells.append(Vector2i(o[0], o[1]))
 
 
 func build_grid() -> Grid:
@@ -41,4 +43,4 @@ func build_grid() -> Grid:
 
 
 func is_ore(x: int, y: int) -> bool:
-	return false
+	return ore_cells.has(Vector2i(x, y))

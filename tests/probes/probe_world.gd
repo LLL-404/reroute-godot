@@ -17,15 +17,15 @@ func _initialize() -> void:
 
 	# 真实图命令
 	w.apply_command({ "kind": "dig", "x": sc.mid_ore[0].x, "y": sc.mid_ore[0].y })
-	check(w.supply == 325 and w.grid.at(sc.mid_ore[0].x, sc.mid_ore[0].y) == Grid.OPEN, "dig ore")
+	check(w.supply == 300 and w.grid.at(sc.mid_ore[0].x, sc.mid_ore[0].y) == Grid.OPEN, "dig ore（改形 C：不即时入账）")
 	w.apply_command({ "kind": "dig", "x": sc.core.x, "y": 17 })
-	check(w.supply == 325, "dig non-ore no yield")
+	check(w.supply == 300, "dig non-ore no yield")
 	w.apply_command({ "kind": "dig", "x": sc.basin_plug.x, "y": sc.basin_plug.y })
 	check(w.route_opened == true, "dig plug opens route")
 	w.apply_command({ "kind": "wall", "x": sc.core.x, "y": 20 })
-	check(w.supply == 320 and w.grid.at(sc.core.x, 20) == Grid.SOLID, "wall build")
+	check(w.supply == 295 and w.grid.at(sc.core.x, 20) == Grid.SOLID, "wall build（首面阶梯价 5）")
 	w.apply_command({ "kind": "wall", "x": sc.core.x, "y": sc.core.y })
-	check(w.supply == 320, "wall on core rejected")
+	check(w.supply == 295, "wall on core rejected")
 	w.apply_command({ "kind": "spawn", "x": sc.spawns[0].x, "y": sc.spawns[0].y })
 	check(w.units.size() == 1 and w.units[0]["speed_ticks"] == 4, "spawn")
 	w.apply_command({ "kind": "spawn", "x": sc.core.x, "y": sc.core.y })
@@ -59,7 +59,7 @@ func _initialize() -> void:
 
 	# schema 字节
 	var buf := a.canonical_bytes()
-	check(buf.data[0] == 0 and buf.data[1] == 0 and buf.data[2] == 0 and buf.data[3] == 10, "STATE_SCHEMA bytes")
+	check(buf.data[0] == 0 and buf.data[1] == 0 and buf.data[2] == 0 and buf.data[3] == 11, "STATE_SCHEMA bytes")
 
 	# 终局冻结
 	var f := World.new(sc, 1)

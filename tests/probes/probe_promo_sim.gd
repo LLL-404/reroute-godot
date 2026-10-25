@@ -11,7 +11,7 @@ func _initialize() -> void:
 	print("[SIM] waves n=", sc.waves.size())
 	for w in sc.waves:
 		print("[SIM] wave ", w)
-	print("[SIM] ORE_YIELD=", Sim.ORE_YIELD, " hard_cap=", sc.hard_cap_tick, " mid_ore=", sc.mid_ore, " basin_ore=", sc.basin_ore, " plug=", sc.basin_plug, " chokes=", sc.chokes)
+	print("[SIM] ORE_YIELD=", Sim.ORE_STORE, " hard_cap=", sc.hard_cap_tick, " mid_ore=", sc.mid_ore, " basin_ore=", sc.basin_ore, " plug=", sc.basin_plug, " chokes=", sc.chokes)
 	_golden_run(sc)
 	_a3_run(sc)
 	quit(0)

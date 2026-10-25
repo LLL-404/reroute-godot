@@ -15,7 +15,8 @@ extends RefCounted
 # v4（2026-10-25 改道经济换轨）：单位行增 bare_dist（12 字段），旧档拒载。
 # v5（2026-10-25 墙阶梯价）：建筑行增 paid（8 字段），旧档拒载。
 # v6（2026-10-25 英雄强化）：单位行增 stun（13 字段），旧档拒载。
-const FORMAT_VERSION := 6
+# v7（2026-10-25 采矿改形 C）：state 增 workers（7 字段行）与 ore（余量表），旧档拒载。
+const FORMAT_VERSION := 7
 
 
 ## 世界 → 存档字典。run_index 供读档还原蓝图视觉（Blueprint.pick(run_index) 派生）。
@@ -39,6 +40,13 @@ static func encode(world: World, run_index: int) -> Dictionary:
 	var builds: Array = []
 	for b in world.buildings:
 		builds.append([b["id"], b["kind"], b["x"], b["y"], b["hp"], b["build_left"], b["cooldown"], b["paid"]])
+	var workers: Array = []
+	for wk in world.workers:
+		workers.append([wk["id"], wk["x"], wk["y"], wk["state"], wk["target"], wk["carrying"], wk["mine_cd"]])
+	var ore: Array = []
+	for i in world.sc.ore_cells.size():
+		var oc: Vector2i = world.sc.ore_cells[i]
+		ore.append(int(world.ore_left.get(world.grid.idx(oc.x, oc.y), 0)))
 	var wave := 0
 	for wv in world.sc.waves:
 		if int(wv[0]) <= world.tick_count:
@@ -76,6 +84,8 @@ static func encode(world: World, run_index: int) -> Dictionary:
 			"next_unit": world.next_unit_id,
 			"next_building": world.next_building_id,
 			"hero": [world.hero["x"], world.hero["y"], world.hero["tx"], world.hero["ty"], world.hero["skill_cd"]],
+			"workers": workers,
+			"ore": ore,
 		},
 	}
 
@@ -91,7 +101,7 @@ static func decode(d) -> World:
 	if not (d.has("state") and d.has("checksum") and d.has("sc_fp")):
 		return null
 	var st: Dictionary = d["state"]
-	for k in ["seed", "sc_seed", "rng", "tick", "supply", "outcome", "route", "kills", "convoy", "lost", "gw", "gh", "cells", "hgt", "units", "buildings", "next_unit", "next_building", "hero"]:
+	for k in ["seed", "sc_seed", "rng", "tick", "supply", "outcome", "route", "kills", "convoy", "lost", "gw", "gh", "cells", "hgt", "units", "buildings", "next_unit", "next_building", "hero", "workers", "ore"]:
 		if not st.has(k):
 			return null
 	var sc := Scenario.new(int(str(st["sc_seed"])))
@@ -152,6 +162,24 @@ static func decode(d) -> World:
 		world.by_cell[world.grid.idx(b["x"], b["y"])] = b
 		if b["kind"] == Sim.B_CORE:
 			world.core = b
+	world.workers = []
+	for row in st["workers"]:
+		if typeof(row) != TYPE_ARRAY or row.size() != 7:
+			return null
+		world.workers.append({
+			"id": int(row[0]), "x": int(row[1]), "y": int(row[2]),
+			"state": int(row[3]), "target": int(row[4]),
+			"carrying": int(row[5]), "mine_cd": int(row[6]),
+			"field": null, "field_rev": -1, "field_goal": -1, "pick_rev": -1,
+		})
+	if world.workers.size() != Sim.WORKER_COUNT:
+		return null
+	world.ore_left = {}
+	if st["ore"].size() != sc.ore_cells.size():
+		return null
+	for i in sc.ore_cells.size():
+		var oc: Vector2i = sc.ore_cells[i]
+		world.ore_left[world.grid.idx(oc.x, oc.y)] = int(st["ore"][i])
 	if world.core.is_empty():
 		return null
 	world.next_unit_id = int(st["next_unit"])

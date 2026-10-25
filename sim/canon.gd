@@ -8,9 +8,11 @@ extends RefCounted
 # v8（2026-10-25）：改道经济换轨——击杀赏金改「有效绕行」口径，单位加 bare_dist ⇒ 旧档拒载。
 # v9（2026-10-25 墙阶梯价）：建筑加 paid（实付造价，退款口径）⇒ 旧档拒载。
 # v10（2026-10-25 英雄强化）：单位加 stun（震荡波眩晕剩余 tick）⇒ 旧档拒载。
+# v11（2026-10-25 采矿改形 C）：加工人表（id/x/y/state/target/carrying/mine_cd）
+#   与矿格余量表（sc.ore_cells 位置序）——挖开不再即时入账 ⇒ 旧档拒载。
 # 常量来源：Lua 版 scripts/sim/canon.lua 逐行对照；>=2^63 的期望值已转带符号十进制
 # （GDScript 大 hex 字面量会被钳位，见 lua64.gd 头注）。
-const STATE_SCHEMA := 10
+const STATE_SCHEMA := 11
 const FNV_OFFSET := 2166136261 # 0x811C9DC5
 const FNV_PRIME := 16777619 # 0x01000193
 const MASK32 := 4294967296 # 0x100000000

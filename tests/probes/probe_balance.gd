@@ -14,7 +14,7 @@ extends ProbeKit
 
 
 static func _mine_cmds(sc: Scenario, t0: int) -> Array:
-	# 中场 5 矿 + 盆地 12 矿（远程可挖，不开插口）——「高级白嫖线」
+	# 中场 5 矿 + 盆地 12 矿（远程可挖 = 给工人露矿；不开插口）——改形 C 后挖开不给钱
 	var out := []
 	var i := 0
 	for o in sc.mid_ore:
@@ -61,32 +61,31 @@ static func script_tortoise(sc: Scenario) -> Array:
 
 
 ## 运河：西口封死（防啃穿配双塔）；东口大开；两道横墙 Z 字截断——怪被迫
-## 南走廊西行 → 绕行口北上 → 二道墙前东折 → 再北上，effdetour 全程兑现；
-## 走廊塔链 tick 400 起建（怪 ~830t 进走廊，竣工必须早于敌到）
+## 南走廊西行 → 绕行口北上 → 二道墙前东折 → 再北上，effdetour 全程兑现。
+## 改形 C 后矿不再即时入账：塔链改由工人流水供给节奏（t≈170 首笔、每 ~85t/worker
+## 一笔 20），t=600 起建首批（供给 ~470），赶在第一波怪 ~1000t 进走廊前竣工
 static func script_canal(sc: Scenario) -> Array:
 	var g := sc.build_grid()
 	var cw: Vector2i = sc.chokes[0]
 	var ce: Vector2i = sc.chokes[1]
 	var out: Array = _mine_cmds(sc, 20)
-	# 西口封死 + 墙后双塔（tick 220 建，第一波前竣工）
+	# 时序适配改形 C（矿不再即时入账）：波 1 前只做最小防御（阶梯墙便宜 5），
+	# 走廊工程等波 1 击杀 + 工人流水的资本到位再开工
+	# —— 第一波防线：西口封死（15）+ 核心门网 3 塔（180，t=200 起 t=380 竣工）
 	_wall_line(g, out, 100, cw.y, cw.x - 1, cw.x + 1)
-	var tw := _tower_line(g, out, 220, cw.y - 1, cw.x - 2, cw.x + 2, 2)
-	if tw == 0:
-		_tower_line(g, out, 220, cw.y - 2, cw.x - 2, cw.x + 2, 2)
-	# 第一道横墙：东咽喉以北 y=ce.y-8，从 cx+8 到东边界（西端留绕行口）
+	_tower_line(g, out, 200, 10, sc.core.x - 2, sc.core.x + 2, 2)
+	# —— 东口漏斗收窄（阶梯墙便宜）：逼第一波怪进核心门网射程
+	_wall_line(g, out, 260, ce.y + 3, ce.x - 2, ce.x + 2)
+	# —— 工程开工：两道横墙 Z 字（波 1 收入到位）
 	var wy2: int = ce.y - 8
-	_wall_line(g, out, 320, wy2, sc.core.x + 8, sc.w - 2)
-	# 第二道 Z 字墙：绕行口以北 10 行，从 cx-4 向东到 cx+9（东端留口）——逼怪东折再北上
-	_wall_line(g, out, 380, wy2 - 10, sc.core.x - 4, sc.core.x + 9)
-	# 走廊塔链（横墙南 1-2 格，间隔 4 控预算）：tick 400 起，赶在怪进走廊前竣工
-	_tower_line(g, out, 400, wy2 + 1, sc.core.x + 10, sc.w - 4, 4)
-	_tower_line(g, out, 520, wy2 + 2, sc.core.x + 12, sc.w - 4, 4)
-	# 绕行口与 Z 字折返通道塔
-	_tower_line(g, out, 700, wy2 - 1, sc.core.x + 5, sc.core.x + 9, 2)
-	# 核心门网（早建：漏网怪最后的拦截线）
-	_tower_line(g, out, 500, 10, sc.core.x - 2, sc.core.x + 2, 2)
-	_tower_line(g, out, 620, 13, sc.core.x - 4, sc.core.x + 4, 4)
-	# 后期纵深（击杀收入滚起来后）
+	_wall_line(g, out, 900, wy2, sc.core.x + 8, sc.w - 2)
+	_wall_line(g, out, 1000, wy2 - 10, sc.core.x - 4, sc.core.x + 9)
+	# —— 走廊塔链两批 + 绕行口塔（怪第二波 ~1700 前竣工）
+	_tower_line(g, out, 1150, wy2 + 1, sc.core.x + 10, sc.w - 4, 4)
+	_tower_line(g, out, 1350, wy2 + 2, sc.core.x + 12, sc.w - 4, 4)
+	_tower_line(g, out, 1500, wy2 - 1, sc.core.x + 5, sc.core.x + 9, 2)
+	# —— 核心纵深二环（后期收入滚起来）
+	_tower_line(g, out, 1600, 13, sc.core.x - 4, sc.core.x + 4, 4)
 	for i in 3:
 		_tower_line(g, out, 2600 + i * 500, 16 + i * 2, sc.core.x - 6, sc.core.x + 6, 4)
 	return out
