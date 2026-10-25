@@ -69,7 +69,7 @@ func _initialize() -> void:
 	await _click(view, cellA)
 	var bA = world.building_at(cellA.x, cellA.y)
 	check(bA != null and int(bA["kind"]) == Sim.B_WALL, "单击放墙")
-	cmp_int(world.supply, sup0 - 10, "放墙扣费 10")
+	cmp_int(world.supply, sup0 - 5, "放墙扣费 5（阶梯价首面）")
 	view.sync(world)
 	cmp_int(view.building_nodes.size(), 2, "墙节点出现（核心+墙）")
 
@@ -100,15 +100,15 @@ func _initialize() -> void:
 	var n0: int = _alive_count(world)
 	await _drag(view, row_cells[0], row_cells[3])
 	cmp_int(_alive_count(world), n0 + 4, "拖拽放墙 4 格")
-	cmp_int(world.supply, sup1 - 40, "拖拽扣费 40")
+	cmp_int(world.supply, sup1 - 20, "拖拽扣费 20（4 面 × 阶梯 5）")
 	check(main.hud.undo_panel.visible, "建造后撤销提示出现")
 	await _key_mod(KEY_Z, true)
 	cmp_int(_alive_count(world), n0, "Ctrl+Z 撤销整条墙线")
-	cmp_int(world.supply, sup1, "撤销墙线全额退款 40")
+	cmp_int(world.supply, sup1, "撤销墙线全额退款 20")
 	check(not main.hud.undo_panel.visible, "撤销后提示消失")
 	await _drag(view, row_cells[0], row_cells[3])
 	cmp_int(_alive_count(world), n0 + 4, "重放墙线 4 格")
-	cmp_int(world.supply, sup1 - 40, "重放扣费 40")
+	cmp_int(world.supply, sup1 - 20, "重放扣费 20")
 
 	# ---- 3. 挖矿（M2-a：矿格隔空点挖被拒，改为派英雄去邻格；开挖闭环见 probe_dig_intent）----
 	main.set_mode("dig")
@@ -154,7 +154,7 @@ func _initialize() -> void:
 	var sup4: int = world.supply
 	await _click(view, cellA)
 	check(world.building_at(cellA.x, cellA.y) == null, "拆除墙")
-	cmp_int(world.supply, sup4 + 5, "拆除退款 50%（5）")
+	cmp_int(world.supply, sup4 + 2, "拆除退款 50%（实付 5 退 2）")
 
 	# ---- 6. 英雄移动 + 原地目标被拒 ----
 	main.set_mode("hero")

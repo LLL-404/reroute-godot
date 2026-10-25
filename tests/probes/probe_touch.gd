@@ -104,7 +104,7 @@ func _initialize() -> void:
 		if bb == null or int(bb["kind"]) != Sim.B_WALL:
 			all_on_line = false
 	check(all_on_line, "触屏拖线逐格落在 Bresenham 线上")
-	cmp_int(main_a.world.supply, supp_a - 40, "触屏拖线扣费 40")
+	cmp_int(main_a.world.supply, supp_a - 20, "触屏拖线扣费 20（4 面 × 阶梯 5）")
 	check(main_a.drag_start == Vector2i(-1, -1), "触屏拖线后起点已清")
 	var canon_a: PackedByteArray = main_a.world.canonical_bytes().data
 	var run_a: int = main_a.run_index
@@ -122,7 +122,7 @@ func _initialize() -> void:
 	check(row_b == row, "对照局扫描出同一行")
 	await _drag_mouse(main_b.view, Vector2i(row_b.x, row_b.y), Vector2i(row_b.x + 1, row_b.y + 3), Vector2i(row_b.x + 3, row_b.y))
 	cmp_int(_count_walls(main_b.world), 4, "鼠标拖线建 4 格墙（对照腿）")
-	cmp_int(main_b.world.supply, supp_b - 40, "鼠标拖线扣费 40（对照腿）")
+	cmp_int(main_b.world.supply, supp_b - 20, "鼠标拖线扣费 20（对照腿）")
 	var canon_b: PackedByteArray = main_b.world.canonical_bytes().data
 	check(canon_a == canon_b, "触屏与鼠标路径世界状态逐字节一致")
 	main_b.view.stop_all_audio()

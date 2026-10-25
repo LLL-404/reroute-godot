@@ -64,10 +64,10 @@ func _initialize() -> void:
 	world.route_opened = true
 	hud.update(world)
 	check(hud.banner_root.visible == true and hud.banner_title.text == "暗门已开", "暗门横幅登场")
-	# 终局倒计时文案：波次表放完（tick 5000 > 末波 4860）才走"暗门已开 · 终局"分支
-	world.tick_count = 5000
+	# 终局倒计时文案：波次表放完（tick 5200 > 末波 5080）才走"暗门已开 · 终局"分支
+	world.tick_count = 5200
 	hud.update(world)
-	check(hud.wave_text.text == "暗门已开 · 终局 1:10", "终局倒计时文案（得 " + hud.wave_text.text + "）")
+	check(hud.wave_text.text == "暗门已开 · 终局 1:00", "终局倒计时文案（得 " + hud.wave_text.text + "）")
 	# v2.4：教学提示条驻留 20s 后自动淡出（hit_regions 随之让位）
 	check(hud._hint_hidden, "提示条 20s 后自动淡出")
 
@@ -77,7 +77,7 @@ func _initialize() -> void:
 	check(hud.supply_text.text == "250", "供给文本更新")
 	var c_flash: Color = hud.supply_text.get_theme_color("font_color")
 	check(c_flash.is_equal_approx(hud.DARK["text"]), "供给变化闪白")
-	world.tick_count = 5005 # 向前推进（tick 单调增是真实对局口径）
+	world.tick_count = 5300 # 向前推进（tick 单调增是真实对局口径；须 > 终局段 5200）
 	hud.update(world)
 	var c_idle: Color = hud.supply_text.get_theme_color("font_color")
 	check(c_idle.is_equal_approx(hud.DARK["supply"]), "闪烁结束回金色")
@@ -213,7 +213,7 @@ func _initialize() -> void:
 		await _click_at(sp)
 		var b = world.building_at(cell.x, cell.y)
 		check(b != null and int(b["kind"]) == Sim.B_WALL, "对照：战场点击放墙生效")
-		cmp_int(world.supply, sup0 - 10, "对照：扣费 10")
+		cmp_int(world.supply, sup0 - world.wall_price(), "对照：按阶梯价扣费")
 
 	# ---- 11. 展示态截图（人眼复核） ----
 	world.hero["skill_cd"] = 400

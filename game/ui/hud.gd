@@ -637,6 +637,27 @@ func _paint_skill() -> void:
 	row_icon["skill"].setup("skill", DARK["text"] if ready else DARK["muted"])
 
 
+## 墙钮动态文案（2026-10-25 刀②阶梯价；main 在建/拆成功后驱动，hud 不读世界）：
+## -1 = 上限封盘「墙满」；n ≥ 0 =「墙×n」。只改 wall 格的 name/cost 文本与可负担性 meta。
+func set_wall_price(price: int) -> void:
+	if not mode_buttons.has("wall"):
+		return
+	var nl: Label = row_name["wall"]
+	var cl: Label = row_cost["wall"]
+	if price < 0:
+		nl.text = "墙满"
+		cl.text = ""
+		mode_buttons["wall"].set_meta("cost", 1 << 30) # 永不可负担（灰）
+	else:
+		nl.text = "墙"
+		cl.text = str(price)
+		mode_buttons["wall"].set_meta("cost", price)
+	nl.reset_size()
+	cl.reset_size()
+	nl.position = Vector2((CELL_W * S - nl.size.x) * 0.5, 32.0 * S)
+	cl.position = Vector2((CELL_W * S - cl.size.x) * 0.5, 47.0 * S)
+
+
 ## 教学提示条：驻留 HINT_LIFE tick（20s）后淡出，只触发一次；reset() 恢复。
 func _update_hint(tick: int) -> void:
 	if _hint_hidden or hint_panel == null or tick < HINT_LIFE:

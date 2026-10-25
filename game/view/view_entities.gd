@@ -70,6 +70,10 @@ var _preview_sig := ""
 var wall_edges_root: Node3D = null
 var focus_ring: MeshInstance3D = null
 var range_root: Node3D = null
+var hero_range_root: Node3D = null # 英雄模式范围预览圈（震荡波半径，2026-10-25 刀④配套）
+var _hero_range_on := false
+var _hero_range_at := Vector2i(-1, -1)
+var sim_world: World = null # sync 每帧缓存（英雄圈跟随/浮字口径用）
 var _wall_mat: Material = null
 var _wall_cells: Dictionary = {} # cellkey -> Vector2i（当局活墙格）
 var _wall_edges: Dictionary = {} # cellkey -> Node3D（边缘段容器，挂 wall_edges_root 下）
@@ -143,6 +147,9 @@ func build_terrain(pgrid: Grid) -> void:
 	range_root = Node3D.new()
 	range_root.name = "TowerRange"
 	dyn.add_child(range_root)
+	hero_range_root = Node3D.new()
+	hero_range_root.name = "HeroRange"
+	dyn.add_child(hero_range_root)
 	cover_nodes = {}
 	building_nodes = {}
 	unit_nodes = {}
@@ -493,15 +500,18 @@ func _apply_preview_material(n: Node, mat: Material) -> void:
 ## 塔射程预览：六边距离球半径 = 建筑表 range（12）；逐格贴地填充 + 外圈亮带。
 ## 逐格而非单张平面六边形：高差地形上不会穿模/悬空，边界也天然贴合格形。
 func _build_range(c: Vector2i) -> void:
-	if range_root == null:
-		return
-	var r: int = int(Sim.BUILDINGS[Sim.B_TOWER - 1]["range"])
-	if r <= 0:
+	_build_range_into(range_root, c, int(Sim.BUILDINGS[Sim.B_TOWER - 1]["range"]))
+
+
+## 通用半径圈（塔射程 / 英雄震荡波共用）：hex_dist ≤ r 格填充 + == r 出界边亮条；
+## 局部窗口扫描（±(r+1)），比全场扫省且结果等价
+func _build_range_into(root: Node3D, c: Vector2i, r: int) -> void:
+	if root == null or r <= 0:
 		return
 	core._ensure_hex_plate()
 	var fills: Array = []
-	for y in core.CELL_N:
-		for x in core.CELL_N:
+	for y in range(maxi(c.y - r - 1, 0), mini(c.y + r + 2, core.CELL_N)):
+		for x in range(maxi(c.x - r - 1, 0), mini(c.x + r + 2, core.CELL_N)):
 			if Grid.hex_dist(x, y, c.x, c.y) > r:
 				continue
 			var w := core.cell_to_world(x, y)
@@ -511,13 +521,13 @@ func _build_range(c: Vector2i) -> void:
 	var fm := core._make_multimesh(fills, core.mats["range_fill"], core.hex_plate_mesh)
 	fm.name = "range_fill"
 	fm.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	range_root.add_child(fm)
+	root.add_child(fm)
 	# 外轮廓：只在“格内 → 格外出界”的共享边摆窄亮条，比整格亮带更细、不糊地形。
 	var edge_root := Node3D.new()
 	edge_root.name = "range_edge"
-	range_root.add_child(edge_root)
-	for y in core.CELL_N:
-		for x in core.CELL_N:
+	root.add_child(edge_root)
+	for y in range(maxi(c.y - r - 1, 0), mini(c.y + r + 2, core.CELL_N)):
+		for x in range(maxi(c.x - r - 1, 0), mini(c.x + r + 2, core.CELL_N)):
 			if Grid.hex_dist(x, y, c.x, c.y) != r:
 				continue
 			var here := core.cell_to_world(x, y)
@@ -539,6 +549,32 @@ func _build_range(c: Vector2i) -> void:
 				mi.scale = Vector3(0.10, 0.05, 0.62)
 				mi.rotation = Vector3(0.0, atan2(tangent.x, tangent.y), 0.0)
 				edge_root.add_child(mi)
+
+
+## 英雄模式范围预览圈：显示震荡波覆盖半径——「易空放」的主因是玩家看不见范围
+## （半径 4 时同站位仍 11 投 1 中，实验证明显示比数值更对症）。main 在模式切换时
+## 调 set_hero_range；sync 检测英雄格变化自动重画（局部窗口，开销可忽略）。
+func set_hero_range(on: bool) -> void:
+	_hero_range_on = on
+	if not on:
+		_hero_range_at = Vector2i(-1, -1)
+		if hero_range_root != null:
+			for c in hero_range_root.get_children():
+				c.free()
+		return
+	_refresh_hero_range()
+
+
+func _refresh_hero_range() -> void:
+	if hero_range_root == null or sim_world == null or not _hero_range_on:
+		return
+	var at := Vector2i(int(sim_world.hero["x"]), int(sim_world.hero["y"]))
+	if at == _hero_range_at:
+		return
+	_hero_range_at = at
+	for c in hero_range_root.get_children():
+		c.free()
+	_build_range_into(hero_range_root, at, int(sim_world.hero_radius))
 
 
 ## 建筑悬停/拆除焦点环（hot = 红：拆除目标/不可建；false = 金：可交互）。
@@ -565,6 +601,8 @@ func set_focus(cell: Vector2i, hot: bool = true) -> void:
 ## delta = 渲染帧间隔（秒）；>0 时视觉虫群偏移阻尼收敛，<=0（探针/首帧）直接取目标值。
 func sync(world: World, tick_alpha: float = 0.0, delta: float = 0.0) -> void:
 	var alpha := clampf(tick_alpha, 0.0, 1.0)
+	sim_world = world # 英雄圈跟随/浮字口径用
+	_refresh_hero_range()
 	# 仅重建地面网格；高度增减总和相同也必须刷新，实体缓存不得被清掉。
 	if terrain.grid != null and terrain.grid.height_rev != _height_rev:
 		_height_rev = terrain.grid.height_rev
@@ -827,6 +865,7 @@ func sync(world: World, tick_alpha: float = 0.0, delta: float = 0.0) -> void:
 					"kind": int(u["kind"]),
 					"hp": int(u["hp"]),
 					"traveled": 0,
+					"bare_dist": int(u["bare_dist"]), # 出生即定死；浮字 bounty_of 口径用
 					"pulse": -1,
 					"anim_until": -1,
 					"meshes": meshes,
@@ -899,7 +938,10 @@ func sync(world: World, tick_alpha: float = 0.0, delta: float = 0.0) -> void:
 			var nd3: Node3D = e3["node"]
 			var scr := core.world_to_screen(nd3.position.x, nd3.position.y, nd3.position.z)
 			if scr.x >= 0.0:
-				var total: int = int(Sim.ENEMIES[kind3 - 1]["reward"]) + Lua64.lshr(int(e3["traveled"]), Sim.CONVOY_SHIFT)
+				# 浮字与 sim 同口径（world.bounty_of）：修掉肉鸽长途税下浮字≠进账的既有脱节
+				var total: int = world.bounty_of({
+					"kind": kind3, "x": int(e3["lx"]), "y": int(e3["ly"]),
+					"traveled": int(e3["traveled"]), "bare_dist": int(e3["bare_dist"])})
 				_float_bounty(scr, "+" + str(total))
 			unit_nodes.erase(uid2)
 	_apply_swarm_offsets(world, delta, cam_ok, cam_pos)
@@ -1126,7 +1168,10 @@ func update_shock_ring(world: World) -> void:
 			rn.free()
 			ring = null
 		else:
-			rn.scale = Vector3(0.3 + 2.7 * k, 1.0, 0.3 + 2.7 * k)
+			# 终半径 = 实际技能半径（天赋加成后随 world.hero_radius，修掉硬编码 3.0 脱节）
+			var end_r: float = maxf(float(world.hero_radius), 0.3)
+			var s := 0.3 + (end_r - 0.3) * k
+			rn.scale = Vector3(s, 1.0, s)
 
 
 # ---- 赏金浮字 / 统计 ----

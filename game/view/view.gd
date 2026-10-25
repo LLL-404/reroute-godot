@@ -141,6 +141,11 @@ func set_focus(cell: Vector2i, hot: bool = true) -> void:
 	entities.set_focus(cell, hot)
 
 
+## 英雄模式范围预览圈（→ view_entities；on = 选中英雄模式时显示震荡波半径）
+func set_hero_range(on: bool) -> void:
+	entities.set_hero_range(on)
+
+
 ## 播一个音效（→ view_audio）
 func play_sound(sname: String, gain: float = 0.8) -> void:
 	audio.play_sound(sname, gain)

@@ -164,7 +164,7 @@ func _initialize() -> void:
 			if view.ring != null:
 				var rn2: Node3D = view.ring["node"]
 				var k9 := 4.0 / 7.0
-				cmp_v3(rn2.scale, Vector3(0.3 + 2.7 * k9, 1.0, 0.3 + 2.7 * k9), "震荡环扩散 t=95")
+				cmp_v3(rn2.scale, Vector3(0.3 + 3.7 * k9, 1.0, 0.3 + 3.7 * k9), "震荡环扩散 t=95（终半径=半径4）")
 			else:
 				check(false, "t=95 震荡环丢失")
 		elif t == 98:

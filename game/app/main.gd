@@ -516,7 +516,7 @@ func _fo_enter_follow() -> void:
 func _fo_enter_econ() -> void:
 	_onboard = OnboardStage.ECON
 	_fo_t = 0.0
-	hud.hint("它绕得越远，你的赏金越多")
+	hud.hint("你还让怪走得动核心，你才拿绕行的钱——修运河，别只堵路")
 
 
 func _fo_finish() -> void:
@@ -808,6 +808,7 @@ func do_undo_build() -> bool:
 		for c in _undo_cells:
 			world.apply_command({ "kind": "undo_build", "x": c.x, "y": c.y })
 		view.play_sound("building_remove.mp3", 0.6)
+		_sync_wall_price()
 	_undo_cells = []
 	_undo_tick = -99999
 	if hud != null:
@@ -1426,6 +1427,8 @@ func set_mode(m: String) -> void:
 	mode = m
 	if hud != null:
 		hud.set_mode(m)
+	if view != null:
+		view.set_hero_range(m == "hero") # 英雄模式显示震荡波半径圈
 
 
 ## 取消当前拖拽（右键/Esc/换模式）：不落子，下一帧预览回到悬停单格。
@@ -1511,6 +1514,8 @@ func apply_mode_at(m: String, x: int, y: int) -> void:
 		world.apply_command({ "kind": "build", "bkind": _current_tower_kind(), "x": x, "y": y })
 		return
 	world.apply_command({ "kind": m, "x": x, "y": y })
+	if m == "remove":
+		_sync_wall_price() # 拆墙回收名额（阶梯价回落）
 	if m == "fill" and world.grid.get_h(x, y) > h_before:
 		view.play_sound("terrain_fill.mp3", 0.8)
 	elif m == "lower" and world.grid.get_h(x, y) < h_before:
@@ -1528,6 +1533,13 @@ func _commit_cells(m: String, cells: Array) -> void:
 			placed.append(c)
 	if not placed.is_empty():
 		_remember_build(placed)
+	_sync_wall_price()
+
+
+## 墙钮动态文案同步（刀②阶梯价）：建/拆/撤销后由 main 驱动 hud（hud 不读世界）。
+func _sync_wall_price() -> void:
+	if world != null and hud != null:
+		hud.set_wall_price(world.wall_price())
 
 
 ## 是否允许编辑战场：肉鸽模式下 INTRO / PICK 阶段虽然不推进 tick，但必须能建造
