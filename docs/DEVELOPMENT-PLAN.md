@@ -3428,6 +3428,41 @@ headless 8/8；窗口 sync 4098/hud 91/input 93/touch/ui_flow/smoke/shots 52 全
 
 **遗留**：500 局跑批 bot 未做（ROGUELIKE-SPEC §8.2，后续批次）；真人试玩平衡复核待 50 人冷启动。
 
+### 11.47 采矿改形 C：工人采运（2026-10-25，评审期玩法优化第二刀；用户头脑风暴裁定方向 C）
+
+**起因**：四刀实测暴露矿收入是「两派共享的固定项」（乌龟/运河都拿 425，无流派区分度），
+dig 即刻 +25 零风险零决策；盆地 12 矿（占 70%）隔空白嫖。头脑风暴三选项，用户裁定 **C=工人采运**
+（10-08 Q01/Q02 通路版方案照用：储量 40 / 每 20t 采 5 / 载重 20 / 开局 2 人 / 无招募界面）。
+
+**sim（d5429c9，schema 11）**：工人独立实体（同英雄：不进 units/buildings、敌人不索敌、
+脚下不可建造——try_build 加守卫）；状态机 TO_MINE（单目标场，工人爬 2 级=虫群口径）→
+MINING（站定每 20t 采 5 进载量）→ TO_CORE（沿主战场回核心贴邻入账）。**自动派工**：
+已挖开且有余量的矿格按 hex_dist 最近（平手 ore_cells 序）逐候选建场校验可达性——密封盆地
+自动排除（**白嫖线死亡**），挖插口即让工人进场（**贪食线真实化**）；目标枯竭/失效按 rev
+节流重挑；被墙隔断原地待命。dig 语义不变（瞬时开路），`ORE_YIELD` 退役。经济上限 425→680。
+
+**坑实录**：① `_worker_mining` 取 `sc.ore_cells[t]` 前必须先判 `t<0`（GDScript 负下标硬报错）；
+② amortized 测试的中途改墙格 (1,0) 撞上工人出生位（核心邻格）、(1,1) 撞上 stub 英雄出生位
+——stub 加 `ore`/`hero_spawn` 选项后挪开；③ probe_save 是**窗口探针**，headless 跑会空转
+900s 不退出（AGENTS §三清单漏看）。
+
+**表现层（6f7a087）**：`update_workers` 金色矿车节点（px/lx/mt 步点插值 3t/格、载量越高
+个子越高）——矿车在路上跑必须看得见（支柱 2 可读性口径）。
+
+**基线第十一录**：黄金局仍 WON@6400（杀 236、核心余 760、供给 527、零建筑损失）——
+工人全游戏搬回 560（中场 200 + 盆地 360，t=1000 挖插口后自动进场），余 120 恰为脚本
+故意不挖的 3 格末角矿。**probe_balance 运河脚本 v6 时序适配**：四刀版靠「挖矿即得 425」
+支撑 tick400 早塔链，改形 C 后该资本消失 ⇒ v5（仅挪后时点）第一波直穿 LOST@1017 ⇒
+v6 重构时序（波 1 前最小防御=阶梯墙+核心门网，波 1 击杀+工人流水到位后开工走廊工程）⇒
+WON、convoy 679-680、全图矿采空。12 断言全绿——运河「高资本高回报」门槛因工人经济更真实。
+
+**闸**：单测 **134/134**（+3：worker-mining-cycle / worker-sealed-idles / worker-no-build-underfoot；
+dig-ore-and-cover 重写）；headless 9/9（golden/scene/blueprint/sim/grid/flow/scenario/world/dig_intent）；
+窗口 sync/smoke/shots/hud/input/ui_flow/touch/save 全绿 + `check_shots` PASS。
+
+**分叉台账**（DECISIONS 同步）：dig 保留开路 / 爬 2 级 / 卡死待命 / 2 人固定无招募 /
+自动派工（手动派工模式留 v2）/ 肉鸽共享（R10 未实装无联动伤）。
+
 **双端包重出（2026-10-25）**：Windows `export/game.exe` 109,550,080B 复签 **Valid**（CN=Reroute）
 + `game.pck` 109,970,388B；包内 selfcheck **33/0 PASS**；`reroute-windows.zip` 183,842,694B
 （192 条目 testzip None）。Android `reroute-release.apk` **312,324,553B**，apksigner
