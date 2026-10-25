@@ -62,6 +62,8 @@ static func default_cfg() -> Dictionary:
 		"bright_pct": 100,
 		"screen_shake": true, # 震屏开关（specs/mobile-ux-spec §4；探针环境另有强制关闭）
 		"runs": 0,
+		"best_wave": 0, # 战绩卡三数之二：已开波数最大值（specs/onboarding-spec §4）
+		"wins": 0, # 战绩卡三数之三：胜场（经典 + 肉鸽同计）
 		"privacy_agreed": false,
 		"seed_text": "", # 世界种子输入原样（空串 = 每局随机；文字由 SeedCode 哈希）
 	}
@@ -116,6 +118,8 @@ static func load_cfg() -> Dictionary:
 		cfg["bright_pct"] = clampi(int(cf.get_value("video", "bright_pct", cfg["bright_pct"])), 70, 130)
 		cfg["screen_shake"] = bool(cf.get_value("video", "screen_shake", cfg["screen_shake"]))
 		cfg["runs"] = maxi(0, int(cf.get_value("progress", "runs", cfg["runs"])))
+		cfg["best_wave"] = maxi(0, int(cf.get_value("progress", "best_wave", cfg["best_wave"])))
+		cfg["wins"] = maxi(0, int(cf.get_value("progress", "wins", cfg["wins"])))
 		cfg["privacy_agreed"] = bool(cf.get_value("privacy", "agreed", cfg["privacy_agreed"]))
 		cfg["seed_text"] = clean_seed_text(str(cf.get_value("game", "seed_text", cfg["seed_text"])))
 	return cfg
@@ -125,9 +129,13 @@ static func load_cfg() -> Dictionary:
 static func save_cfg(cfg: Dictionary) -> void:
 	var cf := ConfigFile.new()
 	var prev_runs := 0
+	var prev_best_wave := 0
+	var prev_wins := 0
 	var prev_agreed := false
 	if cf.load(CFG_PATH) == OK:
 		prev_runs = maxi(0, int(cf.get_value("progress", "runs", 0)))
+		prev_best_wave = maxi(0, int(cf.get_value("progress", "best_wave", 0)))
+		prev_wins = maxi(0, int(cf.get_value("progress", "wins", 0)))
 		prev_agreed = bool(cf.get_value("privacy", "agreed", false))
 	var def := default_cfg() # 平台默认（安卓中画质/85% 渲染；PC 高画质/100%）
 	cf.set_value("audio", "music", clampi(int(cfg.get("music", VOL_MAX)), VOL_MIN, VOL_MAX))
@@ -148,6 +156,8 @@ static func save_cfg(cfg: Dictionary) -> void:
 	cf.set_value("video", "bright_pct", clampi(int(cfg.get("bright_pct", def["bright_pct"])), 70, 130))
 	cf.set_value("video", "screen_shake", bool(cfg.get("screen_shake", def["screen_shake"])))
 	cf.set_value("progress", "runs", maxi(0, int(cfg.get("runs", prev_runs))))
+	cf.set_value("progress", "best_wave", maxi(0, int(cfg.get("best_wave", prev_best_wave))))
+	cf.set_value("progress", "wins", maxi(0, int(cfg.get("wins", prev_wins))))
 	cf.set_value("privacy", "agreed", bool(cfg.get("privacy_agreed", prev_agreed)))
 	cf.set_value("game", "seed_text", clean_seed_text(str(cfg.get("seed_text", "")))) # 写盘前统一清洗
 	cf.save(CFG_PATH)

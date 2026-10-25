@@ -62,6 +62,18 @@ mouse_filter = 2
 [node name="Gap2" type="Control" parent="Col"]
 mouse_filter = 2
 
+[node name="StatsRow" type="HBoxContainer" parent="Col"]
+mouse_filter = 2
+
+[node name="LblRuns" type="Label" parent="Col/StatsRow"]
+mouse_filter = 2
+
+[node name="LblBest" type="Label" parent="Col/StatsRow"]
+mouse_filter = 2
+
+[node name="LblWins" type="Label" parent="Col/StatsRow"]
+mouse_filter = 2
+
 [node name="SeedGap" type="Control" parent="Col"]
 mouse_filter = 2
 

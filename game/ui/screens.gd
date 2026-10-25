@@ -541,6 +541,13 @@ func _bind_title(p: Control) -> void:
 	_dress_rule(p.get_node("Col/Rule"))
 	_dress_gap(p.get_node("Col/Gap2"), 12.0 * S)
 
+	# 战绩卡三数（specs/onboarding-spec §4）：局数 · 最佳波次 · 胜场；数值走 _refresh_title 取数
+	var stats_row: HBoxContainer = p.get_node("Col/StatsRow")
+	stats_row.add_theme_constant_override("separation", int(22.0 * S))
+	for lbl_node in [stats_row.get_node("LblRuns"), stats_row.get_node("LblBest"), stats_row.get_node("LblWins")]:
+		_dress_label(lbl_node, 11.5 * S, C["muted"])
+		lbl_node.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+
 	# 种子行（Task 3）：留空 = 每局随机；改动即写设置，开局时把原文交给 main
 	_dress_gap(p.get_node("Col/SeedGap"), 10.0 * S)
 	var seed_row: HBoxContainer = p.get_node("Col/SeedRow")
@@ -733,6 +740,17 @@ func _bind_settings(p: Control) -> void:
 func _refresh_title() -> void:
 	var btn: Button = pages["title"].find_child("BtnContinue", true, false)
 	btn.disabled = not SaveIO.has_any()
+	# 战绩卡三数（cb["get_stats"] → main._stats_card；读数失败显示 0 不炸壳）
+	var st: Array = [0, 0, 0]
+	if cb.has("get_stats"):
+		st = cb["get_stats"].call()
+	var page: Control = pages["title"]
+	var lr: Label = page.get_node("Col/StatsRow/LblRuns")
+	lr.text = "局数 %d" % int(st[0])
+	var lb: Label = page.get_node("Col/StatsRow/LblBest")
+	lb.text = "最佳波次 %d" % int(st[1])
+	var lw: Label = page.get_node("Col/StatsRow/LblWins")
+	lw.text = "胜场 %d" % int(st[2])
 
 
 ## 按模式刷新槽位：读档空槽禁用；删除钮仅读档且非空时显示

@@ -3257,6 +3257,30 @@ screens.tscn 确认层内 `veil → ConfirmVeil`（避免与根下 `Veil` 同名
 `check_shots` PASS（settings.png 含新行过阈值）；`check_ui_lint` PASS。
 证据 `logs/gates-20261025-mobileux/`。规格修订记录：`cashline/docs/specs/mobile-ux-spec.md` 变更记录。
 
+### 11.43 新手引导 FO 四步 + 战绩卡（2026-10-25，specs/onboarding-spec 落地）
+
+**FO 状态机**（`main.gd` 纯编排层，`sim/` 零改动）：`OnboardStage` NONE/PORT/WALL/FOLLOW/ECON/DONE。
+触发 = 经典开局且 `settings.runs==0`（探针默认豁免保像素口径，`_onboard_override` 供
+`probe_onboarding` 强开）；读档显式置 NONE；二局起 runs≥1 自然失效。
+
+- **FO-0**：`sc.wave_cell(0)` 出怪口 `view.set_focus` 金环 + `hud.hint` 3s 提示，4s 或点击自推进
+- **FO-1**：推荐格 = 出怪口↔hero_spawn **几何中点近似**（FlowField 邻格偏移是内部结构不外泄，
+  实现修订；推荐格仅视觉引导，任意放置算完成——完成判据 = `building_at` 前后对比真实放墙成功）
+- **FO-2**：首单位 `traveled≥5` 或清场 → ECON；不强运镜（相机是玩家的）
+- **FO-3**：4s 自完成
+- **跳过** = 世界区任意点击（鼠标左键/触屏按下，识别>回忆，比角落热区更防误触；实现修订）
+
+**战绩卡**：`user_settings` 新键 `best_wave`/`wins`（progress 段三键连同 runs 全量往返）；
+`_check_outcome` 两分支（经典+肉鸽）终局 `_persist_stats(won)`（best_wave=已开波数，与 HUD
+横幅同源口径）；标题页 `StatsRow` 三数（局数/最佳波次/胜场），`cb["get_stats"]` 取数、
+`_refresh_title` 回填，探针环境不落盘。
+
+**新闸**：`probe_onboarding`（窗口）15/0——FO 四步全链（含 0.25s 大步快进推进波次）、
+点击跳过、二局不触发、落盘往返、标题三数展示。读档不触发由实现保证（load_game 首行置 NONE）。
+
+**闸（全套复验）**：单测 126/0；headless 8/8（golden 零漂移）；窗口 16/16（15 旧 + onboarding 新）；
+`check_shots` PASS（title.png 含战绩行过阈值）；`check_ui_lint` PASS。证据 `logs/gates-20261025-onboard/`。
+
 ## 12. AI 任务卡模板（派活时照抄）
 
 ```markdown

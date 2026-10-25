@@ -239,6 +239,7 @@ func _setup_shell() -> void:
 		"get_seed_text": Callable(self, "_seed_text"),
 		"seed_changed": Callable(self, "_on_seed_changed"),
 		"shake_toggled": Callable(self, "_on_shake_toggled"),
+		"get_stats": Callable(self, "_stats_card"),
 	}, hud)
 
 
@@ -318,6 +319,7 @@ func start_match() -> void:
 	view.bgm(true)
 	shell.close_all()
 	_persist_runs()
+	_onboard_begin()
 
 
 ## 开一局肉鸽：新种子 → RunState（内含独立 Scenario + World）→ 切表现层
@@ -428,6 +430,146 @@ func _persist_runs() -> void:
 	UserSettings.save_cfg(_settings)
 
 
+# ---------------- 新手引导 FO（specs/onboarding-spec §3；纯编排层，sim/ 零改动） ----------------
+# 四步：PORT 出怪口指认 → WALL 第一堵墙（推荐格仅视觉引导，任意放置算完成）→
+# FOLLOW 看第一只怪绕路 → ECON 波末赏金来源。任意世界区点击 = 跳过当前步（识别>回忆，
+# 比角落热区更大更防误触）。探针环境默认不激活（保像素口径），probe_onboarding 用 override 强开。
+enum OnboardStage { NONE, PORT, WALL, FOLLOW, ECON, DONE }
+var _onboard: int = OnboardStage.NONE
+var _onboard_override := -1 # 探针注入：-1 自动（首局判定）/ 0 强制关 / 1 强制开
+var _fo_t := 0.0 # 当前步已展示时长（PORT/ECON 的 4s 自推进）
+var _fo_spawned := false # FOLLOW/ECON 用：见过活单位
+var _fo_port_cell := Vector2i(-1, -1) # FO-0 高亮：首波出怪口
+var _fo_wall_cell := Vector2i(-1, -1) # FO-1 推荐：出怪口↔核心门前锚点的几何中点近似
+
+
+func _onboard_begin() -> void:
+	var on := not _is_probe_run and int(_settings.get("runs", 0)) == 0
+	if _onboard_override == 1:
+		on = true
+	elif _onboard_override == 0 or _is_probe_run:
+		on = false
+	_fo_spawned = false
+	_fo_t = 0.0
+	if not on:
+		_onboard = OnboardStage.NONE
+		return
+	_onboard = OnboardStage.PORT
+	if world == null or sc == null:
+		_onboard = OnboardStage.NONE
+		return
+	_fo_port_cell = sc.wave_cell(0)
+	_fo_wall_cell = _fo_midpath_cell()
+	view.set_focus(_fo_port_cell, true)
+	hud.hint("怪从这里来——点一下继续")
+
+
+## FO-1 推荐格：出怪口 ↔ hero_spawn（核心门前锚点）的几何中点，向四周找无建筑的格。
+## 简化口径：不沿流场走真路径（FlowField 邻格偏移是内部结构不外泄）；
+## 推荐格只作视觉引导，玩家任意放置都算完成（specs/onboarding-spec 实现修订）。
+func _fo_midpath_cell() -> Vector2i:
+	if world == null or sc == null:
+		return Vector2i(-1, -1)
+	var a: Vector2i = sc.wave_cell(0)
+	var b: Vector2i = sc.hero_spawn
+	var mid := Vector2i((a.x + b.x) / 2, (a.y + b.y) / 2)
+	for off in [Vector2i(0, 0), Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1), Vector2i(1, 1), Vector2i(-1, -1)]:
+		var c: Vector2i = mid + off
+		if world.building_at(c.x, c.y) == null:
+			return c
+	return mid
+
+
+func _onboard_active() -> bool:
+	return _onboard != OnboardStage.NONE and _onboard != OnboardStage.DONE
+
+
+## 世界区任意点击 = 「知道了」：跳过当前步（FO-1 除外——放墙本身就是完成动作）。
+func _onboard_click() -> void:
+	if not _onboard_active():
+		return
+	match _onboard:
+		OnboardStage.PORT:
+			_fo_enter_wall()
+		OnboardStage.FOLLOW:
+			_fo_enter_econ()
+		OnboardStage.ECON:
+			_fo_finish()
+		_:
+			pass # WALL 步靠真实放墙完成；DONE/NONE 无动作
+
+
+func _fo_enter_wall() -> void:
+	_onboard = OnboardStage.WALL
+	_fo_t = 0.0
+	if _fo_wall_cell.x >= 0:
+		view.set_focus(_fo_wall_cell, true)
+	hud.hint("试着放一堵墙，挡住它的路")
+
+
+func _fo_enter_follow() -> void:
+	_onboard = OnboardStage.FOLLOW
+	_fo_t = 0.0
+	hud.hint("怪会绕开墙——看它改道")
+
+
+func _fo_enter_econ() -> void:
+	_onboard = OnboardStage.ECON
+	_fo_t = 0.0
+	hud.hint("它绕得越远，你的赏金越多")
+
+
+func _fo_finish() -> void:
+	_onboard = OnboardStage.DONE
+	_fo_t = 0.0
+
+
+## FO 每帧驱动（PORT/ECON 4s 自推进；FOLLOW 看首单位走满 5 格或清场）。
+func _onboard_tick(dt: float) -> void:
+	if not _onboard_active() or world == null:
+		return
+	_fo_t += dt
+	match _onboard:
+		OnboardStage.PORT:
+			if _fo_t >= 4.0:
+				_fo_enter_wall()
+		OnboardStage.FOLLOW:
+			if not world.units.is_empty():
+				_fo_spawned = true
+			var far_enough := false
+			for u in world.units:
+				if int(u.get("traveled", 0)) >= 5:
+					far_enough = true
+					break
+			if far_enough or (_fo_spawned and world.units.is_empty()):
+				_fo_enter_econ()
+		OnboardStage.ECON:
+			if _fo_t >= 4.0:
+				_fo_finish()
+		_:
+			pass
+
+
+## 战绩卡三数落盘（终局调用；探针/自检跳过——probe_onboarding 直接调本函数断言）。
+## best_wave 口径 = 已开波数（与 HUD 横幅波次序号同源：波表 tick ≤ tick_count 计数）。
+func _persist_stats(won: bool) -> void:
+	if _is_probe_run or _settings.is_empty():
+		return
+	var started := 0
+	for w in sc.waves:
+		if int(w[0]) <= world.tick_count:
+			started += 1
+	_settings["best_wave"] = maxi(int(_settings.get("best_wave", 0)), started)
+	if won:
+		_settings["wins"] = int(_settings.get("wins", 0)) + 1
+	UserSettings.save_cfg(_settings)
+
+
+## 标题页战绩卡取数（screens 经 cb["get_stats"] 调用）。
+func _stats_card() -> Array:
+	return [int(_settings.get("runs", 0)), int(_settings.get("best_wave", 0)), int(_settings.get("wins", 0))]
+
+
 ## 设置页视频/画质改动：同步缓存 + 立即应用（显示走 DisplayServer，画质走 view；
 ## 帧率改动下一帧由 _sync_fps_cap 接管）。
 func _on_video_changed(cfg: Dictionary) -> void:
@@ -495,6 +637,7 @@ func to_title() -> void:
 ## 读档开局：还原世界 + 蓝图视觉（Blueprint.pick 按存档 run 重放），直接进对局。
 ## 坏档/旧档读档失败返回 false（由存档页显示原因）。
 func load_game(slot: int) -> bool:
+	_onboard = OnboardStage.NONE # 读档不是首局：FO 显式关闭（specs/onboarding-spec §3）
 	var w := SaveIO.load_slot(slot)
 	if w == null:
 		return false
@@ -873,6 +1016,7 @@ func _process(dt: float) -> void:
 	if world == null:
 		return
 	_sync_run_phase()
+	_onboard_tick(dt)
 	if world.outcome == World.RUNNING and not paused:
 		acc += dt * time_scale
 		var steps := 0
@@ -954,6 +1098,7 @@ func _check_outcome() -> void:
 		hud.set_visible_hud(false)
 		run_ui.hide_run()
 		var ran_won: bool = run.phase == RunState.PHASE_WON
+		_persist_stats(ran_won)
 		shell.open_gameover(ran_won, world)
 		view.play_sound("match_win.mp3" if ran_won else "match_lose.mp3", 0.85)
 		view.bgm_settlement(true)
@@ -962,6 +1107,7 @@ func _check_outcome() -> void:
 		return
 	over_shown = true
 	hud.set_visible_hud(false)
+	_persist_stats(world.outcome == World.WON)
 	shell.open_gameover(world.outcome == World.WON, world)
 	view.play_sound("match_win.mp3" if world.outcome == World.WON else "match_lose.mp3", 0.85)
 	view.bgm_settlement(true)
@@ -1009,6 +1155,7 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventScreenTouch:
 		var st: InputEventScreenTouch = event
 		if st.pressed:
+			_onboard_click() # FO 引导：世界区按下 = 跳过当前步
 			_touch_down(st.index, st.position)
 		else:
 			_touch_up(st.index, st.position)
@@ -1021,6 +1168,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		var mb: InputEventMouseButton = event
 		if mb.button_index == MOUSE_BUTTON_LEFT:
 			if mb.pressed:
+				_onboard_click() # FO 引导：世界区点击 = 跳过当前步（触屏经鼠标换算同路）
 				pointer_down(mb.position)
 			else:
 				pointer_up(mb.position)
@@ -1353,6 +1501,12 @@ func apply_mode_at(m: String, x: int, y: int) -> void:
 		return
 	_ore_intent = {} # 任何其它操作都放弃未完成的矿格意图
 	var h_before: int = world.grid.get_h(x, y)
+	if m == "wall":
+		var b_before = world.building_at(x, y) # FO-1 完成判据：真实放墙成功（specs/onboarding-spec）
+		world.apply_command({ "kind": m, "x": x, "y": y })
+		if b_before == null and world.building_at(x, y) != null and _onboard == OnboardStage.WALL:
+			_fo_enter_follow()
+		return
 	if m == "tower" and run != null:
 		world.apply_command({ "kind": "build", "bkind": _current_tower_kind(), "x": x, "y": y })
 		return
