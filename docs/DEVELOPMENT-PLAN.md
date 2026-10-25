@@ -3426,8 +3426,14 @@ headless 8/8；窗口 sync 4098/hud 91/input 93/touch/ui_flow/smoke/shots 52 全
 （sync/hud/input/touch 四处断言按新值重钉）。注：8fa9d8c 同批含并行会话「矿台扩圈」
 地形自检改动（岩群 216 重钉），同文件无法分离已注明入库。
 
-**遗留**：肉鸽模式共享赏金/墙价新值（probe_rogue 回归待跑）；500 局跑批 bot 未做
-（ROGUELIKE-SPEC §8.2，后续批次）；真人试玩平衡复核待 50 人冷启动。
+**遗留**：500 局跑批 bot 未做（ROGUELIKE-SPEC §8.2，后续批次）；真人试玩平衡复核待 50 人冷启动。
+
+**双端包重出（2026-10-25）**：Windows `export/game.exe` 109,550,080B 复签 **Valid**（CN=Reroute）
++ `game.pck` 109,970,388B；包内 selfcheck **33/0 PASS**；`reroute-windows.zip` 183,842,694B
+（192 条目 testzip None）。Android `reroute-release.apk` **312,324,553B**，apksigner
+`CN=Reroute, OU=GameJam`（指纹与 keystore 一致）。SHA-256：pck `9b682bb24d46aea1…` /
+zip `843f9d5b21066c66…` / apk `a742bb87f0e565e6…`。草稿更新（等 11 月底开窗提审）。
+注：肉鸽 probe_rogue/probe_rogue_ui 已随全量回归跑绿（共享新值无破坏）。
 
 ## 12. AI 任务卡模板（派活时照抄）
 
