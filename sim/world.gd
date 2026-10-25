@@ -9,8 +9,9 @@ extends RefCounted
 #   · 终局后整体冻结（tick 与命令都不再改变状态）；
 #   · 一 tick 固定次序：①摊销补场 ②波次导演 ③单位移动/啃建筑 ③b 英雄步进 ④塔开火与施工 ⑤清尸 ⑥胜负判定；
 #   · 无浮点无 libm；Rng 只在波次抖动里被调用。
-# 改道经济：击杀赏金 = 敌基础赏金 + (绕行路程 >> CONVOY_SHIFT)；traveled 在 ③ 推进时累积
-# （英雄击退不计），只有塔火击杀能兑现。
+# 改道经济（2026-10-25 换轨）：击杀赏金 = 敌基础赏金 + 有效绕行折算（effdetour >> CONVOY_SHIFT，
+# 封顶 2×基础）；effdetour = traveled + 死位主场剩余距离 − 出生格裸图基线，任一端不可达记 0
+# ——堵死（死位不可达）与开门陷阱（出生口裸图不可达）都拿不到绕行钱；只有塔火击杀能兑现。
 const RUNNING := 0
 const WON := 1
 const LOST := 2
@@ -61,6 +62,10 @@ var field_heavy_rev: int
 var rebuilding_heavy: bool
 var rebuild_rev_heavy: int
 
+# 裸图基线场（开局布局、无任何玩家改动的距离场；派生态不进指纹，算完即冻结不随 rev 重建）
+var bare_field: FlowField
+var bare_field_heavy: FlowField
+
 # 围攻场（按兵种爬升上限各一份）
 var siege: FlowField
 var siege_rev: int
@@ -106,6 +111,18 @@ func _init(psc: Scenario, pseed: int, prebuild_budget: int = 2048) -> void:
 	field_heavy_rev = -1
 	rebuilding_heavy = false
 	_rebuild_field_sync()
+
+	# 裸图基线场：开局布局（无玩家建筑/挖填）按兵种口径各一张，一次性算完冻结
+	var bare_grid := sc.build_grid()
+	var bare_goals := [Vector2i(sc.core.x, sc.core.y)]
+	bare_field = FlowField.new(bare_grid)
+	bare_field.begin(bare_goals)
+	while not bare_field.done():
+		bare_field.step(1 << 30)
+	bare_field_heavy = FlowField.new(bare_grid, false, 1)
+	bare_field_heavy.begin(bare_goals)
+	while not bare_field_heavy.done():
+		bare_field_heavy.step(1 << 30)
 
 	siege = null
 	siege_rev = -1
@@ -217,6 +234,7 @@ func spawn_unit(x: int, y: int, speed_ticks: int, kind: int) -> void:
 		"atk_target": -1,
 		"traveled": 0,
 		"climb_wait": 0,
+		"bare_dist": bare_field_for(kind).dist_at(x, y), # v8：出生格裸图基线（不可达 -1）
 	}
 	next_unit_id += 1
 	units.append(unit)
@@ -429,6 +447,33 @@ func climb_max_for(kind: int) -> int:
 ## 按兵种选主场：蛮兽（climb_max ≤ 1）走 field_heavy，其余走 field
 func field_for(kind: int) -> FlowField:
 	return field_heavy if climb_max_for(kind) <= 1 else field
+
+
+## 按兵种选裸图基线场（口径与 field_for 对齐）
+func bare_field_for(kind: int) -> FlowField:
+	return bare_field_heavy if climb_max_for(kind) <= 1 else bare_field
+
+
+## 有效绕行（decicell 当量）：已走格数×10 + 死位主场剩余距离 − 出生格裸图基线，负值归零。
+## 任一端不可达（堵死的死位 / 开门陷阱流的出生口）记 0。平路直走怪严格为 0
+## （每走一格剩余减 10、已走加 10）；爬坡边权 20 会引入每坡 ±10 的保守偏差（可接受）。
+func effdetour(u: Dictionary) -> int:
+	var rest := field_for(int(u["kind"])).dist_at(int(u["x"]), int(u["y"]))
+	var base := int(u.get("bare_dist", -1))
+	if rest < 0 or base < 0:
+		return 0
+	return maxi(int(u["traveled"]) * 10 + rest - base, 0)
+
+
+## 击杀赏金加成：effdetour 折算，封顶 2×基础赏金
+func bounty_bonus(u: Dictionary) -> int:
+	var cap := int(Sim.ENEMIES[u["kind"] - 1]["reward"]) * Sim.BOUNTY_CAP_MULT
+	return mini(Lua64.lshr(effdetour(u), bounty_shift), cap)
+
+
+## 击杀赏金总额（基础 + 加成；表现层浮字与结算同口径）
+func bounty_of(u: Dictionary) -> int:
+	return int(Sim.ENEMIES[u["kind"] - 1]["reward"]) + bounty_bonus(u)
 
 
 ## 单位移动：沿对应主场流场走一格；封路分支处理啃建筑/转围攻
@@ -680,19 +725,19 @@ func towers_and_build() -> void:
 							best_u["hp"] = best_u["hp"] - def["damage"]
 							b["cooldown"] = def["cooldown"]
 							if best_u["hp"] <= 0:
-								# 改道经济：赏金 = 基础 + 绕行路程折算；只有塔火能兑现
-								var bonus := Lua64.lshr(best_u["traveled"], bounty_shift)
+								# 改道经济：赏金 = 基础 + 有效绕行折算；只有塔火能兑现
+								var bonus := bounty_bonus(best_u)
 								supply += Sim.ENEMIES[best_u["kind"] - 1]["reward"] + bonus
 								convoy_earned += bonus
 								kills += 1
 
 
 ## 单位受伤与击杀结算（肉鸽扩展塔共用）。经典模式不经过本函数，故不进指纹。
-## 赏金口径与塔火一致：基础赏金 + 绕行路程 >> bounty_shift。
+## 赏金口径与塔火一致：基础赏金 + 有效绕行折算（封顶 2×基础）。
 func damage_unit(u: Dictionary, dmg: int) -> void:
 	u["hp"] = u["hp"] - dmg
 	if u["hp"] <= 0:
-		var bonus := Lua64.lshr(u["traveled"], bounty_shift)
+		var bonus := bounty_bonus(u)
 		supply += Sim.ENEMIES[u["kind"] - 1]["reward"] + bonus
 		convoy_earned += bonus
 		kills += 1
@@ -764,7 +809,7 @@ func judge() -> void:
 		outcome = LOST # 超时＝敌按时刻表长完，守方判负
 
 
-# ---------------- 规范状态编码（STATE_SCHEMA=7）----------------
+# ---------------- 规范状态编码（STATE_SCHEMA=8）----------------
 # tick | rng | grid | 供给/结局/开门/战果 | 单位表按 id 升序 | 建筑表按 id 升序。
 # 流场是派生态，不进指纹。
 ## 规范状态编码：字段序 = tick|rng|grid|供给/结局/开门/战果|单位表|建筑表（指纹口径）
@@ -799,6 +844,7 @@ func canonical_bytes() -> Canon.Buf:
 		b.put_i32(u["atk_target"])
 		b.put_i32(u["traveled"]) # v3：绕行路程
 		b.put_i32(u["climb_wait"]) # v7：爬坡后摇剩余 tick
+		b.put_i32(u["bare_dist"]) # v8：出生格裸图基线路程（不可达 -1）
 
 	b.put_u32(buildings.size())
 	for i in buildings.size():

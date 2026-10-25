@@ -36,8 +36,11 @@ const ENEMIES := [
 const E_SWARM := 1
 const E_BEHEMOTH := 2
 
-# 改道经济：击杀赏金 = reward + (traveled >> CONVOY_SHIFT)。
+# 改道经济（2026-10-25 换轨）：击杀赏金 = reward + 有效绕行折算。
+# 有效绕行 = traveled + 死位主场剩余距离 − 出生格裸图基线（任一端不可达记 0），
+# 折算后加成封顶 2×基础赏金——堵死拿不到绕行钱，改道多走的路才给钱。
 const CONVOY_SHIFT := 3
+const BOUNTY_CAP_MULT := 2
 
 # 英雄（切片 1 最小形态：点地移动 + 单技能震荡波）。
 const HERO := { "speed_ticks": 3, "skill_radius": 3, "skill_cooldown": 400 }

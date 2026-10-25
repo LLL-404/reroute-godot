@@ -12,7 +12,8 @@ extends RefCounted
 
 # v2（2026-10-16 世界生成）：state 增 sc_seed（布局种子），读档按种子重建校验；旧档自然拒载。
 # v3（2026-10-23 挖坑/爬坡）：高度改 u8 偏移编码（支持 -2..5），单位行增 climb_wait（11 字段）。
-const FORMAT_VERSION := 3
+# v4（2026-10-25 改道经济换轨）：单位行增 bare_dist（12 字段），旧档拒载。
+const FORMAT_VERSION := 4
 
 
 ## 世界 → 存档字典。run_index 供读档还原蓝图视觉（Blueprint.pick(run_index) 派生）。
@@ -31,7 +32,7 @@ static func encode(world: World, run_index: int) -> Dictionary:
 		units.append([
 			u["id"], u["x"], u["y"], u["speed_ticks"], u["stuck_ticks"],
 			u["kind"], u["hp"], u["atk_cd"], u["atk_target"], u["traveled"],
-			u["climb_wait"],
+			u["climb_wait"], u["bare_dist"],
 		])
 	var builds: Array = []
 	for b in world.buildings:
@@ -125,14 +126,14 @@ static func decode(d) -> World:
 
 	world.units = []
 	for row in st["units"]:
-		if typeof(row) != TYPE_ARRAY or row.size() != 11:
+		if typeof(row) != TYPE_ARRAY or row.size() != 12:
 			return null
 		world.units.append({
 			"id": int(row[0]), "x": int(row[1]), "y": int(row[2]),
 			"speed_ticks": int(row[3]), "stuck_ticks": int(row[4]),
 			"kind": int(row[5]), "hp": int(row[6]), "atk_cd": int(row[7]),
 			"atk_target": int(row[8]), "traveled": int(row[9]),
-			"climb_wait": int(row[10]),
+			"climb_wait": int(row[10]), "bare_dist": int(row[11]),
 		})
 	world.buildings = []
 	world.by_cell = {}

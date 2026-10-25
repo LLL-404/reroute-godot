@@ -423,20 +423,41 @@ func register(kit: TestKit) -> void:
 		kit.eq(w.supply, 240, "塔后供给")
 		w.apply_command({ "kind": "spawn", "x": 4, "y": 5, "speed": 1000 })
 		w.apply_command({ "kind": "spawn", "x": 4, "y": 5, "speed": 1000 })
+		# 白盒：站桩单位死位即出生位；裸图基线不含塔、主位剩余绕塔 ⇒ 二者差 = 塔造成的绕行
+		var base0: int = w.units[0]["bare_dist"]
+		var rest0: int = w.field_for(Sim.E_SWARM).dist_at(4, 5)
 		w.units[0]["traveled"] = 25 # 白盒：精确观测折算
 		w.units[1]["traveled"] = 7
 		_run(w, 61)
 		kit.eq(w.kills, 0, "首炮仅致伤")
 		_run(w, 21)
 		kit.eq(w.kills, 1, "第一击杀")
-		kit.eq(w.supply, 246, "3 + (25>>3)=3")
-		kit.eq(w.convoy_earned, 3, "绕行累计 3")
+		var b0: int = mini(Lua64.lshr(25 * 10 + rest0 - base0, 3), 6)
+		kit.eq(w.supply, 243 + b0, "3 + 有效绕行折算")
+		kit.eq(w.convoy_earned, b0, "绕行累计")
 		_run(w, 21)
 		kit.eq(w.kills, 1, "B 仅致伤")
 		_run(w, 21)
 		kit.eq(w.kills, 2, "第二击杀")
-		kit.eq(w.supply, 249, "3 + (7>>3)=0")
-		kit.eq(w.convoy_earned, 3, "不足 8 格不凑整"))
+		var b1: int = mini(Lua64.lshr(7 * 10 + rest0 - base0, 3), 6)
+		kit.eq(w.supply, 243 + b0 + 3 + b1, "B 基础+有效绕行")
+		kit.eq(w.convoy_earned, b0 + b1, "绕行累计累加"))
+
+	kit.test("effdetour-semantics", func():
+		var w := World.new(StubScenario.new({ "size": 20 }), 1)
+		w.apply_command({ "kind": "spawn", "x": 4, "y": 5, "speed": 1000 })
+		var u: Dictionary = w.units[0]
+		kit.eq(w.effdetour(u), 0, "未改图的站桩怪绕行为 0")
+		u["bare_dist"] = -1 # 白盒：模拟开门陷阱流（出生口裸图不可达）
+		kit.eq(w.effdetour(u), 0, "出生口不可达记 0")
+		var rest0: int = w.field_for(Sim.E_SWARM).dist_at(4, 5)
+		u["bare_dist"] = rest0 - 50
+		kit.eq(w.effdetour(u), 50, "基线少 5 格 = 绕行 5 格当量")
+		u["bare_dist"] = rest0 - 10
+		kit.eq(w.bounty_bonus(u), 1, "绕行 1 格当量 10>>3=1 未触顶")
+		u["traveled"] = 30
+		kit.eq(w.bounty_bonus(u), 6, "(300+10)>>3=38 触顶 2×3=6")
+		kit.eq(w.bounty_of(u), 9, "总额 = 基础 3 + 加成 6"))
 
 	# ---------------- 波次与渗漏 ----------------
 
@@ -549,7 +570,7 @@ func register(kit: TestKit) -> void:
 		kit.eq(b.data[0], 0, "STATE_SCHEMA 大端字节 1")
 		kit.eq(b.data[1], 0, "STATE_SCHEMA 大端字节 2")
 		kit.eq(b.data[2], 0, "STATE_SCHEMA 大端字节 3")
-		kit.eq(b.data[3], 7, "STATE_SCHEMA = 7"))
+		kit.eq(b.data[3], 8, "STATE_SCHEMA = 8"))
 
 	kit.test("compact-keeps-order", func():
 		var w := World.new(StubScenario.new(), 1)

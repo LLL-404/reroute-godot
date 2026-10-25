@@ -77,6 +77,10 @@ static func check_invariants(world: World) -> String:
 	for u in world.units:
 		if u["traveled"] < 0 or u["traveled"] > world.tick_count:
 			return "不变式5破例：单位 %d 路程 %d 越界 tick=%d" % [u["id"], u["traveled"], world.tick_count]
+	for u in world.units:
+		var bd := int(u.get("bare_dist", -1))
+		if bd < -1 or bd > 4096:
+			return "不变式6破例：单位 %d 裸图基线 %d 越界 tick=%d" % [u["id"], bd, world.tick_count]
 	return ""
 
 
