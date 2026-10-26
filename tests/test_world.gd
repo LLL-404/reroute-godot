@@ -45,6 +45,15 @@ func register(kit: TestKit) -> void:
 		kit.eq(w.supply, Sim.START_SUPPLY, "非矿覆盖无收益")
 		kit.eq(w.grid.at(sparse.x, sparse.y), Grid.OPEN, "表土挖开"))
 
+	kit.test("worker-no-ore-idles", func():
+		var w := World.new(StubScenario.new({ "size": 20 }), 1)
+		_run(w, 4) # 连续无矿：后续 tick 也不能拿 target=-1 去取矿格
+		kit.eq(w.tick_count, 4, "无矿时世界仍连续推进")
+		kit.eq(w.supply, Sim.START_SUPPLY, "无矿不产供给")
+		for wk in w.workers:
+			kit.eq(int(wk["target"]), -1, "工人保持空目标")
+			kit.eq(int(wk["state"]), Sim.W_TO_MINE, "工人原地待命"))
+
 	kit.test("worker-mining-cycle", func():
 		var w := World.new(StubScenario.new({ "size": 20, "ore": [[4, 1]] }), 1)
 		kit.eq(w.workers.size(), Sim.WORKER_COUNT, "开局 2 工人")

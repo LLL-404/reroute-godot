@@ -781,8 +781,8 @@ func _worker_to_mine(w: Dictionary) -> void:
 		_worker_pick(w)
 		w["pick_rev"] = grid.rev
 		t = int(w["target"])
-		if t < 0:
-			return # 无活可干：原地待命（rev 再变才重挑）
+	if t < 0:
+		return # 无活可干：每个 tick 都直接待命，不能继续读取 ore_cells[-1]
 	if int(w["field_rev"]) != grid.rev or int(w["field_goal"]) != t:
 		var f := FlowField.new(grid, false, 2) # 工人爬 2 级（虫群口径）
 		f.begin([Vector2i(sc.ore_cells[t].x, sc.ore_cells[t].y)])
