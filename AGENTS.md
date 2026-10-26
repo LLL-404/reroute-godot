@@ -48,7 +48,10 @@ GODOT="C:/G/game/Godot_v4.7.2-stable_mono_win64/Godot_v4.7.2-stable_mono_win64_c
 P="C:/Users/Administrator/Documents/默认项目/reroute-godot"
 
 # headless 安全：单测 + 模拟模块探针 + 场景构建
-"$GODOT" --headless --path "$P" -s res://tests/run_tests.gd                    # 126 单测
+# 推荐用跑闸外壳：日志出现 SCRIPT ERROR / ERROR: 即判红（防「断言 0 失败」的假绿）
+python tools/gate_run.py --headless -s res://tests/run_tests.gd            # 135 单测
+python tools/gate_run.py --headless -s res://tests/probes/probe_golden.gd
+"$GODOT" --headless --path "$P" -s res://tests/run_tests.gd  # 135 单测（裸跑，不拦引擎错误）
 for p in golden scene blueprint sim grid flow scenario world; do
   "$GODOT" --headless --path "$P" -s res://tests/probes/probe_$p.gd
 done

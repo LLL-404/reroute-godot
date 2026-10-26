@@ -1187,7 +1187,7 @@ func update_workers(world: World, alpha: float) -> void:
 	for w in world.workers:
 		var wid := int(w["id"])
 		seen[wid] = true
-		var e: Dictionary = worker_nodes.get(wid)
+		var e = worker_nodes.get(wid) # 首次出现返回 null：不能先声明成固定 Dictionary，否则赋 Nil 直接报错
 		if e == null:
 			var node := MeshInstance3D.new()
 			node.name = "Worker%d" % wid
