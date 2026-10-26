@@ -386,9 +386,11 @@ static func _generate_freeform(seed: int, salt: int) -> Dictionary:
 			if Grid.hex_dist(core_x + dx, core_y + dy, core_x, core_y) <= CORE_CLEAR:
 				prot[str(core_x + dx) + "," + str(core_y + dy)] = true
 	for o in mid_ore:
-		for dy in range(-1, 2):
-			for dx in range(-1, 2):
-				prot[str(o.x + dx) + "," + str(o.y + dy)] = true
+		# 矿台渐变带同口径 d≤2（2026-10-25）：岩石/微丘/散土不落矿带坡肩，避免 SOLID 堵死谷口
+		for dy in range(-2, 3):
+			for dx in range(-2, 3):
+				if Grid.hex_dist(o.x + dx, o.y + dy, o.x, o.y) <= 2:
+					prot[str(o.x + dx) + "," + str(o.y + dy)] = true
 	for y in range(by0, by0 + bh):
 		for x in range(bx0, bx0 + bw):
 			prot[str(x) + "," + str(y)] = true
@@ -865,9 +867,11 @@ static func _terrain_depressions(hs: Array, seed: int, salt: int, geom: Dictiona
 		for dx in range(-1, 2):
 			_terrain_mark(prot, plug.x + dx, plug.y + dy)
 	for o in geom["mid_ore"]:
-		_terrain_mark(prot, int(o.x), int(o.y))
-		for k in 6:
-			_terrain_mark(prot, Grid.nx(o.x, o.y, k), Grid.ny(o.x, o.y, k))
+		# 矿台渐变带 d≤2 全护（2026-10-25）：洼地不许贴着矿带挖负护城河
+		for dy in range(-2, 3):
+			for dx in range(-2, 3):
+				if Grid.hex_dist(int(o.x) + dx, int(o.y) + dy, int(o.x), int(o.y)) <= 2:
+					_terrain_mark(prot, int(o.x) + dx, int(o.y) + dy)
 	for o in geom["basin_ore"]:
 		_terrain_mark(prot, int(o.x), int(o.y))
 		for k in 6:
@@ -894,6 +898,13 @@ static func _terrain_depressions(hs: Array, seed: int, salt: int, geom: Dictiona
 				for dx in 2:
 					_terrain_mark(prot, mx + dx, my + dy)
 	var want: int = 2 + Lua64.mod(_hash16(seed, salt, 9301), 3)
+	for i in 4096: # 崖形摆布后（2026-10-25）：h≥2 格及其邻不许落洼地，防把孤峰/崖脉挖成坑
+		if int(hs[i]) >= 2:
+			var hx: int = Lua64.mod(i, 64)
+			var hy: int = Lua64.idiv(i, 64)
+			_terrain_mark(prot, hx, hy)
+			for k in 6:
+				_terrain_mark(prot, Grid.nx(hx, hy, k), Grid.ny(hx, hy, k))
 	var placed := 0
 	for t in range(0, 256):
 		if placed >= want:
@@ -1142,6 +1153,15 @@ static func _generate_terrain(seed: int, salt: int, p: Dictionary, _is_default: 
 		_terrain_clamp(heights, int(o.x), int(o.y), 0, 1)
 		for k in 6:
 			_terrain_clamp(heights, Grid.nx(o.x, o.y, k), Grid.ny(o.x, o.y, k), 0, 1)
+	# ⑤b 矿台渐变带（2026-10-25）：中场矿 d2 环钳 [-1,2] —— 矿带边界对内落差恒 ≤2
+	# （渲染=可爬坡），崖壁圈/负护城河不再贴着矿长；盆地矿是设计内密闭陷阱，不参与。
+	for o in geom["mid_ore"]:
+		for dy in range(-2, 3):
+			for dx in range(-2, 3):
+				var gx := int(o.x) + dx
+				var gy := int(o.y) + dy
+				if Grid.hex_dist(gx, gy, int(o.x), int(o.y)) == 2:
+					_terrain_clamp(heights, gx, gy, -1, 2)
 	# ⑥ 低地走廊（沿真实可通行最短路；核心邻格抬到 h_core-1 保证蛮兽能进）
 	var mask: Array = _terrain_mask(p, geom)
 	var bfs: Array = _terrain_bfs(mask, core)
@@ -1173,6 +1193,8 @@ static func _generate_terrain(seed: int, salt: int, p: Dictionary, _is_default: 
 			for dy in 2:
 				for dx in 2:
 					_terrain_set(heights, mx + dx, my + dy, 1)
+	# ⑥c 崖形摆布（2026-10-25，孤峰/崖脉两种形态都是软保证：不进 terrain_valid，命中率钉 sweep 断言）
+	_terrain_cliff_forms(heights, seed, salt, geom, corr, p)
 	# ⑦ 负高度补足：限坡会把小坑压平 → 不足 20‰ 时显式放置洼地
 	var neg_now := 0
 	for i in 4096:
@@ -1180,6 +1202,8 @@ static func _generate_terrain(seed: int, salt: int, p: Dictionary, _is_default: 
 			neg_now += 1
 	if neg_now * 1000 / 4096 < TERRAIN_NEG_LO:
 		_terrain_depressions(heights, seed, salt, geom, mains, corr, p)
+	# ⑦b 矿口保证（2026-10-25）：最后落定——晚于走廊/微丘/洼地，切完不再被覆盖
+	var mouth_ok := _terrain_ore_mouth(heights, geom, ts)
 	# ⑧ 统计自检
 	var nz := 0
 	var neg := 0
@@ -1196,8 +1220,198 @@ static func _generate_terrain(seed: int, salt: int, p: Dictionary, _is_default: 
 	var neg_perm := neg * 1000 / 4096
 	var valid: bool = nz_perm >= TERRAIN_NZ_LO and nz_perm <= TERRAIN_NZ_HI \
 		and neg_perm >= TERRAIN_NEG_LO and neg_perm <= TERRAIN_NEG_HI \
-		and hi >= TERRAIN_HI_MIN
+		and hi >= TERRAIN_HI_MIN and mouth_ok
 	return { "terrain_kind": kind, "heights": heights, "terrain_valid": valid }
+
+
+## 该方向沿六边直线走 5 格是否无墙（h≥2 或出界 = 墙；墙口径 = 肩坎及以上）。
+static func _mouth_open_dir(heights: Array, x: int, y: int, k: int) -> bool:
+	var cx := x
+	var cy := y
+	for _step in 5:
+		cx = Grid.nx(cx, cy, k)
+		cy = Grid.ny(cx, cy, k)
+		if cx < 0 or cy < 0 or cx >= 64 or cy >= 64:
+			return false
+		if int(heights[cy * 64 + cx]) >= 2:
+			return false
+	return true
+
+
+## 矿口保证（2026-10-25）：矿台渐变带保证矿带边界是坡不是崖，但坡肩仍可能连成
+## 一圈碗壁把矿围在窝里。从矿带中心沿 6 个六边方向探 5 格，开向不足 2 时挑
+## 沿线峰值最低的被墙方向（平手 _hash16 裁决）切一道缓坡谷口：谷线钳 0..1、
+## 谷线六邻钳 0..2（与低地走廊同口径）。返回 false = 仍不足 2 开向（换盐保险，
+## 构造上不可达）。
+static func _terrain_ore_mouth(heights: Array, geom: Dictionary, ts: int) -> bool:
+	var band: Array = geom["mid_ore"]
+	var ctr: Vector2i = band[2]
+	var open := 0
+	for k in 6:
+		if _mouth_open_dir(heights, ctr.x, ctr.y, k):
+			open += 1
+	for _carve in range(2 - open):
+		var best_k := -1
+		var best_cost := 1 << 30
+		var best_key := -1
+		for k in 6:
+			if _mouth_open_dir(heights, ctr.x, ctr.y, k):
+				continue
+			var cost := 0
+			var cx := ctr.x
+			var cy := ctr.y
+			for _step in 6:
+				cx = Grid.nx(cx, cy, k)
+				cy = Grid.ny(cx, cy, k)
+				if cx < 0 or cy < 0 or cx >= 64 or cy >= 64:
+					cost = 1 << 30
+					break
+				cost = maxi(cost, int(heights[cy * 64 + cx]))
+			var key := _hash16(ctr.x * 6 + k, ctr.y, ts + 17)
+			if cost < best_cost or (cost == best_cost and key < best_key):
+				best_cost = cost
+				best_k = k
+				best_key = key
+		if best_k < 0 or best_cost >= (1 << 30):
+			break
+		var gx := ctr.x
+		var gy := ctr.y
+		for _step2 in 6:
+			gx = Grid.nx(gx, gy, best_k)
+			gy = Grid.ny(gx, gy, best_k)
+			if gx < 0 or gy < 0 or gx >= 64 or gy >= 64:
+				break
+			_terrain_clamp(heights, gx, gy, 0, 1)
+			for n in 6:
+				_terrain_clamp(heights, Grid.nx(gx, gy, n), Grid.ny(gx, gy, n), 0, 2)
+	var open_after := 0
+	for k in 6:
+		if _mouth_open_dir(heights, ctr.x, ctr.y, k):
+			open_after += 1
+	return open_after >= 2
+
+
+## 崖形摆布（2026-10-25 §11.45）：孤峰（1..2 座小方山：心 h3、半环 h2 肩）+ 崖脉（1 条
+## 5..9 格 h3 漂移游走链，邻格只降不升）。两种形态都是**软保证**——放不下就跳过，
+## 不进 terrain_valid；命中率由 64 种子 sweep 断言钉住。选址全由 (seed, salt) 哈希决定，
+## 纯整数、确定性。盐域 9501..9599（与特征 93xx / 矿口 17 错开）。
+static func _terrain_cliff_forms(heights: Array, seed: int, salt: int, geom: Dictionary,
+		corr: Dictionary, p: Dictionary) -> void:
+	var prot: Array = []
+	for i in 4096:
+		prot.append(false)
+	var core: Vector2i = geom["core"]
+	for y in range(maxi(core.y - 9, 0), mini(core.y + 10, 64)):
+		for x in range(maxi(core.x - 9, 0), mini(core.x + 10, 64)):
+			if Grid.hex_dist(x, y, core.x, core.y) <= 7:
+				_terrain_mark(prot, x, y)
+	for m in geom["mains"]:
+		for dy in range(-2, 3):
+			for dx in range(-2, 3):
+				_terrain_mark(prot, int(m.x) + dx, int(m.y) + dy)
+	var hero: Vector2i = geom["hero"]
+	_terrain_mark(prot, hero.x, hero.y)
+	var b: Rect2i = geom["basin"]
+	for y in range(b.position.y - 1, b.position.y + b.size.y + 1):
+		for x in range(b.position.x - 1, b.position.x + b.size.x + 1):
+			_terrain_mark(prot, x, y)
+	var plug: Vector2i = geom["plug"]
+	for dy in range(-1, 2):
+		for dx in range(-1, 2):
+			_terrain_mark(prot, plug.x + dx, plug.y + dy)
+	for key in corr: # 走廊 + 1 环：崖壁不许压走廊净空头
+		var parts: PackedStringArray = String(key).split(",")
+		var px := int(parts[0])
+		var py := int(parts[1])
+		_terrain_mark(prot, px, py)
+		for k in 6:
+			_terrain_mark(prot, Grid.nx(px, py, k), Grid.ny(px, py, k))
+	for o in geom["mid_ore"]: # 矿台 d≤2 + 1 环余量（矿口探测不被孤峰添堵）
+		for dy in range(-3, 4):
+			for dx in range(-3, 4):
+				if Grid.hex_dist(int(o.x) + dx, int(o.y) + dy, int(o.x), int(o.y)) <= 3:
+					_terrain_mark(prot, int(o.x) + dx, int(o.y) + dy)
+	for o in geom["basin_ore"]:
+		_terrain_mark(prot, int(o.x), int(o.y))
+		for k in 6:
+			_terrain_mark(prot, Grid.nx(o.x, o.y, k), Grid.ny(o.x, o.y, k))
+	if bool(p.get("freeform", false)):
+		for c in p["rocks"]:
+			_terrain_mark(prot, int(c.x), int(c.y))
+		for c in p["hills"]: # 微丘被校验钉死 h1，不许压
+			_terrain_mark(prot, int(c.x), int(c.y))
+		for c in p["sparse"]:
+			_terrain_mark(prot, int(c.x), int(c.y))
+	else:
+		var mx: int = p["mesa_x"]
+		var my: int = p["mesa_y"]
+		if mx >= 0:
+			for dy in 3:
+				for dx in 3:
+					_terrain_mark(prot, mx + dx, my + dy)
+	for i in 4096: # 现有 h≥2 格不叠加（走廊肩/自然台地保持原样）
+		if int(heights[i]) >= 2:
+			var x0: int = Lua64.mod(i, 64)
+			var y0: int = Lua64.idiv(i, 64)
+			_terrain_mark(prot, x0, y0)
+	# —— 孤峰 1..2 座：心 h3 + 半环 h2 肩（3..5 格，起始向/数量全由哈希定）——
+	var want_butte := 1 + Lua64.mod(_hash16(seed, salt, 9501), 2)
+	var placed := 0
+	for t in 24:
+		if placed >= want_butte:
+			break
+		var cx: int = 3 + Lua64.mod(_hash16(seed, salt * 7 + t, 9503), 58)
+		var cy: int = 3 + Lua64.mod(_hash16(seed, salt * 7 + t, 9507), 58)
+		var ok := not bool(prot[cy * 64 + cx])
+		if ok:
+			for k in 6:
+				if bool(prot[Grid.ny(cx, cy, k) * 64 + Grid.nx(cx, cy, k)]):
+					ok = false
+					break
+		if not ok:
+			continue
+		heights[cy * 64 + cx] = 3
+		_terrain_mark(prot, cx, cy)
+		var start_k: int = Lua64.mod(_hash16(cx, cy, 9509), 6)
+		var ring_n: int = 3 + Lua64.mod(_hash16(cx, cy, 9513), 3)
+		for i2 in ring_n:
+			var k2 := (start_k + i2) % 6
+			var sx: int = Grid.nx(cx, cy, k2)
+			var sy: int = Grid.ny(cx, cy, k2)
+			heights[sy * 64 + sx] = 2
+			_terrain_mark(prot, sx, sy)
+		placed += 1
+	# —— 崖脉 1 条：漂移游走 5..9 格 h3；邻格只降不升（>2 压回 2）——
+	for t in 24:
+		var sx: int = 3 + Lua64.mod(_hash16(seed, salt * 11 + t, 9521), 58)
+		var sy: int = 3 + Lua64.mod(_hash16(seed, salt * 11 + t, 9523), 58)
+		if bool(prot[sy * 64 + sx]):
+			continue
+		var want_len: int = 5 + Lua64.mod(_hash16(sx, sy, 9527), 5)
+		var dir_k: int = Lua64.mod(_hash16(sx, sy, 9529), 6)
+		var chain: Array = []
+		var cx := sx
+		var cy := sy
+		for _step in want_len:
+			if cx < 1 or cy < 1 or cx > 62 or cy > 62 or bool(prot[cy * 64 + cx]):
+				break
+			chain.append(Vector2i(cx, cy))
+			prot[cy * 64 + cx] = true
+			var turn: int = Lua64.mod(_hash16(cx, cy, 9531), 10)
+			if turn == 0:
+				dir_k = (dir_k + 1) % 6 # 左转 20%
+			elif turn == 1:
+				dir_k = (dir_k + 5) % 6 # 右转 20%，其余直行
+			cx = Grid.nx(cx, cy, dir_k)
+			cy = Grid.ny(cx, cy, dir_k)
+		if chain.size() < 5:
+			continue
+		for c in chain:
+			heights[int(c.y) * 64 + int(c.x)] = 3
+		for c in chain: # 坡肩整备：只降不升，h0 崖面保持 Δ3 陡壁读感
+			for k in 6:
+				_terrain_clamp(heights, Grid.nx(int(c.x), int(c.y), k), Grid.ny(int(c.x), int(c.y), k), 0, 2)
+		break
 
 
 ## 核心邻格最低允许高度（保证蛮兽从邻格跨入核心时爬升 ≤1）。

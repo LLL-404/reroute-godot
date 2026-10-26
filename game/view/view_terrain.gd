@@ -121,6 +121,7 @@ var field_h: PackedFloat64Array
 var height_fn: Callable
 var cur_palette: Dictionary = {}
 var _gate_pts: Array = [] # 出怪口世界坐标（Vector2；四侧）：崖壁豁口对齐当局主口，空 = 无豁口
+var _cliff_pcache: Dictionary = {} # 崖壁角点参数场缓存（键=量化角点坐标；_rebuild_hex 开头清）
 
 var heat_on := false
 var heat_root: Node3D = null
@@ -830,6 +831,7 @@ func _emit_grass(verts: PackedVector3Array, nrms: PackedVector3Array, cols: Pack
 func _rebuild_hex() -> void:
 	if field_h.is_empty() or _ground == null:
 		return # 蓝图尚未套用（正常流程 apply_blueprint 先于 build_terrain）
+	_cliff_pcache.clear()
 	_compute_cell_top()
 	var n := core.CELL_N
 	var verts := PackedVector3Array()
@@ -989,7 +991,14 @@ func _rebuild_hex() -> void:
 					var n2y := dr / dlen
 					# 风格化软光：垂直面法线向上倾 0.30（借顶光，避免墙面在阴影侧压成死黑；纯光照项，无几何影响）
 					var sn := Vector3(wn.x * n2r, n2y + 0.30, wn.z * n2r).normalized()
-					var scol := _edge_color(kind, sj, col, (h_u + h_l) * 0.5, x, y, k2)
+					# 层理相位 = 角点参数场两端插值（沿线连续；仅崖壁吃相位，可爬坡/石阶口径不动）
+					var scol: Color
+					if kind == EDGE_CLIFF:
+						var pa := _cliff_params(ax, az)
+						var pb := _cliff_params(bx, bz)
+						scol = _edge_color(kind, sj, col, (h_u + h_l) * 0.5, x, y, k2, lerpf(pa[2], pb[2], 0.5))
+					else:
+						scol = _edge_color(kind, sj, col, (h_u + h_l) * 0.5, x, y, k2)
 					# 非顶层点沿边方向外延 0.75×r：把相邻边在共享角处的楔形缝自然闭合成折缝
 					# （P0 恒 r=0 → 顶缝无外延、精确重合；延伸量 < 面深 → 不产生新穿插）
 					var eu := 0.75 * r_u
@@ -1105,14 +1114,21 @@ func edge_profile(x: int, y: int, k: int, t: float, t_lo: float, kind: int) -> P
 		pts.append(t_lo - 0.010)
 	else:
 		var drop2 := delta - lip_v
-		var rel := 0.55 + 0.9 * Blueprint.ihash(x * 71 + k * 23, y * 97 + k * 11, 3347) # 面斜率签 0.55..1.45
-		pts.append(BATTER * 0.5 * rel + _edge_j(x, y, k, 3, 0.016, 3323))
-		var h3 := t - lip_v - drop2 * 0.5 + _edge_j(x, y, k, 3, 0.025, 3329)
+		# 崖壁参数 = 角点参数场两端插值（2026-10-25 §11.45）：长崖脉沿线漂移、孤峰四壁一体。
+		# C⁰ 连续 → 相邻面共享角咬合，0.75 外延闭角照常工作。
+		var w0: Vector3 = core.cell_to_world(x, y)
+		var pa := _cliff_params(w0.x + core.HEX_CORNERS[HEX_EDGE_A[k]].x, w0.z + core.HEX_CORNERS[HEX_EDGE_A[k]].y)
+		var pb := _cliff_params(w0.x + core.HEX_CORNERS[HEX_EDGE_B[k]].x, w0.z + core.HEX_CORNERS[HEX_EDGE_B[k]].y)
+		var rel: float = lerpf(pa[0], pb[0], 0.5) # 面斜率签 0.55..1.45（沿崖线漂移）
+		var skirt: float = lerpf(pa[1], pb[1], 0.5) # 裙脚外伸乘子 0.7..1.3
+		var jit: float = lerpf(pa[3], pb[3], 0.5) # 微扰幅度乘子 0.4..1.6
+		pts.append(BATTER * 0.5 * rel + _edge_j(x, y, k, 3, 0.016 * jit, 3323))
+		var h3 := t - lip_v - drop2 * 0.5 + _edge_j(x, y, k, 3, 0.025 * jit, 3329)
 		pts.append(h3)
-		pts.append(BATTER * (2.0 + 1.2 * rel) + _edge_j(x, y, k, 4, 0.03, 3331)) # 渣坡裙脚外缘（贴地薄楔）
+		pts.append(BATTER * (2.0 + 1.2 * rel) * skirt + _edge_j(x, y, k, 4, 0.03 * jit, 3331)) # 渣坡裙脚外缘（贴地薄楔）
 		# 裙脚高度自适应：恒低于 P3 且恒离地 ≥4mm（实心/微差边视觉落差极小时防非单调/防穿插）
-		pts.append(maxf(minf(t_lo + 0.012 + _edge_j(x, y, k, 4, 0.008, 3337), h3 - 0.02), t_lo + 0.004))
-		pts.append(BATTER * (0.7 + 0.6 * rel) + _edge_j(x, y, k, 5, 0.02, 3343)) # 回勾至沉底坡脚
+		pts.append(maxf(minf(t_lo + 0.012 + _edge_j(x, y, k, 4, 0.008 * jit, 3337), h3 - 0.02), t_lo + 0.004))
+		pts.append(BATTER * (0.7 + 0.6 * rel) * skirt + _edge_j(x, y, k, 5, 0.02 * jit, 3343)) # 回勾至沉底坡脚
 		pts.append(t_lo - 0.010)
 	return pts
 
@@ -1122,10 +1138,27 @@ func _edge_j(x: int, y: int, k: int, j: int, amp: float, salt: int) -> float:
 	return (Blueprint.ihash(x * 97 + k * 13 + j * 5, y * 61 + j * 7, salt) - 0.5) * 2.0 * amp
 
 
+## 崖壁角点参数场（2026-10-25 §11.45）：C² 连续值噪声按角点世界坐标采样
+## （波长 7m 主场 + 3m 细场，Blueprint.vnoise）。棱取两端角点插值 →
+## 长崖脉跨 2~3 个噪声波长、参数沿线漂移；孤峰足迹小、四壁采样近同值 = 一整块岩石。
+## 返回 [rel(坡率签), skirt(裙脚乘子), phase(层理相位), jit(微扰乘子)]；量化键缓存。
+func _cliff_params(ax: float, az: float) -> Array:
+	var key := Vector2i(int(round(ax * 1000.0)), int(round(az * 1000.0)))
+	if _cliff_pcache.has(key):
+		return _cliff_pcache[key]
+	var rel := 0.55 + 0.9 * Blueprint.vnoise(ax / 7.0, az / 7.0, 9701)
+	var skirt := 0.7 + 0.6 * Blueprint.vnoise(ax / 7.0 + 40.0, az / 7.0, 9703)
+	var phase := Blueprint.vnoise(ax / 7.0 + 80.0, az / 7.0, 9707) * TAU
+	var jit := 0.4 + 1.2 * Blueprint.vnoise(ax / 3.0, az / 3.0, 9711)
+	var out := [rel, skirt, phase, jit]
+	_cliff_pcache[key] = out
+	return out
+
+
 ## 边色阶：圆唇 = 顶色微暗两档；微差面 = 岩化石阶（层理明暗带）；
 ## 可爬坡 = 暖色渣土（一眼可走）；崖壁 = 岩化提亮 + 双频层理带 + 逐边明暗签（去「平」）。
 ## a 位 = 贴图岩权。全部输入（x,y,k,sj,h_mid）确定性。
-func _edge_color(kind: int, sj: int, col: Color, h_mid: float, x: int, y: int, k: int) -> Color:
+func _edge_color(kind: int, sj: int, col: Color, h_mid: float, x: int, y: int, k: int, phase: float = 0.0) -> Color:
 	var out: Color
 	var a := col.a
 	var tag := Blueprint.ihash(x * 53 + k * 17, y * 41 + k * 7, 5483) # 逐边明暗签
@@ -1138,12 +1171,13 @@ func _edge_color(kind: int, sj: int, col: Color, h_mid: float, x: int, y: int, k
 		out = col.lerp(_col_lo, 0.10) if sj == 2 else col.lerp(_col_lo, 0.16)
 		a = minf(col.a * 0.45, 1.0)
 	elif kind == EDGE_CLIFF:
-		var band := 0.5 + 0.5 * sin(h_mid * 8.7 + float(x) * 0.7 + float(y) * 0.5 + float(sj) * 1.7)
-		var band2 := 0.5 + 0.5 * sin(h_mid * 2.9 + float(x) * 0.23 + float(y) * 0.41)
+		# 层理带相位来自角点参数场（2026-10-25）：带线沿崖壁连续流动，不再逐边重启
+		var band := 0.5 + 0.5 * sin(h_mid * 8.7 + phase + float(sj) * 1.7)
+		var band2 := 0.5 + 0.5 * sin(h_mid * 2.9 + phase * 0.6)
 		if sj == 4: # 裙脚回勾底面（近地暗缝，多为遮挡）
 			out = col.lerp(_col_rock, 0.30).darkened(0.34)
 		elif sj == 3: # 下段坡 + 渣坡裙脚：暖色碎渣带（掺沙纹，贴地碎屑感）
-			var banda := 0.5 + 0.5 * sin(h_mid * 6.1 + float(x) * 0.51 + float(y) * 0.37)
+			var banda := 0.5 + 0.5 * sin(h_mid * 6.1 + phase + float(sj) * 0.7)
 			out = col.lerp(_col_lo, 0.26).darkened(0.06 - 0.08 * banda)
 			out = Color(maxf(out.r, 0.30), maxf(out.g, 0.25), maxf(out.b, 0.16), out.a)
 			a = minf(col.a + 0.18, 1.0)
@@ -1152,7 +1186,7 @@ func _edge_color(kind: int, sj: int, col: Color, h_mid: float, x: int, y: int, k
 			out = out.darkened(0.02 if sj == 2 else 0.10)
 			var tone := 0.96 + 0.11 * band + 0.07 * band2
 			if tag < 0.24:
-				tone += 0.08 # 明面（亮岩带）
+				tone += 0.04 # 明面（亮岩带；沿线漂移后逐边签减幅，连续性优先）
 			out = Color(maxf(out.r * tone, 0.32), maxf(out.g * tone, 0.27), maxf(out.b * tone, 0.19), out.a) # 暖色地板防死黑
 			a = minf(col.a + 0.35, 1.0)
 	else: # EDGE_MICRO

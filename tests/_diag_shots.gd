@@ -12,7 +12,7 @@ func _initialize() -> void:
 	main.set_process(false)
 	main.start_match()
 	main.paused = true
-	for seed in [20261004, 20261005, 20261006, 20261012]:
+	for seed in [20261004, 20261012, 20261023, 20261063]:
 		main.run_index = int(seed) - 20261003 - 1
 		main.new_game()
 		main.start_match()
@@ -27,6 +27,6 @@ func _initialize() -> void:
 		for _i in 4:
 			await process_frame
 		var img := root.get_texture().get_image()
-		img.save_png("res://shots/_diag_%d.png" % int(seed))
+		img.save_png("res://shots/_diag_cliff_after_%d.png" % int(seed))
 		print("[DIAG] shot ", seed)
 	quit()

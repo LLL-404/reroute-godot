@@ -147,7 +147,8 @@ func register(kit: TestKit) -> void:
 	kit.test("rock-cells-readonly", func():
 		var sc := Scenario.new(20261004)
 		var rc: Array = sc.rock_cells()
-		kit.eq(rc.size(), 217, "快照岩群数")
+		# 2026-10-25 矿台渐变带扩圈后重钉（d≤2 净空挤掉 1 格岩）
+		kit.eq(rc.size(), 216, "快照岩群数")
 		rc.clear()
-		kit.eq(sc.rock_cells().size(), 217, "快照为拷贝（清空不回写）")
+		kit.eq(sc.rock_cells().size(), 216, "快照为拷贝（清空不回写）")
 		kit.ok(Scenario.new().rock_cells().is_empty(), "默认种子（历史路径）岩群空"))
