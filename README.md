@@ -107,3 +107,40 @@ P="D:/G/game/games/reroute-godot"
 7. **数组原地 compact**（`arr[i]=arr[j]` + `resize`）触发类型错误→建新数组。
 8. **基线冻结**：`sim/golden_baseline.gd` 的 16 指纹、剧本指纹 `0x7dea2b02`、
    `STATE_SCHEMA=5` 都是判据。改动必须走「记录 + 重录」流程，**禁止为了修绿探针而改基线**。
+
+## 五、许可
+
+Copyright (C) 2026 LLL-404
+
+本仓库以 **Mozilla Public License 2.0（MPL-2.0）** 发布，全文见 [`LICENSE`](LICENSE)。
+
+> This Source Code Form is subject to the terms of the Mozilla Public License, v. 2.0.
+> If a copy of the MPL was not distributed with this file, You can obtain one at
+> <https://mozilla.org/MPL/2.0/>.
+
+### 5.1 效力口径
+
+MPL-2.0 是**文件级**弱传染许可，不是全作品传染：
+
+| 你做的事 | 义务 |
+|---|---|
+| 阅读、编译、游玩 | 无 |
+| 修改仓库里的某个文件并分发 | **该文件**必须以 MPL-2.0 公开；其他文件随意 |
+| 把本项目代码/素材嵌进自己的闭源项目且未修改 | 可以，无需开源你的项目 |
+| 拿本项目做商业产品 | 可以，MPL-2.0 不禁商用 |
+
+### 5.2 第三方素材例外（不适用 MPL-2.0）
+
+| 素材 | 许可 | 义务 |
+|---|---|---|
+| `assets/fonts/NotoSansSC-Regular.otf`、`NotoSerifSC-Bold-Sub.ttf` | SIL OFL-1.1 | 保留 OFL 授权文本，不得单独售卖字体 |
+| ambientCG PBR 贴图（2 组） | CC0-1.0 | 无 |
+| Godot Engine 4.7.2 | MIT | 保留其版权声明 |
+
+逐项来源、作者与署名要求见 [`CREDITS.md`](CREDITS.md)。
+
+### 5.3 为什么不是 AGPL
+
+AGPL-3.0 的 §13 要求「通过网络提供服务也必须开放源码」，是开源许可里约束最强的一档。
+本项目是单机游戏，无服务端，AGPL 的额外条款不产生实际义务，却会让部分企业环境直接拉黑
+（法务常把 AGPL 列为禁用清单）。MPL-2.0 在「保留开源义务」与「可被企业采用」之间取平衡。
