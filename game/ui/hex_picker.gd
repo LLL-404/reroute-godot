@@ -6,11 +6,21 @@ extends CanvasLayer
 #   ③ 悬停：卡片上浮 16px、放大 1.07、稀有度光晕点亮（0.45→0.95）
 #   ④ 选中：该卡放大到 1.22 并向屏幕中心飞入后淡出，其余两张缩小淡出，压暗层同时退场
 #   ⑤ 底部工具行：刷新（供给价）/ 跳过（+50）
-# 只读 RunState 的 offers；一切动作经 on_pick / on_refresh / on_skip 交回 main。
+# 只读 RunState 的 offers；选牌/刷新/跳过都走本类 signal 交回 main。
 # 层级 12：压在 run_ui(11) 与 hud(10) 之上，低于 shell(20)。
+
+# ---- 公开面（外部可调）----
+# 装配：setup(sfx_call, hud)。方法：open(offers, meta) / close() / is_open()。
+# ---- 探针契约（改名会破 tests/probes，勿动）----
+# probe_hex_shot 直读 _cards 并调 _hover_on / _select（截图摆位用）；改名须同步该探针。
 
 const UiStyle = preload("res://game/ui/ui_style.gd")
 const HexCardScene = preload("res://game/ui/hex_card.tscn") # 卡片骨架场景（结构在 tscn）
+
+# ---- 外向信号（main 接这 3 条）----
+signal card_picked(idx: int) # 选中第 idx 张
+signal refresh_requested() # 花供给刷新三选一
+signal skip_requested() # 跳过（+50 供给）
 
 # 稀有度配色（银 / 金 / 棱彩），LOL 口径
 const RARITY := {
@@ -56,13 +66,13 @@ var _idx_of: Dictionary = {} # holder -> index
 var _hover := -1
 var _busy := false
 var _entering := false
-var _cb: Dictionary = {}
 var _hud = null
 var _open := false
 
 
-func init(callbacks: Dictionary, _hud_ref) -> void:
-	sfx = callbacks.get("sfx", Callable())
+## 初始化：注入音效口（Callable）与 HUD 引用（显隐指挥盘用）
+func setup(sfx_call: Callable, _hud_ref = null) -> void:
+	sfx = sfx_call
 	_hud = _hud_ref
 	C = UiStyle.DARK
 	layer = 12
@@ -112,10 +122,9 @@ func _bind() -> void:
 # ---------------- 对外接口 ----------------
 
 ## 展开三选一。meta = { title, supply, refresh_cost, can_refresh }；
-## cb = { pick(idx), refresh(), skip() }
-func open(offers: Array, meta: Dictionary, cb: Dictionary) -> void:
+## 选牌/刷新/跳过走本类 signal（card_picked / refresh_requested / skip_requested）
+func open(offers: Array, meta: Dictionary) -> void:
 	_recalc_s()
-	_cb = cb
 	_busy = false
 	_hover = -1
 	_open = true
@@ -266,27 +275,21 @@ func _select(i: int) -> void:
 	_clear_cards()
 	if _hud != null:
 		_set_dock_visible(true)
-	var fn: Callable = _cb.get("pick", Callable())
-	if fn.is_valid():
-		fn.call(i)
+	card_picked.emit(i)
 
 
 func _skip() -> void:
 	if _busy:
 		return
 	_busy = true
-	var fn: Callable = _cb.get("skip", Callable())
 	close()
-	if fn.is_valid():
-		fn.call()
+	skip_requested.emit()
 
 
 func _refresh() -> void:
 	if _busy:
 		return
-	var fn: Callable = _cb.get("refresh", Callable())
-	if fn.is_valid():
-		fn.call()
+	refresh_requested.emit()
 
 
 # ---------------- 卡片 ----------------

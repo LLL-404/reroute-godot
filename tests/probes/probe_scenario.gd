@@ -11,21 +11,21 @@ func _initialize() -> void:
 	# --- 锚点（默认种子 20261003 全量钉死）---
 	check(Scenario.DEFAULT_SEED == 20261003 and sc.seed == Scenario.DEFAULT_SEED, "default seed")
 	check(sc.template_id == 0, "default template 0 (frozen ridge)")
-	check(sc.w == 64 and sc.h == 64, "dims 64x64")
-	check(sc.core == Vector2i(33, 6), "core")
-	check(sc.hero_spawn == Vector2i(33, 8), "hero_spawn")
+	check(sc.w == Dims.MAP_N and sc.h == Dims.MAP_N, "dims 128x128（64 时代 64x64 已废止）")
+	check(sc.core == Vector2i(63, 12), "core")
+	check(sc.hero_spawn == Vector2i(63, 16), "hero_spawn")
 	check(sc.spawns.size() == 3, "spawns count")
-	check(sc.spawns.size() >= 3 and sc.spawns[0] == Vector2i(21, 56) and sc.spawns[1] == Vector2i(45, 56) and sc.spawns[2] == Vector2i(6, 57), "spawns anchors")
-	check(sc.ridge_y == 42, "ridge_y")
-	check(sc.chokes.size() == 2 and sc.chokes[0] == Vector2i(22, 42) and sc.chokes[1] == Vector2i(46, 42), "chokes")
-	check(sc.basin_plug == Vector2i(8, 53), "basin_plug")
-	check(sc.basin_rect == Rect2i(3, 53, 7, 8), "basin_rect")
-	check(sc.mesa == Rect2i(16, 48, 2, 2), "mesa")
+	check(sc.spawns.size() >= 3 and sc.spawns[0] == Vector2i(39, 112) and sc.spawns[1] == Vector2i(87, 112) and sc.spawns[2] == Vector2i(8, 109), "spawns anchors")
+	check(sc.ridge_y == 82, "ridge_y")
+	check(sc.chokes.size() == 2 and sc.chokes[0] == Vector2i(38, 82) and sc.chokes[1] == Vector2i(87, 82), "chokes")
+	check(sc.basin_plug == Vector2i(10, 105), "basin_plug")
+	check(sc.basin_rect == Rect2i(5, 105, 7, 8), "basin_rect")
+	check(sc.mesa == Rect2i(55, 95, 2, 2), "mesa")
 	check(sc.sparse_phase == 2, "sparse_phase")
 	check(sc.resample_salt == 0, "resample_salt")
-	check(sc.end_tick == 6400 and sc.hard_cap_tick == 8800 and sc.trickle_every == 300, "timing")
+	check(sc.end_tick == 8740 and sc.hard_cap_tick == 11140 and sc.trickle_every == 300, "timing")
 	check(sc.wave_scale_pct == 100, "wave_scale_pct")
-	check(Scenario.PATH_REF == 548 and Scenario.PATH_LO == 466 and Scenario.PATH_HI == 630, "path band consts")
+	check(Scenario.PATH_REF == 990 and Scenario.PATH_LO == 840 and Scenario.PATH_HI == 1140, "path band consts")
 
 	# 越界护栏：锚点若破例（数组变短），后续读取退化为显式坏值而不是硬崩。
 	var spawn0: Vector2i = sc.spawns[0] if sc.spawns.size() > 0 else Vector2i(-1, -1)
@@ -58,7 +58,7 @@ func _initialize() -> void:
 			finale += cnt
 	check(waves_ok, "waves shape")
 	check(sc.waves.size() == 25, "waves count")
-	check(total == 200 and first == 60 and last == 5080 and max_batch == 14 and finale == 82, "waves contract")
+	check(total == 200 and first == 2400 and last == 7420 and max_batch == 14 and finale == 155, "waves contract")
 
 	# --- 地形锚点（2026-10-23 随机高度：三类基地地貌 + 统计带）---
 	var cx: int = sc.core.x
@@ -125,8 +125,8 @@ func _initialize() -> void:
 		if g.at(oc.x, oc.y) != Grid.COVER:
 			ore_ok = false
 	check(ore_ok, "all ore cells cover")
-	check(g.at(sc.sparse_phase, 17) == Grid.COVER, "sparse row cover")
-	check(g.at(sc.sparse_phase + 1, 17) == Grid.OPEN, "sparse row neighbor open")
+	check(g.at(sc.sparse_phase, 34) == Grid.COVER, "sparse row cover")
+	check(g.at(sc.sparse_phase + 1, 34) == Grid.OPEN, "sparse row neighbor open")
 	check(g.get_h(sc.core.x, sc.core.y) == sc.height_at(sc.core.x, sc.core.y) \
 		and g.get_h(spawn0.x, spawn0.y) == 0 and g.get_h(spawn1.x, spawn1.y) == 0 \
 		and g.get_h(sc.hero_spawn.x, sc.hero_spawn.y) == 0 \
@@ -163,10 +163,10 @@ func _initialize() -> void:
 	check(d0 == d1, "main spawn paths equal d0=%d d1=%d" % [d0, d1])
 	check(d2 == -1, "spawn3 unreachable closed d2=%d" % d2)
 
-	# --- 指纹守门（0x90fe29d8）+ 确定性 + 负对照 ---
+	# --- 指纹守门（0x64fd41e1，128 图重录）+ 确定性 + 负对照 ---
 	var canon := Canon.new()
 	var fp: int = sc.fingerprint(canon)
-	check(fp == 0x7f62bbe8, "fingerprint baseline (got 0x%x)" % fp)
+	check(fp == 0x64fd41e1, "fingerprint baseline (got 0x%x)" % fp)
 	check(fp == sc.fingerprint(canon), "fingerprint repeat call")
 	check(fp == Scenario.new().fingerprint(Canon.new()), "fingerprint fresh instance")
 	var mut := Scenario.new()
@@ -179,10 +179,10 @@ func _initialize() -> void:
 	check(sc.ore_cells.size() == sc.basin_ore.size() + sc.mid_ore.size(), "ore_cells size")
 	check(sc.ore_cells.size() == 17 and sc.basin_ore.size() == 12 and sc.mid_ore.size() == 5 \
 		and sc.ore_cells[0] == sc.basin_ore[0] and sc.ore_cells[12] == sc.mid_ore[0], "ore_cells order basin->mid")
-	check(sc.mid_ore.size() == 5 and sc.mid_ore[0] == Vector2i(31, 21) and sc.mid_ore[4] == Vector2i(35, 21), "mid ore span")
-	check(sc.basin_ore.size() == 12 and sc.basin_ore[0] == Vector2i(5, 56) and sc.basin_ore[11] == Vector2i(7, 59), "basin ore span")
-	check(sc.is_ore(33, 21) and sc.is_ore(5, 56) and sc.is_ore(7, 59), "is_ore true")
-	check(not sc.is_ore(sc.basin_plug.x, sc.basin_plug.y) and not sc.is_ore(4, 54) and not sc.is_ore(0, 0), "is_ore false plug/interior/border")
+	check(sc.mid_ore.size() == 5 and sc.mid_ore[0] == Vector2i(61, 40) and sc.mid_ore[4] == Vector2i(65, 40), "mid ore span")
+	check(sc.basin_ore.size() == 12 and sc.basin_ore[0] == Vector2i(7, 108) and sc.basin_ore[11] == Vector2i(9, 111), "basin ore span")
+	check(sc.is_ore(63, 40) and sc.is_ore(7, 108) and sc.is_ore(9, 111), "is_ore true")
+	check(not sc.is_ore(sc.basin_plug.x, sc.basin_plug.y) and not sc.is_ore(6, 106) and not sc.is_ore(0, 0), "is_ore false plug/interior/border")
 
 	# --- 自由世界全扫（自由盐内收敛 + 各局校验合法 + 地形统计/可达 + 指纹互异）---
 	var fps := {}

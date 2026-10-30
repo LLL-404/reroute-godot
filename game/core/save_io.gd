@@ -74,12 +74,16 @@ static func slot_meta(slot: int) -> Dictionary:
 	return m if typeof(m) == TYPE_DICTIONARY else {}
 
 
-## 写档（补保存时间戳；成功返回 true）。
-static func save_slot(slot: int, world: World, run_index: int) -> bool:
+## 写档（补保存时间戳 + 战争迷雾位图旁路字段；成功返回 true）。
+## fog_bits 为空（探针关雾）时不写该键——读档侧按现存实体重推导探索记忆。
+## 迷雾是纯视图层状态：走 JSON 旁路键，不进 sim/save.gd 编码与 schema。
+static func save_slot(slot: int, world: World, run_index: int, fog_bits: PackedByteArray = PackedByteArray()) -> bool:
 	var d := SaveCodec.encode(world, run_index)
 	var m: Dictionary = d["meta"]
 	m["saved_at"] = int(Time.get_unix_time_from_system())
 	m["saved_text"] = Time.get_datetime_string_from_system(false, true).substr(5, 11) # "10-16 14:30"
+	if fog_bits.size() > 0:
+		d["fog_b64"] = Marshalls.raw_to_base64(fog_bits)
 	var f := FileAccess.open(slot_path(slot), FileAccess.WRITE)
 	if f == null:
 		return false
@@ -99,6 +103,25 @@ static func load_slot(slot: int) -> World:
 	var txt := f.get_as_text()
 	f.close()
 	return SaveCodec.decode(_parse_json(txt))
+
+
+## 读槽位的战争迷雾位图（fog_b64 旁路字段；无/坏 = 空数组，读档侧按现存实体重推导）。
+static func slot_fog(slot: int) -> PackedByteArray:
+	var p := slot_path(slot)
+	if not FileAccess.file_exists(p):
+		return PackedByteArray()
+	var f := FileAccess.open(p, FileAccess.READ)
+	if f == null:
+		return PackedByteArray()
+	var txt := f.get_as_text()
+	f.close()
+	var d = _parse_json(txt)
+	if typeof(d) != TYPE_DICTIONARY:
+		return PackedByteArray()
+	var b64 = d.get("fog_b64", "")
+	if typeof(b64) != TYPE_STRING or b64 == "":
+		return PackedByteArray()
+	return Marshalls.base64_to_raw(b64)
 
 
 ## 删除槽位文件（不存在 = 无操作）。

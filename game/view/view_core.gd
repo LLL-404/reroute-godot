@@ -4,8 +4,8 @@ extends RefCounted
 # 相机取景与屏幕投影、相机操控（WASD 平移 / 右键拖拽 / QE 旋转 / 滚轮缩放）。
 # 零 sim 引用（只被 terrain/entities 当几何底座）；节点挂点统一走 host。
 
-const CELL_N := 64
-const HALF := 32.0
+const CELL_N := Dims.MAP_N # 2026-10-27 B1：派生自 sim/dims.gd（与 sc.w 一致性由单测锁死）
+const HALF := Dims.MAP_HALF
 const H_STEP := 1.2 # sim 高度层 1.2m/级
 const MAP_MIN_VISIBLE := 0.75 # 平移时地图至少占屏幕面积的比例（场外最多露 1/4）
 
@@ -21,6 +21,16 @@ const RESERVE_LEFT := 0.0
 # 不再靠抬高俯角去撑满纵向——52° 会把高度差压平却没有消掉透视缩短。
 const PITCH_DEG := 42.0
 const CAM_FOV := 30.0
+# A1 俯仰/缩放操控口径：俯角可在 18°..78° 间改（中键拖拽/QE 等），滚轮缩放夹在 0.16..1.8。
+const PITCH_MIN_DEG := 18.0
+const PITCH_MAX_DEG := 78.0
+const ZOOM_MIN := 0.16
+const ZOOM_MAX := 1.8
+# 缩放-俯角联动（2026-10-27 用户裁定）：升高（zoom 变大）俯角趋直 → 60°；降低趋平 → 20°；
+# 默认档 zoom=1 恒 42°。中键手动俯仰是微调覆盖，下一次滚轮/捏合缩放即回到联动曲线。
+const PITCH_NEAR_DEG := 20.0
+const PITCH_FAR_DEG := 60.0
+const CAM_CLEAR_H := 10.0 # 相机离地最小净空（米）：贴地拉近时自动拉远，避免钻进地形
 
 # 色板（albedo）。ground_lo/ground/ground_hi/rock 每局被蓝图 palette 覆盖；
 # gold/rubble 为占位块色（真实资产后续轮替换）。
@@ -59,9 +69,10 @@ var _fog_fit_mult := 1.0 # 取景视距外推系数：雾基准按横屏 ~76m �
 var camera: Camera3D
 var focus := Vector3.ZERO # 相机注视的地面点（y=0；平移/旋转围绕它）
 var yaw := 0.0 # 水平旋转（绕 Y，正 = 左旋；QE 修改）
-var _pitch := 0.0 # 基准俯角（rad，取景时定；操控不改）
+var _pitch := 0.0 # 基准俯角（rad，默认 42°；可由中键拖拽/QE 等操控改，夹在 18°..78°）
 var _dist := 0.0 # 相机到 focus 的基准距离（取景时定；滚轮缩放叠乘 _zoom）
-var _zoom := 1.0 # 滚轮缩放倍率（0.6–1.8；取景重置 1.0）
+var _zoom := 1.0 # 滚轮缩放倍率（0.16–1.8；取景重置 1.0）
+var _ground_h := Callable() # 地面高度回调（view.gd 注入 terrain.ground_h；未注入时按平地 0 处理）
 var _fit_pull := 0.90 # 取景后的额外拉近系数（<1 = 更近）：0.90 = 地图四边各溢出约半格~一格，画面几乎全是地图
 # 震屏（B3）：只做平移抖动，不旋转相机 —— 旋转会让 world_to_screen 缓存与 HUD 对位漂移。
 var shake_on := true # 探针运行时关闭（截图不能被抖偏，像素校验口径）
@@ -109,7 +120,7 @@ func setup() -> void:
 	sun.rotation_degrees = Vector3(-46.0, -24.0, 0.0) # 2026-10-21：-58/10 → -46/-24。原角度投影几乎全被崖体自身遮住，斜侧主光让地面出现可见投影、拉出立体感
 	# 2026-10-21：相机距地图中心约 81m，默认 100m + fade_start 0.8 → 主场区正好落在淡出区，投影在实机视角几乎不可见。
 	# 拉长到 190m 并关掉淡出，让整片场地都在阴影覆盖内。
-	sun.directional_shadow_max_distance = 190.0
+	sun.directional_shadow_max_distance = 320.0 # 128 图对角 ~181m（2026-10-27 随扩容复核）
 	sun.directional_shadow_fade_start = 1.0
 	# 法线偏移 2.0m 会把 1m 级岩块的投影整个推没（远景只能看到 3m 以上的大件才有影），收到 0.35m。
 	sun.shadow_bias = 0.04
@@ -414,6 +425,11 @@ func _ensure_camera() -> void:
 	host.add_child(camera)
 
 
+## 注入地面高度回调（wx, wz → 米）：view.gd 拿到 terrain 后注入，view_core 不直接引用 view_terrain。
+func set_ground_height(cb: Callable) -> void:
+	_ground_h = cb
+
+
 ## 取景：把 64² 地图横向撑满可交互区（上让顶栏、右让按钮带、下让余量）。
 ## 2026-10-23：俯角固定 42°（不再二分贴边），FOV 30° 收窄透视；纵向由竖直偏移平衡留白。
 ## 注意：取景会重置平移/旋转/缩放（窗口尺寸变化时由 sync 触发，回到默认北向全图视角）。
@@ -502,10 +518,20 @@ func _apply_cam() -> void:
 	var f := Vector3(0.0, -sr, -cr).rotated(Vector3.UP, yaw)
 	var u := Vector3(0.0, cr, -sr).rotated(Vector3.UP, yaw)
 	var d := _dist * _zoom
+	# 最小视距（A1）：先按名义距离求出相机所在水平点，若离地净空不足 CAM_CLEAR_H 就拉远 d。
+	# 只改距离、不改方向 → 实际俯角（视线角）不变，画面仍在同一视线方向上。
+	if _ground_h.is_valid() and sr > 0.01:
+		var nom := focus - f * d
+		var need := float(_ground_h.call(nom.x, nom.z)) + CAM_CLEAR_H
+		if d * sr < need:
+			d = need / sr
 	camera.position = focus - f * d
 	# 远裁面跟随视距（2026-10-22）：竖屏/窄窗口取景会算到 500m+ 视距，固定 far=400 会把整张地图裁掉只剩背景色。
 	# 横屏正常取景约 76m，far 保持 400 不变；只在需要时放宽，避免无谓的深度精度损失。
 	camera.far = maxf(400.0, d * 2.2)
+	# 景深远界随视距：近看时虚化起点前移，远看时放宽（默认视距 ≈86.6 → ≈73.6，接近原 80）。
+	if _dof_attrs != null:
+		_dof_attrs.dof_blur_far_distance = clampf(d * 0.85, 40.0, 240.0)
 	if shake_t > 0.0 and shake_amp > 0.0:
 		var k := shake_t / maxf(shake_dur, 0.001)
 		var a := shake_amp * k * k # 二次衰减：收尾干脆，不留尾巴
@@ -580,6 +606,14 @@ func _map_visible_ratio() -> float:
 ## 阈值分两档：居中占比 ≥ MAP_MIN_VISIBLE 时用 MAP_MIN_VISIBLE（0.75）；
 ## 拉远到地图小于屏幕时退化为「居中占比的 90%」，保证居中仍达标、平移不被锁死。
 func _move_focus(v: Vector3) -> void:
+	# 近距/低俯角（A1）：可见面积二分会让焦点被推出场外，且判定不再可靠；直接硬夹到地图邻域。
+	if _zoom < 0.6 or _pitch < deg_to_rad(30.0):
+		focus += v
+		var near_limit := HALF + 4.0
+		focus.x = clampf(focus.x, -near_limit, near_limit)
+		focus.z = clampf(focus.z, -near_limit, near_limit)
+		_apply_cam()
+		return
 	var limit := HALF + 24.0
 	focus += v
 	focus.x = clampf(focus.x, -limit, limit)
@@ -612,6 +646,22 @@ func _move_focus(v: Vector3) -> void:
 
 # ---- 相机操控（纯表现层；不进模拟、不进指纹）----
 
+## 设置俯角（rad）：先夹到 [PITCH_MIN_DEG, PITCH_MAX_DEG]，再重摆相机。
+func set_pitch(rad: float) -> void:
+	_pitch = clampf(rad, deg_to_rad(PITCH_MIN_DEG), deg_to_rad(PITCH_MAX_DEG))
+	_apply_cam()
+
+
+## 俯角增量（rad；正 = 抬高俯角，负 = 压低）
+func pitch_by(delta: float) -> void:
+	set_pitch(_pitch + delta)
+
+
+## 当前俯角（rad；供探针/门面读取）
+func pitch() -> float:
+	return _pitch
+
+
 ## WASD 平移：dir_x 右为正（D 键），dir_y 前为正（W 键），dist 为世界单位。
 func pan_world(dir_x: float, dir_y: float, dist: float) -> void:
 	if camera == null or _dist <= 0.0:
@@ -634,11 +684,22 @@ func pan_pixels(dx: float, dy: float) -> void:
 	_move_focus(fh * (dy * upp) - rt * (dx * upp))
 
 
-## 滚轮缩放（绕 focus 拉近/拉远；倍率夹在 [0.6, 1.8]；纯表现层，不进模拟/指纹）。
+## 滚轮缩放（绕 focus 拉近/拉远；倍率夹在 [ZOOM_MIN, ZOOM_MAX] = 0.16–1.8；纯表现层，不进模拟/指纹）。
+## 缩放-俯角联动曲线（2026-10-27 用户裁定）：zoom∈[ZOOM_MIN,1] 线性映射 20°→42°，
+## zoom∈[1,ZOOM_MAX] 线性映射 42°→60°。zoom=1（取景默认档）恒 42°，默认观感/截图口径不变。
+func _pitch_for_zoom(z: float) -> float:
+	if z <= 1.0:
+		var t: float = clampf((z - ZOOM_MIN) / (1.0 - ZOOM_MIN), 0.0, 1.0)
+		return deg_to_rad(lerpf(PITCH_NEAR_DEG, PITCH_DEG, t))
+	var t2: float = clampf((z - 1.0) / (ZOOM_MAX - 1.0), 0.0, 1.0)
+	return deg_to_rad(lerpf(PITCH_DEG, PITCH_FAR_DEG, t2))
+
+
 func zoom_by(factor: float) -> void:
 	if camera == null or _dist <= 0.0:
 		return
-	_zoom = clampf(_zoom * factor, 0.6, 1.8)
+	_zoom = clampf(_zoom * factor, ZOOM_MIN, ZOOM_MAX)
+	_pitch = _pitch_for_zoom(_zoom) # 缩放联动俯角：手动微调被下一次缩放覆盖
 	_apply_cam()
 
 

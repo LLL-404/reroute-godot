@@ -31,6 +31,7 @@ func _initialize() -> void:
 	preload("res://tests/test_world.gd").new().register(kit)
 	preload("res://tests/test_save.gd").new().register(kit)
 	preload("res://tests/test_verify.gd").new().register(kit)
+	preload("res://tests/test_command.gd").new().register(kit)
 
 	var ok := kit.run()
 	quit(0 if ok else 1)

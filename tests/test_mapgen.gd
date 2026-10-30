@@ -8,6 +8,19 @@ extends RefCounted
 func register(kit: TestKit) -> void:
 	kit.module("mapgen")
 
+	kit.test("dims-single-source", func():
+		# B1 尺寸单点化（2026-10-27 §11.48）：sim/视图/烘焙三处权威全部派生自 sim/dims.gd，
+		# 此用例锁死三源一致——翻尺寸只许改 Dims.MAP_N 一处。
+		var core_script := preload("res://game/view/view_core.gd")
+		var bp_script := preload("res://game/core/blueprint.gd")
+		kit.eq(Scenario.new().w, Dims.MAP_N, "scenario.w 派生自 Dims")
+		kit.eq(Scenario.new().h, Dims.MAP_N, "scenario.h 派生自 Dims")
+		kit.eq(int(core_script.CELL_N), Dims.MAP_N, "view_core.CELL_N 派生自 Dims")
+		kit.eq(core_script.HALF, Dims.MAP_HALF, "view_core.HALF 派生自 Dims")
+		kit.eq(bp_script.HALF, Dims.MAP_HALF, "blueprint.HALF 派生自 Dims")
+		kit.eq(bp_script.FINE_N, Dims.MAP_N * 2 + 1, "blueprint.FINE_N 派生自 Dims")
+		kit.eq(MapGen.N, Dims.MAP_N, "mapgen.N 派生自 Dims"))
+
 	kit.test("64-seed-sweep", func():
 		var sigs := {}
 		var salt_max := 0
@@ -19,21 +32,21 @@ func register(kit: TestKit) -> void:
 			kit.ok(sc.resample_salt < 48, "种子 %d 落入 legacy 兜底 salt=%d" % [s, sc.resample_salt])
 			if sc.resample_salt > salt_max:
 				salt_max = sc.resample_salt
-			# 核心位：自由但留边（CORE_MARGIN=6）
-			kit.ok(sc.core.x >= 6 and sc.core.x <= 57 and sc.core.y >= 6 and sc.core.y <= 57, "core 越域 s=%d" % s)
+			# 核心位：自由但留边（CORE_MARGIN=6；128 图域 6..121，2026-10-27 扩容重钉）
+			kit.ok(sc.core.x >= 6 and sc.core.x <= 121 and sc.core.y >= 6 and sc.core.y <= 121, "core 越域 s=%d" % s)
 			# 出怪口：2..3 主口 + 盆地口（末位）
 			kit.ok(sc.spawns.size() >= 3 and sc.spawns.size() <= 4, "出怪口数越域 s=%d" % s)
 			if sc.spawns.size() == 4:
 				n3 += 1
-			# 主口贴周缘带（x/y 任一距边 ≤14）
+			# 主口贴周缘带（x/y 任一距边 ≤28 = MapGen.PERIPH_BAND；128 图重钉）
 			for j in sc.spawns.size() - 1:
 				var sp: Vector2i = sc.spawns[j]
-				kit.ok(sp.x <= 14 or sp.x >= 49 or sp.y <= 14 or sp.y >= 49, "主口离周缘 s=%d #%d %s" % [s, j, str(sp)])
+				kit.ok(sp.x <= 28 or sp.x >= 99 or sp.y <= 28 or sp.y >= 99, "主口离周缘 s=%d #%d %s" % [s, j, str(sp)])
 			# 盆地：整矩形场内 + 尺寸域 + 插口棱中（水平边看 x、垂直边看 y，两端各避 2 格）
 			var b: Rect2i = sc.basin_rect
-			kit.ok(b.position.x >= 2 and b.position.x + b.size.x <= 62 \
-				and b.position.y >= 2 and b.position.y + b.size.y <= 62, "盆地越域 s=%d" % s)
-			kit.ok(b.size.x >= 6 and b.size.x <= 9 and b.size.y >= 7 and b.size.y <= 9, "盆地尺寸越域 s=%d" % s)
+			kit.ok(b.position.x >= 2 and b.position.x + b.size.x <= 126 \
+				and b.position.y >= 2 and b.position.y + b.size.y <= 126, "盆地越域 s=%d" % s)
+			kit.ok(b.size.x >= 6 and b.size.x <= 9 and b.size.y >= 8 and b.size.y <= 9, "盆地尺寸越域 s=%d" % s)
 			var pm_x: bool = sc.basin_plug.x >= b.position.x + 2 and sc.basin_plug.x <= b.position.x + b.size.x - 3
 			var pm_y: bool = sc.basin_plug.y >= b.position.y + 2 and sc.basin_plug.y <= b.position.y + b.size.y - 3
 			kit.ok(pm_x != pm_y, "插口非棱中 s=%d %s" % [s, str(sc.basin_plug)])
@@ -41,9 +54,10 @@ func register(kit: TestKit) -> void:
 			kit.eq(sc.mid_ore.size(), 5, "中场矿数 s=%d" % s)
 			kit.eq(sc.basin_ore.size(), 12, "盆地矿数 s=%d" % s)
 			kit.eq(sc.ore_cells.size(), 17, "矿总表 s=%d" % s)
-			# 地貌带上界复核（生成器自检带 [60,220]/[20,160]‰ → 计数留宽验）
-			kit.ok(sc._rock_arr.size() >= 150 and sc._rock_arr.size() <= 900, "岩群计数越界 s=%d n=%d" % [s, sc._rock_arr.size()])
-			kit.ok(sc._hill_arr.size() >= 50 and sc._hill_arr.size() <= 640, "微丘计数越界 s=%d n=%d" % [s, sc._hill_arr.size()])
+			# 地貌计数复核（128 重钉：生成器自检带 岩[40,220]‰/丘[20,160]‰ × 内圈面积≈15.8k
+			# → 自检域 ≈岩[623,3493]/丘[312,2540]，计数留宽验；64 种子实测 岩[630,1588]/丘[1239,1826]）
+			kit.ok(sc._rock_arr.size() >= 600 and sc._rock_arr.size() <= 3600, "岩群计数越界 s=%d n=%d" % [s, sc._rock_arr.size()])
+			kit.ok(sc._hill_arr.size() >= 300 and sc._hill_arr.size() <= 2600, "微丘计数越界 s=%d n=%d" % [s, sc._hill_arr.size()])
 			# 布局签名多样性（核心 + 主口数 + 盆地 + 插口）
 			sigs["%s|%d|%s|%s" % [str(sc.core), sc.spawns.size(), str(b), str(sc.basin_plug)]] = true
 		kit.ok(salt_max < 48, "盐峰 %d 越自由窗" % salt_max)
@@ -147,8 +161,8 @@ func register(kit: TestKit) -> void:
 	kit.test("rock-cells-readonly", func():
 		var sc := Scenario.new(20261004)
 		var rc: Array = sc.rock_cells()
-		# 2026-10-25 矿台渐变带扩圈后重钉（d≤2 净空挤掉 1 格岩）
-		kit.eq(rc.size(), 216, "快照岩群数")
+		# 128 图扩容重钉（矿台渐变带扩圈 d≤2 净空口径沿用）
+		kit.eq(rc.size(), 827, "快照岩群数")
 		rc.clear()
-		kit.eq(sc.rock_cells().size(), 216, "快照为拷贝（清空不回写）")
+		kit.eq(sc.rock_cells().size(), 827, "快照为拷贝（清空不回写）")
 		kit.ok(Scenario.new().rock_cells().is_empty(), "默认种子（历史路径）岩群空"))

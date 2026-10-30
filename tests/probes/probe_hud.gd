@@ -46,26 +46,27 @@ func _initialize() -> void:
 	check(absf(hud.hp_bar.value - 950.0) < 0.01, "血条跟随")
 	world.core["hp"] = 1200
 
-	# ---- 3. 波次文案与横幅调度 ----
+	# ---- 3. 波次文案与横幅调度（2026-10-28 波表 +2340：首波 60→2400，末波 5080→7420，end 6400→8740）----
 	world.tick_count = 0
 	hud.update(world)
-	check(hud.wave_text.text == "下一波 3s · 虫群×1", "波次文案 t=0（得 " + hud.wave_text.text + "）")
+	check(hud.wave_text.text == "下一波 120s · 虫群×1", "波次文案 t=0（得 " + hud.wave_text.text + "）")
 	world.tick_count = 50
 	hud.update(world)
-	check(hud.wave_text.text == "下一波 1s · 虫群×1", "波次文案 t=50（得 " + hud.wave_text.text + "）")
-	world.tick_count = 60
+	check(hud.wave_text.text == "下一波 118s · 虫群×1", "波次文案 t=50（得 " + hud.wave_text.text + "）")
+	world.tick_count = 2400
 	hud.update(world)
-	check(hud.banner_root.visible == true, "横幅出现 t=60")
+	check(hud.banner_root.visible == true, "横幅出现 t=2400")
 	check(hud.banner_title.text == "第 1 波", "横幅标题（得 " + hud.banner_title.text + "）")
 	check(hud.banner_sub.text == "虫群×1", "横幅编成（得 " + hud.banner_sub.text + "）")
-	world.tick_count = 100
+	world.tick_count = 2440
 	hud.update(world)
-	check(hud.banner_root.visible == false, "横幅到期熄灭 t=100")
+	check(hud.banner_root.visible == false, "横幅到期熄灭 t=2440（BANNER_LIFE 40）")
 	world.route_opened = true
 	hud.update(world)
 	check(hud.banner_root.visible == true and hud.banner_title.text == "暗门已开", "暗门横幅登场")
-	# 终局倒计时文案：波次表放完（tick 5200 > 末波 5080）才走"暗门已开 · 终局"分支
-	world.tick_count = 5200
+	# 终局倒计时文案：波次表放完（tick 7540 > 末波 7420）才走"暗门已开 · 终局"分支；
+	# 8740-7540 = 1200 tick = 1:00（与旧口径 6400-5200 等量平移）
+	world.tick_count = 7540
 	hud.update(world)
 	check(hud.wave_text.text == "暗门已开 · 终局 1:00", "终局倒计时文案（得 " + hud.wave_text.text + "）")
 	# v2.4：教学提示条驻留 20s 后自动淡出（hit_regions 随之让位）
@@ -77,7 +78,7 @@ func _initialize() -> void:
 	check(hud.supply_text.text == "250", "供给文本更新")
 	var c_flash: Color = hud.supply_text.get_theme_color("font_color")
 	check(c_flash.is_equal_approx(hud.DARK["text"]), "供给变化闪白")
-	world.tick_count = 5300 # 向前推进（tick 单调增是真实对局口径；须 > 终局段 5200）
+	world.tick_count = 7560 # 向前推进（tick 单调增是真实对局口径；须 > 终局段 7540，且 > 供给变化 7540+闪 5）
 	hud.update(world)
 	var c_idle: Color = hud.supply_text.get_theme_color("font_color")
 	check(c_idle.is_equal_approx(hud.DARK["supply"]), "闪烁结束回金色")
@@ -145,9 +146,9 @@ func _initialize() -> void:
 	# ---- 7b. 指挥坞与成本可负担性（v2.4）----
 	check(hud.dock != null and hud.dock.size.x > 0.0 and hud.dock.size.y > 0.0, "指挥坞已建")
 	check(hud.dock.get_rect().encloses(Rect2(hud.mode_buttons["hero"].position, hud.mode_buttons["hero"].size)), "坞面板包住末行")
-	# v2.5：3 行 2/3/3 图标格（图标子节点随钮换色）
-	check(hud.dock_rows.size() == 3 and hud.dock_rows[0].size() == 2 and hud.dock_rows[1].size() == 3 and hud.dock_rows[2].size() == 3, "指挥盘 2/3/3 格")
-	check(hud.row_icon.size() == 8 and hud.row_icon["wall"].kind == "wall", "八格图标齐备")
+	# v2.5：3 行 3/3/3 图标格（2026-10-28 开局成长改造：行 1 增矿工钮 worker；图标子节点随钮换色）
+	check(hud.dock_rows.size() == 3 and hud.dock_rows[0].size() == 3 and hud.dock_rows[1].size() == 3 and hud.dock_rows[2].size() == 3, "指挥盘 3/3/3 格")
+	check(hud.row_icon.size() == 9 and hud.row_icon["wall"].kind == "wall", "九格图标齐备")
 	hud.set_mode("tower")
 	check(hud.row_icon["tower"].color.is_equal_approx(hud.DARK["on_gold"]), "选中格图标转深字")
 	hud.set_mode("wall")
@@ -271,8 +272,9 @@ func _initialize() -> void:
 	check(hud.top_bar.position.is_equal_approx(Vector2(48, 24)), "安全区·顶栏起点内缩")
 	check(absf(hud.top_bar.size.x - (1280.0 - 48.0 - 60.0)) < 0.5, "安全区·顶栏宽度内缩")
 	var mbtn: Button = hud.mode_buttons["wall"]
-	# 首行 2 格居中：坞内偏移 = PAD + (内容宽 - 2 格宽) / 2
-	var row_w0: float = 2.0 * hud.CELL_W + hud.CELL_GAP
+	# 首行 3 格（开局成长改造 DOCK_ROWS 3/3/3，hud.gd:46）：行宽 = 3×格宽 + 2×格距 = 盘内容宽
+	# → 居中偏移 0，模式盘首钮 x = dock.x + PAD×S（旧口径 v2.5 首行 2 格已废止）
+	var row_w0: float = 3.0 * hud.CELL_W + 2.0 * hud.CELL_GAP
 	var want_bx: float = hud.dock.position.x + (hud.DOCK_PAD + (hud.DOCK_W - hud.DOCK_PAD * 2.0 - row_w0) * 0.5) * hud.S
 	check(absf(mbtn.position.x - want_bx) < 0.5, "安全区·模式盘右缘内缩")
 	hud.set_safe_insets_override(Vector4(-1.0, -1.0, -1.0, -1.0))

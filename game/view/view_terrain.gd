@@ -117,6 +117,7 @@ var core: ViewCoreScript
 var field_root: Node3D
 
 var grid: Grid = null
+var _core_cell := Vector2i(-1, -1) # 当局核心格（由 apply_blueprint 的 anchor 提供）；-1,-1 = 无（固定图路径）
 var field_h: PackedFloat64Array
 var height_fn: Callable
 var cur_palette: Dictionary = {}
@@ -127,6 +128,9 @@ var heat_on := false
 var heat_root: Node3D = null
 var heat_rev := -1
 var heat_mats: Array = []
+
+var fog_root: Node3D = null # 战争迷雾遮罩层（开局成长改造；rebuild_fog 重建，clear_fog 拆）
+var fog_mats: Array = []
 
 var _stat_field := 0
 var _stat_plain := 0
@@ -198,6 +202,12 @@ func apply_blueprint(bp: Dictionary, bp_seed: int, anchor: Dictionary = {}) -> v
 	var composed: Array = Blueprint.compose(bp, bp_seed, anchor)
 	height_fn = composed[0]
 	cur_palette = composed[1]
+	# 核心格：每次应用蓝图都重置；无 anchor 的固定图路径保持 -1（行为不变）
+	_core_cell = Vector2i(-1, -1)
+	if anchor.has("core"):
+		var cc = anchor["core"]
+		if cc is Vector2i:
+			_core_cell = cc
 	_gate_pts = []
 	var gp: Variant = anchor.get("gate_pts", [])
 	if typeof(gp) == TYPE_ARRAY and not gp.is_empty():
@@ -424,6 +434,8 @@ func _fill_field_region() -> void:
 # ---- 场内六棱板网格（2026-10-17 H3）----
 
 ## 每格视觉顶（蓝图高 + 模拟层 1.2m/级 + SOLID 抬升 + 边框围界）→ _cell_top。
+## 核心格是建筑占地、不是岩顶：不加 SOLID_BUMP，并在并台后钉到落地高度（模型按 ground_y 摆位，
+## 渲染顶面必须同高，否则核心恒陷进地面约 1.6m）。
 func _compute_cell_top() -> void:
 	if field_h.is_empty():
 		return
@@ -436,11 +448,15 @@ func _compute_cell_top() -> void:
 			if grid != null:
 				t += float(grid.get_h(x, y)) * core.H_STEP
 				if grid.at(x, y) == Grid.SOLID:
-					t += SOLID_BUMP
+					if Vector2i(x, y) != _core_cell:
+						t += SOLID_BUMP
 					if x == 0 or y == 0 or x == n - 1 or y == n - 1:
 						t += RIM_BUMP * _rim_scale(x, y) # 边框围界（视觉围合；周向起伏 + 南口豁口）
 			_cell_top[y * n + x] = t
 	_merge_plate_tops()
+	# 核心格顶面覆盖为落地高度（与 ground_y 一致）：盖掉并台量化/任何抬升
+	if _core_cell.x >= 0 and _core_cell.x < n and _core_cell.y >= 0 and _core_cell.y < n:
+		_cell_top[_core_cell.y * n + _core_cell.x] = ground_y(_core_cell.x, _core_cell.y)
 
 
 ## 自然地形并台（B，2026-10-21 扩为全场）：
@@ -899,7 +915,8 @@ func _rebuild_hex() -> void:
 			var h0 := field_h[y * n + x]
 			var low: bool = grid != null and grid.get_h(x, y) < 0 # 负高度坑底（色阶走低洼沙色，不刷岩面）
 			var base := verts.size()
-			var r0 := _top_ripple(w.x, w.z)
+			var prs := _pad_ripple_scale(x, y)
+			var r0 := _top_ripple(w.x, w.z) * prs
 			verts.append(Vector3(w.x, t + r0.x, w.z))
 			nrms.append((nrm + Vector3(-r0.y, 0.0, -r0.z)).normalized())
 			cols.append(_field_color_at(w.x, w.z, h0, solid, slope, low))
@@ -920,7 +937,7 @@ func _rebuild_hex() -> void:
 				var c2: Vector2 = core.HEX_CORNERS[i]
 				var ax := w.x + c2.x * 0.55
 				var az := w.z + c2.y * 0.55
-				var r1 := _top_ripple(ax, az)
+				var r1 := _top_ripple(ax, az) * prs
 				verts.append(Vector3(ax, t + r1.x * 0.62, az))
 				nrms.append((nrm + Vector3(-r1.y, 0.0, -r1.z) * 0.62).normalized())
 				cols.append(_field_color_at(ax, az, lerpf(h0, hc, 0.55), solid, slope, low))
@@ -1220,6 +1237,13 @@ func _rim_scale(x: int, y: int) -> float:
 	return s
 
 
+## 核心平台（核心格 + 6 邻）顶面波纹系数：0 = 纯平，1 = 正常起伏
+func _pad_ripple_scale(x: int, y: int) -> float:
+	if _core_cell.x < 0:
+		return 1.0
+	return 0.0 if Grid.hex_dist(x, y, _core_cell.x, _core_cell.y) <= 1 else 1.0
+
+
 ## 顶面缓丘：世界坐标连续双波（返回 (高度, d/dx, d/dz)）。
 ## 角点必须始终为 0（调用方只取中心/内环 → 相邻格共享角点高度恒等，无拼板台阶）。
 func _top_ripple(px: float, pz: float) -> Vector3:
@@ -1370,7 +1394,8 @@ func heat_enabled() -> bool:
 
 
 ## 按 grid.rev 重建热层板（rev 变 = 落墙/挖矿/填挖）。
-func rebuild_heat(pworld: World) -> void:
+## pfog 非空时跳过未探索格（开局成长改造：热层不泄露迷雾外的怪路）。
+func rebuild_heat(pworld: World, pfog = null) -> void:
 	if heat_root != null:
 		heat_root.free()
 		heat_root = null
@@ -1399,7 +1424,7 @@ func rebuild_heat(pworld: World) -> void:
 	for y in core.CELL_N:
 		for x in core.CELL_N:
 			var d := dists[y * core.CELL_N + x]
-			if d >= 0:
+			if d >= 0 and (pfog == null or pfog.is_explored(x, y)):
 				var band := mini(HEAT_N, 1 + (d * HEAT_N) / (maxd + 1))
 				var arr: Array = groups[band - 1]
 				var w := core.cell_to_world(x, y)
@@ -1413,10 +1438,64 @@ func rebuild_heat(pworld: World) -> void:
 		_stat_heat += arr2.size()
 
 
+# ---- 战争迷雾遮罩层（开局成长改造 2026-10-28）----
+
+## 拆雾层（探针关雾 / 重建前的清理）
+func clear_fog() -> void:
+	if fog_root != null:
+		fog_root.free()
+		fog_root = null
+
+
+## 按 fog 位图重建遮罩（entities.sync 每帧在 fog.dirty 时调用；消费后清 dirty）。
+## 两档：未探索=近黑矮棱柱（scale_y 2.4，盖顶面 + 岩块/草丛/一级台阶）；已探索未视野=半暗平板。
+## 格顶取 _cell_top（含 SOLID 抬升）——ground_y 不含岩石抬升，用它雾板会沉进岩石里。
+## 未探索悬崖的更高侧立面不遮（纯地形剪影，不泄露矿/敌情）；全部板不投影、优先级压过热层。
+func rebuild_fog(pfog) -> void:
+	if _cell_top.size() < core.CELL_N * core.CELL_N:
+		return # 地形还没建：保持 dirty，entities.sync 下帧重试
+	if fog_root != null:
+		fog_root.free()
+		fog_root = null
+	pfog.dirty = false
+	if not pfog.enabled or pfog.n <= 0:
+		return
+	var dark: Array = []
+	var dim: Array = []
+	var cn := core.CELL_N
+	for y in cn:
+		for x in cn:
+			var idx := y * cn + x
+			var w := core.cell_to_world(x, y)
+			if pfog.is_explored(x, y):
+				if pfog.is_visible(x, y):
+					continue
+				dim.append([Vector3(w.x, _cell_top[idx] + 0.08, w.z), Vector3(1.02, 0.06, 1.02)])
+			else:
+				dark.append([Vector3(w.x, _cell_top[idx] + 0.08 + 1.2, w.z), Vector3(1.02, 2.4, 1.02)])
+	if fog_mats.is_empty():
+		# 未探索近黑（不透明读作"没去过"）/ 已探索半暗（读作"去过但现在没盯着"）
+		fog_mats.append(core.make_flat_material(Color(0.012, 0.018, 0.028, 0.97), 2))
+		fog_mats.append(core.make_flat_material(Color(0.008, 0.012, 0.02, 0.5), 1))
+	core._ensure_hex_plate()
+	fog_root = Node3D.new()
+	fog_root.name = "Fog"
+	host.add_child(fog_root)
+	var mmi_dark := core._make_multimesh(dark, fog_mats[0], core.hex_plate_mesh)
+	mmi_dark.name = "Dark"
+	mmi_dark.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	fog_root.add_child(mmi_dark)
+	var mmi_dim := core._make_multimesh(dim, fog_mats[1], core.hex_plate_mesh)
+	mmi_dim.name = "Dim"
+	mmi_dim.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	fog_root.add_child(mmi_dim)
+
+
 # ---- 拾取 ----
 
-## 拾取：屏幕坐标（像素）→ 战场格。地面有程序化起伏：先按 y=0 求交，取命中格高度再求交，
-## 两轮收敛（地势 ±1.2m、俯角 ≥35° 足够）。返回 Vector2i(-1,-1) = 未命中。
+## 拾取：屏幕坐标（像素）→ 战场格。地面有程序化起伏：先按 y=0 求交，再取命中格地面高度重求交，
+## 最多迭代 4 轮（低俯角 18° 下也能收敛）。返回 Vector2i(-1,-1) = 未命中。
+## 收敛判据：连续两轮命中同一格（高度不再变化），或 t 变化 < 0.001m（视为不再前进）。
 ## 注意：Godot 的 project_ray_* 取像素坐标（非 0..1 归一化；传小值会被当左上角像素 → 射线全偏）。
 func pick_cell(screen_x: float, screen_y: float) -> Vector2i:
 	if core.camera == null:
@@ -1429,13 +1508,23 @@ func pick_cell(screen_x: float, screen_y: float) -> Vector2i:
 	var t := -origin.y / dir.y
 	if t < 0.0:
 		return Vector2i(-1, -1)
-	for _i in 2:
+	var prev_cell := Vector2i(-1, -1) # 上一轮命中格；用于「连续同格」收敛判定
+	for _i in 4:
 		var cell := core.world_to_cell(origin.x + dir.x * t, origin.z + dir.z * t)
+		# 连续两轮同一格：地面高度已稳定，直接收敛
+		if cell == prev_cell:
+			break
+		prev_cell = cell
 		var gh := 0.0
 		if cell.x >= 0:
 			gh = ground_y(cell.x, cell.y)
 		var t2 := -(origin.y - gh) / dir.y
-		if t2 <= 0.0:
+		# t 必须为正（交点在射线前方）；变化极小则已到不动点，退出防震荡
+		if t2 <= 0.0 or absf(t2 - t) < 0.001:
 			break
 		t = t2
-	return core.world_to_cell(origin.x + dir.x * t, origin.z + dir.z * t)
+	var hit_point := origin + dir * t
+	# 相机后方守卫：最终交点落在相机背后（如地图边缘/极低俯角）视为未命中
+	if core.camera.is_position_behind(hit_point):
+		return Vector2i(-1, -1)
+	return core.world_to_cell(hit_point.x, hit_point.z)

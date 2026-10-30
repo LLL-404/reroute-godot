@@ -133,6 +133,19 @@ mouse_filter = 2
 [node name="CostLabel" type="Label" parent="ActionLayer/BtnTower"]
 mouse_filter = 2
 
+[node name="BtnWorker" type="Button" parent="ActionLayer"]
+
+[node name="Icon" type="Control" parent="ActionLayer/BtnWorker"]
+mouse_filter = 2
+script = ExtResource("2_icon")
+
+[node name="NameLabel" type="Label" parent="ActionLayer/BtnWorker"]
+text = "矿工"
+mouse_filter = 2
+
+[node name="CostLabel" type="Label" parent="ActionLayer/BtnWorker"]
+mouse_filter = 2
+
 [node name="BtnDig" type="Button" parent="ActionLayer"]
 
 [node name="Icon" type="Control" parent="ActionLayer/BtnDig"]

@@ -65,6 +65,9 @@ func _draw() -> void:
 		"hero":
 			draw_circle(Vector2(12, 7.4), 3.2, color)
 			draw_arc(Vector2(12, 20), 7.2, PI, TAU, 20, color, lw)
+		"worker":
+			draw_line(Vector2(8, 20), Vector2(15, 8), color, lw) # 镐柄
+			draw_arc(Vector2(12, 10), 7.4, PI * 1.05, PI * 1.95, 16, color, lw) # 镐头弧
 		"sun":
 			draw_circle(Vector2(12, 12), 3.8, color)
 			for i in 8:

@@ -29,14 +29,18 @@ func _initialize() -> void:
 	var world = main.world
 
 	# 锚点：坐标映射的独立字面量检查（其余对拍以此为基）
-	cmp_v3(view.cell_to_world(0, 0), Vector3(-31.5, 0.0, -31.5), "cell_to_world(0,0)")
-	cmp_v3(view.cell_to_world(63, 63), Vector3(32.0, 0.0, 31.5), "cell_to_world(63,63)（六边 odd-r：63 为奇行 +0.5 右移；原方形口径 31.5 已废止）")
+	cmp_v3(view.cell_to_world(0, 0), Vector3(-63.5, 0.0, -63.5), "cell_to_world(0,0)（128 口径：-(MAP_HALF-0.5)；64 时代 -31.5 已废止）")
+	cmp_v3(view.cell_to_world(127, 127), Vector3(64.0, 0.0, 63.5), "cell_to_world(127,127)（六边 odd-r：127 为奇行 +0.5 右移；64 时代 (63,63)→(32.0,31.5) 已废止）")
 
 	# ---- 布置：2 单位 + 墙 + 塔（远处）+ 英雄移动 ----
+	# 探针沙盒白盒补供给：本闸只测视觉同步不测经济；建造/地形脚本（墙5+10、塔60、
+	# 填15×3、挖10×3）按旧口径 300 供给设计，2026-10-28 新经济开局 60 会在塔处断流
+	# （45<60 被拒）并把地形段饿死（supply=0 < LOWER_COST 10）。
+	world.supply = 300
 	var spawn_a := _find_free(world, 24, 8, 40, 16, [])
 	var spawn_b := _find_free(world, 24, 8, 40, 16, [spawn_a])
 	var wall_cell := _find_free(world, 24, 8, 40, 16, [spawn_a, spawn_b])
-	var tower_cell := _find_free(world, 0, 0, 63, 63, [], Vector2i(32, 8), 900)
+	var tower_cell := _find_free(world, 0, 0, Dims.MAP_N - 1, Dims.MAP_N - 1, [], Vector2i(32, 8), 900)
 	var hero_target := _find_free(world, 26, 20, 38, 34, [])
 	check(spawn_a.x >= 0 and spawn_b.x >= 0, "出生格扫描")
 	check(wall_cell.x >= 0, "墙格扫描")
@@ -198,18 +202,18 @@ func _initialize() -> void:
 	var exp_total := 0
 	var maxd := 0
 	var dists := []
-	dists.resize(64 * 64)
-	for y in 64:
-		for x in 64:
+	dists.resize(world.sc.w * world.sc.h)
+	for y in world.sc.h:
+		for x in world.sc.w:
 			var d: int = world.field.dist_at(x, y)
 			if d > maxd:
 				maxd = d
-			dists[y * 64 + x] = d
+			dists[y * world.sc.w + x] = d
 			if d >= 0:
 				exp_total += 1
 	cmp_int(int(view.debug_stats()["heat"]), exp_total, "热层实例数")
 	var band_counts := [0, 0, 0, 0, 0, 0]
-	for i in 64 * 64:
+	for i in world.sc.w * world.sc.h:
 		var d2: int = dists[i]
 		if d2 >= 0:
 			var band: int = mini(6, 1 + (d2 * 6) / (maxd + 1))
@@ -228,7 +232,7 @@ func _initialize() -> void:
 	_terrain_edge_check(view, world, main)
 
 	# ---- 视觉虫群（纯表现层）：同格 3 只必须错开，且偏移不越出格心安全半径 ----
-	var swarm_cell := _find_free(world, 0, 0, 63, 63, [], Vector2i(32, 32), 400)
+	var swarm_cell := _find_free(world, 0, 0, Dims.MAP_N - 1, Dims.MAP_N - 1, [], Vector2i(int(Dims.MAP_HALF), int(Dims.MAP_HALF)), 400)
 	check(swarm_cell.x >= 0, "虫群分离测试格扫描")
 	if swarm_cell.x >= 0:
 		var sid0: int = world.units.size()
@@ -517,8 +521,8 @@ func _terrain_edge_check(view, world, main) -> void:
 	var v1: PackedVector3Array = arr1[Mesh.ARRAY_VERTEX]
 	var i1: PackedInt32Array = arr1[Mesh.ARRAY_INDEX]
 	var expect := _edge_verts_expect(T, CELL_N)
-	cmp_int(v1.size(), expect, "顶点账目（独立重算：顶面 13×4096（A8 中心+内环+角环）+ 逐边 strip×4×(双面×2)）")
-	check(v1.size() > 4096 * 7 and v1.size() < 4096 * 64, "顶点数量级可控（%d）" % v1.size())
+	cmp_int(v1.size(), expect, "顶点账目（独立重算：顶面 13×16384（A8 中心+内环+角环）+ 逐边 strip×4×(双面×2)）")
+	check(v1.size() > 16384 * 7 and v1.size() < 16384 * 64, "顶点数量级可控（%d）" % v1.size())
 	T._rebuild_field()
 	var arr2: Array = T._hex.mesh.surface_get_arrays(0)
 	var v2: PackedVector3Array = arr2[Mesh.ARRAY_VERTEX]
@@ -547,6 +551,23 @@ func _terrain_edge_check(view, world, main) -> void:
 		cmp_int(T.edge_kind_at(me.x, me.y, me.z), 0, "同层高差边 = 石阶（微差）")
 	_plate_merge_check(T, world, CELL_N)
 	_pit_check(view, world, CELL_N, hstep, main)
+
+	# 核心视觉齐平（2026-10-26）：核心格是 SOLID 建筑占地，不加岩台抬升；渲染顶面必须等于模型落地高度
+	var core_cell: Vector2i = world.sc.core
+	var top_c: float = T._cell_top[core_cell.y * CELL_N + core_cell.x]
+	var gy_c: float = view.ground_y(core_cell.x, core_cell.y)
+	check(absf(top_c - gy_c) <= 0.01, "核心格渲染顶面与落地高度齐平（top=%.3f gy=%.3f）" % [top_c, gy_c])
+	# 6 邻保持各自地形；允许 ≤40cm 边缘高差（并台量化 + 天然起伏；64 时代 16 种子实测最大
+	# 0.2567 → 旧带 0.30。128 图默认图实测 0.346：邻顶被并台量化到 1.50（=10×PLATE_STEP），
+	# 核心顶为未量化 raw 1.154，差 0.346 —— 统计带按 128 实测重定）
+	var over_max := -INF
+	for k in 6:
+		var nx: int = Grid.nx(core_cell.x, core_cell.y, k)
+		var ny: int = Grid.ny(core_cell.x, core_cell.y, k)
+		if nx < 0 or ny < 0 or nx >= CELL_N or ny >= CELL_N:
+			continue
+		over_max = maxf(over_max, T._cell_top[ny * CELL_N + nx] - gy_c)
+	check(over_max <= 0.40, "核心 6 邻不高于落地高度 40cm（最大 %.3f）" % over_max)
 
 
 ## 负高度坑（2026-10-23 Task6）：连挖两级到 -2 → 顶面/贴地下沉 2×H_STEP；
@@ -646,6 +667,10 @@ func _plate_merge_check(T, world, CELL_N: int) -> void:
 		for x in range(1, CELL_N - 1):
 			if world.grid.at(x, y) != Grid.SOLID or world.grid.get_h(x, y) != 0:
 				continue
+			if Vector2i(x, y) == world.sc.core:
+				continue # 核心格是建筑占地（2026-10-26 起渲染不加岩台抬升、不量化），不属"岩顶"；
+						 # 专属齐平检查在本函数之后。64 时代旧图核心格 h≠0 被 h 过滤侥幸跳过，
+						 # 128 重排后 seed 20261004 核心 (41,75) 落 h=0 格，不排除会假红。
 			n_cells += 1
 			var t: float = T._cell_top[y * CELL_N + x]
 			if absf(t / step - roundf(t / step)) > 1e-4:

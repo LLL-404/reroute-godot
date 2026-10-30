@@ -150,13 +150,12 @@ func _init(psc: Scenario, pseed: int, prebuild_budget: int = 2048) -> void:
 	wave_driver = Callable()
 	tower_cap = -1
 	place_building(Sim.B_CORE, sc.core.x, sc.core.y)
-	# 工人与矿格余量（核心落地后出生：第 id 个可行邻格，都是核心山头通行格）
+	# 工人与矿格余量（开局成长改造 2026-10-28：工人改购买制，开局 0 工人——
+	# 开局 60 供给的主分支选择：买 2 矿工或建 1 塔）
 	ore_left = {}
 	for i in sc.ore_cells.size():
 		ore_left[grid.idx(sc.ore_cells[i].x, sc.ore_cells[i].y)] = Sim.ORE_STORE
 	workers = []
-	for i in Sim.WORKER_COUNT:
-		_spawn_worker(i)
 
 
 ## 同步重建两个主场流场（初始化/存档前调用；运行时走摊销补场）
@@ -181,7 +180,11 @@ func _rebuild_field_sync() -> void:
 func apply_command(cmd: Dictionary) -> void:
 	if outcome != RUNNING:
 		return
-	var kind: String = cmd["kind"]
+	# 未知命令 = Nop（既有契约，test_world「unknown-command-nop」锁死）：这里不硬崩。
+	# 拼写防护放在命令构造端——生产代码走 Command 工厂，剧本走 Command.make 的 assert。
+	var kind: String = cmd.get("kind", "")
+	if not (kind in Command.ALL_KINDS):
+		return
 	if kind == "dig":
 		if grid.at(cmd["x"], cmd["y"]) == Grid.COVER:
 			grid.set_cell(cmd["x"], cmd["y"], Grid.OPEN)
@@ -223,6 +226,8 @@ func apply_command(cmd: Dictionary) -> void:
 	elif kind == "spawn":
 		if grid.passable(cmd["x"], cmd["y"]):
 			spawn_unit(cmd["x"], cmd["y"], cmd.get("speed", 0), cmd.get("kind_id", Sim.E_SWARM))
+	elif kind == "worker":
+		try_buy_worker()
 	# 未知命令 = Nop：零副作用
 
 
@@ -395,6 +400,22 @@ func try_undo_build(x: int, y: int) -> void:
 	b["hp"] = 0
 
 
+## 购买矿工（开局成长改造 2026-10-28）：扣 WORKER_COST 出生在核心邻格。
+## 守卫全在变更前：达 WORKER_CAP / 供给不足 / 无出生位 → 零副作用。
+## 出生位用 _spawn_worker 的既有扫描（第 id 个可行邻格，确定性、无随机源）。
+func try_buy_worker() -> void:
+	if workers.size() >= Sim.WORKER_CAP or supply < Sim.WORKER_COST:
+		return
+	var passables := 0
+	for k in 6:
+		if grid.passable(Grid.nx(sc.core.x, sc.core.y, k), Grid.ny(sc.core.x, sc.core.y, k)):
+			passables += 1
+	if passables == 0:
+		return # 核心六邻全堵（理论不可达，防御性守卫）：不扣钱
+	supply -= Sim.WORKER_COST
+	_spawn_worker(workers.size())
+
+
 # ---------------- 一 tick ----------------
 
 ## 推进一步模拟（固定次序：摊销补场 → 波次 → 移动 → 英雄 → 塔/施工 → 清尸 → 判定）
@@ -466,7 +487,7 @@ func emit_wave_at(pos: Vector2i, kind: int, count: int) -> void:
 		if cell.x < 0:
 			continue # 无处可放：跳过该单位，且不消耗 Rng（母体同口径）
 		var spd: int = Sim.ENEMIES[kind - 1]["speed_ticks"] + rng.next_int(2)
-		apply_command({ "kind": "spawn", "x": cell.x, "y": cell.y, "speed": spd, "kind_id": kind })
+		apply_command(Command.spawn(cell.x, cell.y, spd, kind))
 
 
 ## 出生点螺旋找空格（r=0..3 切比雪夫环）；找不到回退场；再找不到返回 (-1,-1)。
@@ -775,8 +796,10 @@ func _worker_to_core(w: Dictionary) -> void:
 ## TO_MINE：沿单目标场走向矿格；到场转 MINING；目标失效/不可达时重挑
 func _worker_to_mine(w: Dictionary) -> void:
 	var t := int(w["target"])
+	# 目标失效口径（开局成长改造 2026-10-28 起COVER 不再失效——那是自动挖开的合法目标）：
+	# 无目标 / 矿已采空 / 矿格被建筑压住（SOLID）
 	var t_bad: bool = t < 0 or int(ore_left.get(grid.idx(sc.ore_cells[t].x, sc.ore_cells[t].y), 0)) <= 0 \
-			or grid.at(sc.ore_cells[t].x, sc.ore_cells[t].y) != Grid.OPEN
+			or grid.at(sc.ore_cells[t].x, sc.ore_cells[t].y) == Grid.SOLID
 	if t_bad and int(w["pick_rev"]) != grid.rev:
 		_worker_pick(w)
 		w["pick_rev"] = grid.rev
@@ -784,16 +807,21 @@ func _worker_to_mine(w: Dictionary) -> void:
 	if t < 0:
 		return # 无活可干：每个 tick 都直接待命，不能继续读取 ore_cells[-1]
 	if int(w["field_rev"]) != grid.rev or int(w["field_goal"]) != t:
-		var f := FlowField.new(grid, false, 2) # 工人爬 2 级（虫群口径）
-		f.begin([Vector2i(sc.ore_cells[t].x, sc.ore_cells[t].y)])
-		while not f.done():
-			f.step(1 << 30)
+		var f := _worker_field_for(t)
 		w["field"] = f
 		w["field_rev"] = grid.rev
 		w["field_goal"] = t
 	var wf: FlowField = w["field"]
 	var d: int = wf.dist_at(int(w["x"]), int(w["y"]))
 	if d == 0:
+		var c: Vector2i = sc.ore_cells[t]
+		if grid.at(c.x, c.y) == Grid.COVER:
+			# 全自动开采（开局成长改造 2026-10-28）：站邻格自己挖开露矿。
+			# 不触发 route_opened——开门口径只认玩家 dig；密封盆地插口工人不可达，
+			# 此为防御性语义钉。挖开即重挑（下 tick 已开矿按正常口径入选）。
+			grid.set_cell(c.x, c.y, Grid.OPEN)
+			w["target"] = -1
+			return
 		w["state"] = Sim.W_MINING
 		w["mine_cd"] = 0
 	elif d < 0:
@@ -805,29 +833,60 @@ func _worker_to_mine(w: Dictionary) -> void:
 		_worker_step(w, wf)
 
 
-## 选目标：已挖开且有余量的矿格中，取工人位置 hex_dist 最近者（平手取 ore_cells 序）；
-## 逐个建单目标场校验可达性（密封盆地/被墙隔断的自动跳过），首个可达者即目标。
+## 目标矿格的工人场（爬 2 级，虫群口径）：已挖开→矿格本身；
+## 未挖开（COVER 挡行军）→其可通行邻格组，工人站邻格开挖。矿格被建筑压住
+## 或六邻全封时场不可达（dist 恒 -1），由调用方按待命处理。
+func _worker_field_for(t: int) -> FlowField:
+	var c: Vector2i = sc.ore_cells[t]
+	var f := FlowField.new(grid, false, 2)
+	if grid.at(c.x, c.y) == Grid.OPEN:
+		f.begin([c])
+	else:
+		var goals: Array = []
+		for k in 6:
+			var nx: int = Grid.nx(c.x, c.y, k)
+			var ny: int = Grid.ny(c.x, c.y, k)
+			if grid.passable(nx, ny):
+				goals.append(Vector2i(nx, ny))
+		f.begin(goals)
+	while not f.done():
+		f.step(1 << 30)
+	return f
+
+
+## 选目标（开局成长改造 2026-10-28 两轮口径）：第一轮只挑已挖开且有余量的矿；
+## 全部不可达时第二轮退而求其次挑未挖开的矿（工人走去邻格自己挖开——全自动）。
+## 两轮同序：工人位置 hex_dist 最近，平手取 ore_cells 序；逐个建场校验可达性
+## （密封盆地/被墙隔断/六邻全封的自动跳过），首个可达者即目标。
 func _worker_pick(w: Dictionary) -> void:
 	w["target"] = -1
-	var cand: Array = []
-	for i in sc.ore_cells.size():
-		var c: Vector2i = sc.ore_cells[i]
-		if int(ore_left.get(grid.idx(c.x, c.y), 0)) > 0 and grid.at(c.x, c.y) == Grid.OPEN:
-			cand.append([Grid.hex_dist(int(w["x"]), int(w["y"]), c.x, c.y), i])
-	cand.sort_custom(func(a, b): return a[0] < b[0] or (a[0] == b[0] and a[1] < b[1]))
-	for cd in cand:
-		var i: int = cd[1]
-		var c: Vector2i = sc.ore_cells[i]
-		var f := FlowField.new(grid, false, 2)
-		f.begin([c])
-		while not f.done():
-			f.step(1 << 30)
-		if f.dist_at(int(w["x"]), int(w["y"])) >= 0:
-			w["target"] = i
-			w["field"] = f
-			w["field_rev"] = grid.rev
-			w["field_goal"] = i
-			return
+	for pass_n in 2:
+		var want_open: bool = pass_n == 0
+		var cand: Array = []
+		for i in sc.ore_cells.size():
+			var c: Vector2i = sc.ore_cells[i]
+			if int(ore_left.get(grid.idx(c.x, c.y), 0)) > 0 and (grid.at(c.x, c.y) == Grid.OPEN) == want_open:
+				cand.append([Grid.hex_dist(int(w["x"]), int(w["y"]), c.x, c.y), i])
+		cand.sort_custom(func(a, b): return a[0] < b[0] or (a[0] == b[0] and a[1] < b[1]))
+		for cd in cand:
+			var i: int = cd[1]
+			var c: Vector2i = sc.ore_cells[i]
+			# 未挖开矿的快速拒绝：六邻全封（含被建筑压死）连站位都没有
+			if grid.at(c.x, c.y) != Grid.OPEN:
+				var has_spot := false
+				for k in 6:
+					if grid.passable(Grid.nx(c.x, c.y, k), Grid.ny(c.x, c.y, k)):
+						has_spot = true
+						break
+				if not has_spot:
+					continue
+			var f := _worker_field_for(i)
+			if f.dist_at(int(w["x"]), int(w["y"])) >= 0:
+				w["target"] = i
+				w["field"] = f
+				w["field_rev"] = grid.rev
+				w["field_goal"] = i
+				return
 
 
 ## 工人步进（步点口径同单位：(tick+id) % 速度 == 0）；沿给定场走一格（落点必须可通行）

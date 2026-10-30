@@ -7,12 +7,26 @@ extends Node3D
 # 本文件只做两件事：_ready 组装；把组件公共面原样转发为 view.xxx（外部访问零变化）。
 # 视图层只读模拟状态，绝不回写；插值用的 prev 格存组件里，不进指纹。
 
+# ---- 公开面（外部可调）：main / tests / probes 全部按 view.xxx 访问，不直接碰组件 ----
+# 转发方法 26 个：sync / debug_stats / cell_to_world / ground_y / pick_cell / world_to_screen /
+# camera_pan / camera_pan_pixels / camera_rotate / camera_zoom / camera_pitch_by / camera_pitch /
+# shake / update_shake / apply_blueprint / apply_video / build_terrain / set_heat / heat_enabled /
+# show_ghost / set_focus / set_hero_range / play_sound / bgm / bgm_settlement / stop_all_audio。
+# 转发属性（只读；is_ore / on_float 可写）：unit_nodes / building_nodes / cover_nodes / death_fx /
+# hero / ring / ghost / ghost_mi / ghost_alive / preview_root / range_root / wall_edges / focus_ring /
+# camera / mats / field_root / heat_root / sfx_players / sfx_amb / bgm_player / bgm_on / sfx_log。
+# 常量：H_STEP / Z_YAW。组件引用：core / audio / terrain / entities。
+# ---- 探针契约（改名会破 tests/probes，勿动）----
+# 上面方法与常量被 39 个探针共 140+ 处直读；view_core 的 cell_to_world / make_material 是
+# 四组件共用工具，不得私有化。
+
 const ModelsScript = preload("res://game/view/models.gd")
 
 const ViewCoreScript = preload("res://game/view/view_core.gd")
 const ViewAudioScript = preload("res://game/view/view_audio.gd")
 const ViewTerrainScript = preload("res://game/view/view_terrain.gd")
 const ViewEntitiesScript = preload("res://game/view/view_entities.gd")
+const FogScript = preload("res://game/view/fog_of_war.gd")
 
 # 常量转发（探针经 view.H_STEP / view.Z_YAW 读取，语义同原 view.gd）
 const H_STEP := ViewCoreScript.H_STEP
@@ -22,15 +36,20 @@ var core: ViewCoreScript
 var audio: ViewAudioScript
 var terrain: ViewTerrainScript
 var entities: ViewEntitiesScript
+var fog: FogScript # 战争迷雾位图（开局成长改造 2026-10-28）：纯视图层；探针置 enabled=false 关闭
 
 
 ## 视图启动：组装四组件 + 首局 canyon 地貌 + 相机取景 + 音频（顺序 = 原单文件初始化）
 func _ready() -> void:
 	# 组件组装（顺序 = 原单文件初始化顺序：模型管理器 → 渲染基建 → 场地根 → 首局地貌 → 相机 → 音频）
+	fog = FogScript.new()
 	core = ViewCoreScript.new(self)
 	audio = ViewAudioScript.new(self)
 	terrain = ViewTerrainScript.new(self, core)
+	# 地面高度回调注入（A1 最小视距用）：view_core 不直接引用 view_terrain，只持有 Callable。
+	core.set_ground_height(Callable(terrain, "ground_h"))
 	entities = ViewEntitiesScript.new(self, core, terrain, audio)
+	entities.fog = fog # 战争迷雾位图注入（units 闸门/热层遮蔽用）
 
 	entities.models = ModelsScript.new() # 真实资产模型管理器
 	core.setup()
@@ -93,6 +112,16 @@ func camera_rotate(delta: float) -> void:
 ## 相机滚轮缩放（倍率因子；夹在 [0.6, 1.8]；→ view_core）
 func camera_zoom(factor: float) -> void:
 	core.zoom_by(factor)
+
+
+## 相机俯仰（中键上下拖；增量弧度，正 = 更陡；→ view_core）
+func camera_pitch_by(delta: float) -> void:
+	core.pitch_by(delta)
+
+
+## 当前俯仰角（弧度；中键拖拽/探针读取用；→ view_core）
+func camera_pitch() -> float:
+	return core.pitch()
 
 
 ## 震屏（B3，amp 米 / dur 秒；只平移不旋转；探针运行时由 main 关闭）

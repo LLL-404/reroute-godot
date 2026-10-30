@@ -43,9 +43,9 @@ func register(kit: TestKit) -> void:
 	kit.test("encode-fields", func():
 		var w := World.new(Scenario.new(), 123)
 		var d := Save.encode(w, 2)
-		kit.eq(d["format"], 7, "格式版本")
+		kit.eq(d["format"], Save.FORMAT_VERSION, "格式版本（随 sim/save.gd 单源走）")
 		kit.eq(d["schema"], Canon.STATE_SCHEMA, "状态版本")
-		kit.eq(d["sc_fp"], 2137177064, "剧本指纹 0x7f62bbe8（末波阶段化）")
+		kit.eq(d["sc_fp"], 1694319073, "剧本指纹 0x650e7561（2026-10-28 Terrain 2.1 地形校准后重钉）")
 		kit.eq(d["meta"]["run"], 2, "meta.run")
 		kit.eq(d["meta"]["tick"], 0, "meta.tick")
 		kit.eq(d["meta"]["wave"], 0, "meta.wave 开局 0")
@@ -64,6 +64,31 @@ func register(kit: TestKit) -> void:
 		kit.eq(w2.supply, w.supply, "供给")
 		kit.eq(w2.seed, w.seed, "seed")
 		kit.eq(w2.route_opened, w.route_opened, "开门态"))
+
+	kit.test("roundtrip-workers", func():
+		# 开局成长改造：工人数可变（0..WORKER_CAP），存档往返按实际数量还原
+		var w := World.new(Scenario.new(), 31)
+		kit.eq(w.workers.size(), 0, "0 工人开局")
+		var d0: Dictionary = _json_rt(Save.encode(w, 1))
+		var w0 := Save.decode(d0)
+		kit.ok(w0 != null and w0.workers.size() == 0, "0 工人往返")
+		w.supply = 999 # 白盒：连购到上限
+		for _i in Sim.WORKER_CAP:
+			w.apply_command(Command.worker())
+		kit.eq(w.workers.size(), Sim.WORKER_CAP, "买满 6")
+		var d6: Dictionary = _json_rt(Save.encode(w, 1))
+		var w6 := Save.decode(d6)
+		kit.ok(w6 != null and w6.workers.size() == Sim.WORKER_CAP, "6 工人往返")
+		kit.eq(w6.workers[3]["id"], w.workers[3]["id"], "工人 id 保留")
+		kit.eq(w6.workers[3]["carrying"], w.workers[3]["carrying"], "载量保留")
+		# 旧档兼容形态：2 工人（原免费开局口径）必须照常可读
+		var d2: Dictionary = _json_rt(Save.encode(w, 1))
+		var w2w := Save.decode(d2)
+		kit.ok(w2w != null, "2 工人旧档形态可读")
+		w2w.workers = w2w.workers.slice(0, 2) # 白盒：模拟旧档的 2 工人形态
+		var d_old: Dictionary = _json_rt(Save.encode(w2w, 1))
+		var w_old := Save.decode(d_old)
+		kit.ok(w_old != null and w_old.workers.size() == 2, "旧档 2 工人照常还原"))
 
 	kit.test("roundtrip-mid", func():
 		var w := World.new(Scenario.new(), 777)

@@ -123,6 +123,10 @@ func _initialize() -> void:
 	cmp_int(int(world.hero["ty"]), stand.y, "英雄已收到前往命令 y")
 
 	# ---- 4. 放塔（单点语义：拖拽也只落起点一格；施工进度 0.12 起步）----
+	# 探针沙盒白盒补供给：本闸测输入闭环不测经济，塔段断言全为相对差值。
+	# 2026-10-28 新经济开局 60，前面墙 5+墙线 20 已花 25（剩 35 < 塔 60 被拒）；
+	# 旧口径 300 供给时代无此问题。补到 300。
+	world.supply = 300
 	main.set_mode("tower")
 	var sup3: int = world.supply
 	var n_before_t: int = world.buildings.size()
@@ -161,9 +165,28 @@ func _initialize() -> void:
 	await _click(view, cellE)
 	cmp_int(int(world.hero["tx"]), cellE.x, "英雄目标 x")
 	cmp_int(int(world.hero["ty"]), cellE.y, "英雄目标 y")
+	# 白盒逐 tick 把英雄真实走到 cellE 再测原地拒收。原因有二（均 128 图实测）：
+	# ① 本探针自始 set_process(false)（无 tick 干扰），英雄不会自行走位；
+	# ② 128 图英雄出生格紧贴核心北侧（seed 20261004：(41,73) vs core (41,75)），
+	#    默认南向取景下出生格基点被核心台地遮挡、拾取回邻格（pick(41,73)→(42,74)），
+	#    「点自身格」会点成邻格而假红。cellE 在可点击盒内，走到后拾取精确。
+	var hx0: int = int(world.hero["x"])
+	var hy0: int = int(world.hero["y"])
+	var walks := 0
+	while walks < 4000 and not (int(world.hero["x"]) == cellE.x and int(world.hero["y"]) == cellE.y):
+		world.tick()
+		view.sync(world)
+		walks += 1
 	var tx_keep: int = int(world.hero["tx"])
 	await _click(view, Vector2i(int(world.hero["x"]), int(world.hero["y"])))
 	cmp_int(int(world.hero["tx"]), tx_keep, "原地目标被拒")
+	# 走回原位还原现场：§12 会对 cellE 挖低，英雄压格会被零副作用卫兵拒绝而假红
+	world.apply_command({ "kind": "hero", "x": hx0, "y": hy0 })
+	var walks_back := 0
+	while walks_back < 4000 and not (int(world.hero["x"]) == hx0 and int(world.hero["y"]) == hy0):
+		world.tick()
+		view.sync(world)
+		walks_back += 1
 
 	# ---- 7. TAB 热层 ----
 	check(view.heat_enabled() == false, "初始热层关")
@@ -341,33 +364,159 @@ func _initialize() -> void:
 		pin_n += 1
 	check(pin_n >= 6, "至少 6 格完成回拾（实际 %d）" % pin_n)
 
-	# ---- 15. 滚轮缩放（拉近/还原/限位 0.6–1.8；暂停与 HUD 区冻结）----
+	# ---- 15. 滚轮缩放（缩放值上下限 0.16–1.8；暂停与 HUD 区冻结）----
+	# 2026-10-26 重钉：下限 0.16 时最小视距会沿视线把相机拉远，y 不再随 zoom 线性变化，
+	# 旧「相机 y 比值」口径在下限附近失效 → 上下限直接断言 core._zoom。
 	var yz0: float = cam.global_position.y
 	await _wheel_at(vp_size * Vector2(0.5, 0.5), true)
 	var yz1: float = cam.global_position.y
 	check(yz1 < yz0 - 1.0, "滚轮拉近（y %.1f→%.1f）" % [yz0, yz1])
 	await _wheel_at(vp_size * Vector2(0.5, 0.5), false)
 	var yz2: float = cam.global_position.y
-	check(absf(yz2 - yz0) < 1.0, "滚轮拉远还原（y %.1f，基准 %.1f）" % [yz2, yz0])
-	for _i in 14:
+	# 还原带 2.5：滚轮步进不对称（上滚×0.9/下滚×1.1，camera_control.gd wheel_step）→
+	# 单步往返 zoom 落 0.99；叠加 2026-10-27 缩放-俯角联动（view_core._pitch_for_zoom）
+	# → y 残差 ≈ _dist×1%×sin42°。64 时代 _dist≈86 残差 ~0.9 过旧带 1.0；128 图 _dist≈173
+	# 实测 y 115.9→114.2（残差 1.7，闭式验算 171.6×sin41.74°=114.2 吻合）→ 带重定 2.5。
+	check(absf(yz2 - yz0) < 2.5, "滚轮拉远还原（y %.1f，基准 %.1f）" % [yz2, yz0])
+	for _i in 20:
 		await _wheel_at(vp_size * Vector2(0.5, 0.5), true)
-	var yz3: float = cam.global_position.y
+	check(is_equal_approx(view.core._zoom, 0.16), "拉近限位 0.16（zoom %.4f）" % view.core._zoom)
 	await _wheel_at(vp_size * Vector2(0.5, 0.5), true)
-	var yz4: float = cam.global_position.y
-	check(absf(yz4 - yz3) < 0.3 and yz3 < yz0 * 0.75, "拉近限位 0.6（y %.1f→%.1f）" % [yz3, yz4])
-	for _i in 24:
+	check(is_equal_approx(view.core._zoom, 0.16), "下限再上滚仍 0.16（zoom %.4f）" % view.core._zoom)
+	# 0.16×1.1^n 需要 n=26 才够夹到 1.8（24 次只有 1.576）：数值口径必须给足次数
+	for _i in 26:
 		await _wheel_at(vp_size * Vector2(0.5, 0.5), false)
-	var yz5: float = cam.global_position.y
+	check(is_equal_approx(view.core._zoom, 1.8), "拉远限位 1.8（zoom %.4f）" % view.core._zoom)
 	await _wheel_at(vp_size * Vector2(0.5, 0.5), false)
-	var yz6: float = cam.global_position.y
-	check(absf(yz6 - yz5) < 0.5 and yz5 > yz0 * 1.5, "拉远限位 1.8（y %.1f→%.1f）" % [yz5, yz6])
+	check(is_equal_approx(view.core._zoom, 1.8), "上限再下滚仍 1.8（zoom %.4f）" % view.core._zoom)
 	main.paused = true
 	await _wheel_at(vp_size * Vector2(0.5, 0.5), true)
-	check(absf(cam.global_position.y - yz6) < 0.2, "暂停中滚轮冻结")
+	check(is_equal_approx(view.core._zoom, 1.8), "暂停中滚轮冻结（zoom %.4f）" % view.core._zoom)
 	main.paused = false
-	await _wheel_at(Vector2(vp_size.x - 30.0, 400.0), false)
-	check(absf(cam.global_position.y - yz6) < 0.2, "HUD 区滚轮冻结")
-	finish("INPUT", 21)
+	# HUD 区冻结：先把缩放摆回中段（停在 1.8 时下滚本来就不变，断言会变成空转）
+	view.core._zoom = 1.0
+	view.core._apply_cam()
+	await _wheel_at(_hud_pt(main), false)
+	check(is_equal_approx(view.core._zoom, 1.0), "HUD 区滚轮冻结（zoom %.4f）" % view.core._zoom)
+
+	# ---- 16. 俯角（18°..78° 夹取；实测视线角；最小视距只沿视线后退不改角度）----
+	view.core.set_pitch(deg_to_rad(18.0))
+	check(absf(rad_to_deg(view.core.pitch()) - 18.0) < 0.02, "俯角 set_pitch(18°) 读回 %.3f°" % rad_to_deg(view.core.pitch()))
+	var dir_p: Vector3 = (view.core.focus - cam.global_position).normalized()
+	var ang18: float = rad_to_deg(atan2(-dir_p.y, sqrt(dir_p.x * dir_p.x + dir_p.z * dir_p.z)))
+	check(absf(ang18 - 18.0) < 0.05, "俯角 18° 实际视线角 %.3f°" % ang18)
+	var clr18: float = cam.global_position.y - view.terrain.ground_h(cam.global_position.x, cam.global_position.z)
+	check(clr18 >= 9.9, "俯角 18° 相机净空 %.2fm ≥9.9" % clr18)
+	view.core.set_pitch(deg_to_rad(42.0))
+	view.core._zoom = 1.0
+	view.core._apply_cam()
+	var y_nom42: float = view.core._dist * sin(deg_to_rad(42.0))
+	check(absf(cam.global_position.y - y_nom42) < 0.05, "俯角 42° 默认档不触发最小视距（y %.3f / 名义 %.3f）" % [cam.global_position.y, y_nom42])
+	view.core.set_pitch(deg_to_rad(5.0))
+	check(absf(rad_to_deg(view.core.pitch()) - 18.0) < 0.02, "俯角 5° 夹到 18°（%.3f°）" % rad_to_deg(view.core.pitch()))
+	view.core.set_pitch(deg_to_rad(85.0))
+	check(absf(rad_to_deg(view.core.pitch()) - 78.0) < 0.02, "俯角 85° 夹到 78°（%.3f°）" % rad_to_deg(view.core.pitch()))
+	var dir_h: Vector3 = (view.core.focus - cam.global_position).normalized()
+	var ang78: float = rad_to_deg(atan2(-dir_h.y, sqrt(dir_h.x * dir_h.x + dir_h.z * dir_h.z)))
+	check(absf(ang78 - 78.0) < 0.05, "俯角 78° 实际视线角 %.3f°" % ang78)
+	# 近景（zoom 0.16）+ 18°：净空靠「沿视线后退」补足，俯角必须仍是 18°
+	view.core._zoom = 0.16
+	view.core.set_pitch(deg_to_rad(18.0))
+	var clr_near: float = cam.global_position.y - view.terrain.ground_h(cam.global_position.x, cam.global_position.z)
+	check(clr_near >= 9.9, "俯角 近景 18° 相机净空 %.2fm ≥9.9（最小视距生效）" % clr_near)
+	var dir_n: Vector3 = (view.core.focus - cam.global_position).normalized()
+	var ang_near: float = rad_to_deg(atan2(-dir_n.y, sqrt(dir_n.x * dir_n.x + dir_n.z * dir_n.z)))
+	check(absf(ang_near - 18.0) < 0.05, "俯角 近景实际视线角仍 18°（%.3f°）" % ang_near)
+	# 复位默认档（42° / zoom1 / yaw0）
+	view.core._zoom = 1.0
+	view.core.yaw = 0.0
+	view.core.set_pitch(deg_to_rad(42.0))
+	await _frames(1)
+
+	# ---- 17. 中键拖拽（上下调俯角 / 左右调偏航；HUD 区与左键拖拽期间不启动）----
+	# 灵敏度 0.005 rad/px：向下拖 100px = +0.5rad（俯角变陡），向右拖 = 偏航变大（跟手）。
+	view.core.yaw = 0.0
+	view.core._zoom = 1.0
+	view.core.set_pitch(deg_to_rad(42.0))
+	var cp: Vector2 = vp_size * Vector2(0.5, 0.5)
+	var mb_p0: float = rad_to_deg(view.core.pitch())
+	await _mmb(cp, true)
+	await _mmb_move(cp + Vector2(0.0, 100.0))
+	var mb_p1: float = rad_to_deg(view.core.pitch())
+	await _mmb(cp + Vector2(0.0, 100.0), false)
+	check(absf((mb_p1 - mb_p0) - rad_to_deg(0.5)) < 0.1, "中键下拖 100px 俯角 +28.65°（%.2f→%.2f）" % [mb_p0, mb_p1])
+	var mb_y0: float = view.core.yaw
+	await _mmb(cp, true)
+	await _mmb_move(cp + Vector2(-80.0, 0.0))
+	var mb_y1: float = view.core.yaw
+	await _mmb(cp + Vector2(-80.0, 0.0), false)
+	check(absf((mb_y1 - mb_y0) + 0.4) < 0.01, "中键右拖 -80px 偏航 -0.4rad（%.4f）" % (mb_y1 - mb_y0))
+	var mb_h0: float = rad_to_deg(view.core.pitch())
+	await _mmb_drag(_hud_pt(main), Vector2(0.0, 100.0))
+	check(absf(rad_to_deg(view.core.pitch()) - mb_h0) < 0.01, "HUD 区中键不调俯角（%.2f°）" % rad_to_deg(view.core.pitch()))
+	main.drag_start = Vector2i(24, 24)
+	var mb_d0: float = rad_to_deg(view.core.pitch())
+	await _mmb_drag(cp, Vector2(0.0, 100.0))
+	check(absf(rad_to_deg(view.core.pitch()) - mb_d0) < 0.01, "左键拖拽占用时中键不调俯角（%.2f°）" % rad_to_deg(view.core.pitch()))
+	main.drag_start = Vector2i(-1, -1)
+	await _mmb(cp, true)
+	await _rmb_tap(cp)
+	check(main.camera_control.mmb == true, "右键点按不清中键拖拽态")
+	var mb_r0: float = view.core.pitch()
+	await _mmb_move(cp + Vector2(0.0, -50.0))
+	var mb_r1: float = view.core.pitch()
+	await _mmb(cp + Vector2(0.0, -50.0), false)
+	check(absf((mb_r0 - mb_r1) - 0.25) < 0.05, "中键上拖 50px 俯角 -0.25rad（%.3f→%.3f）" % [mb_r0, mb_r1])
+
+	# ---- 18. 低角拾取回环（18°/30°/42° × 平坦/崖壁/盆地/边缘格）----
+	# 崖壁/盆地取「钉扎视角下顶面真实可见」的代表格：全图极值格在低角钉扎视角常被前方地形遮挡，
+	# 遮挡不是拾取缺陷——拿「必须回到被遮挡的极值格」当判据本身是错的 oracle，故先按可见性筛代表格。
+	# 筛选口径（固定顺序、确定性）：行优先遍历候选，崖壁 = 地面高 ≥3.5 且南侧 hex 邻格（y+1/y+2）
+	# 低 ≥1.0（朝镜头方向有落差面）；盆地 = 地面高 ≤0.5；候选须在 18°/30°/42° 三角度都回拾为自身。
+	var cliff_cands: Array = []
+	var basin_cands: Array = []
+	for yy in world.sc.h:
+		for xx in world.sc.w:
+			var gyy: float = view.ground_y(xx, yy)
+			if gyy >= 3.5 and _south_drop(view, xx, yy, 1.0):
+				cliff_cands.append(Vector2i(xx, yy))
+			if gyy <= 0.5:
+				basin_cands.append(Vector2i(xx, yy))
+	var cliff_cell: Vector2i = await _visible_rep(view, cliff_cands)
+	var basin_cell: Vector2i = await _visible_rep(view, basin_cands)
+	if cliff_cell.x < 0:
+		fail("崖壁类无三角度都可见的代表格（候选 %d 格）" % cliff_cands.size())
+	if basin_cell.x < 0:
+		fail("盆地类无三角度都可见的代表格（候选 %d 格）" % basin_cands.size())
+	# 边缘格同口径可见性筛选：128 图北缘硬编码 (64,0) 的低角射线被内陆高台
+	# （实测 (64,8) top>7.1）截住，回拾 (64,8)/(64,4)/(63,3) —— 按本节 oracle 原则
+	# （遮挡不是拾取缺陷），边缘代表格改为行 0 上第一个三角度都回拾为自身的格。
+	var edge_cands: Array = []
+	for xx in range(2, Dims.MAP_N - 2):
+		edge_cands.append(Vector2i(xx, 0))
+	var edge_cell: Vector2i = await _visible_rep(view, edge_cands)
+	if edge_cell.x < 0:
+		fail("边缘类无三角度都可见的代表格（候选 %d 格）" % edge_cands.size())
+	var kinds: Array = [
+		["平坦", flat_cells[0]],
+		["崖壁", cliff_cell],
+		["盆地", basin_cell],
+		["边缘", edge_cell],
+	]
+	for pd in [18.0, 30.0, 42.0]:
+		for kind in kinds:
+			var cell: Vector2i = kind[1]
+			if cell.x < 0:
+				continue # 该类别无代表格：上面已 fail 记明，这里不再造伪断言
+			var back: Vector2i = await _pick_at(view, cell, pd)
+			check(back == cell, "俯角%.0f° 拾取回环·%s %s→%s" % [pd, kind[0], str(cell), str(back)])
+	# 复位默认档 + 焦点回地图中心
+	view.core._zoom = 1.0
+	view.core.yaw = 0.0
+	view.core.focus = Vector3.ZERO
+	view.core.set_pitch(deg_to_rad(42.0))
+	await _frames(1)
+	finish("INPUT", 47)
 
 
 ## 读取特定战场格中心处的六棱板顶面顶点高度（独立于 ground_y，防止自我对拍）。
@@ -568,7 +717,106 @@ func _rmb_drag(from: Vector2, delta: Vector2) -> void:
 	await process_frame
 
 
+## 中键按下/抬起（pos 处；中键 = 上下调俯角 / 左右调偏航）。
+func _mmb(pos: Vector2, pressed: bool) -> void:
+	var ev := InputEventMouseButton.new()
+	ev.button_index = MOUSE_BUTTON_MIDDLE
+	ev.pressed = pressed
+	ev.position = pos
+	get_root().push_input(ev)
+	await process_frame
+
+
+## 鼠标移动注入（中键拖拽用位置差算增量，故不填 relative）。
+func _mmb_move(pos: Vector2) -> void:
+	var mv := InputEventMouseMotion.new()
+	mv.position = pos
+	get_root().push_input(mv)
+	await process_frame
+
+
+## 中键拖拽：按下 → 移动 delta → 松开。
+func _mmb_drag(pos: Vector2, delta: Vector2) -> void:
+	await _mmb(pos, true)
+	await _mmb_move(pos + delta)
+	await _mmb(pos + delta, false)
+
+
+## 右键点按（按下 + 抬起，不移动；测中键/右键状态互不清）。
+func _rmb_tap(pos: Vector2) -> void:
+	var down := InputEventMouseButton.new()
+	down.button_index = MOUSE_BUTTON_RIGHT
+	down.pressed = true
+	down.position = pos
+	get_root().push_input(down)
+	await process_frame
+	var up := InputEventMouseButton.new()
+	up.button_index = MOUSE_BUTTON_RIGHT
+	up.pressed = false
+	up.position = pos
+	get_root().push_input(up)
+	await process_frame
+
+
+## HUD 点击排除区里、且**不压在控件上**的一点（右下角排除区贴右缘 4px 的空边）。
+## 两个坑：① v2.5 指挥坞挪到右下角后，「右侧空地 (vp.x-30, 400)」已不在 hit_regions 内，
+## 拿它测 HUD 冻结会空转；② 滚轮事件没有配对抬起，压在 STOP 控件（顶栏/HUD 钮）上会把 GUI
+## 鼠标抓取粘住，此后所有鼠标事件都被那个控件吞掉（实测 §17 中键整段静默）→ 只能选无控件处。
+func _hud_pt(main) -> Vector2:
+	var rs: Array = main.hud.hit_regions()
+	if rs.size() < 2:
+		return Vector2(640.0, 28.0)
+	var r: Rect2 = rs[1]
+	return Vector2(r.end.x - 4.0, r.position.y + 100.0)
+
+
 # ---------------- 扫描辅助 ----------------
+
+## 南侧（y+1 / y+2 行、hex 相邻）是否存在比本格低 ≥drop 的邻格：本格朝镜头方向有落差面 = 崖壁候选。
+func _south_drop(view, x: int, y: int, drop: float) -> bool:
+	var g0: float = view.ground_y(x, y)
+	for dy in [1, 2]:
+		for dx in range(-1, 2):
+			var nx: int = x + int(dx)
+			var ny: int = y + int(dy)
+			if nx < 0 or ny < 0 or nx >= Dims.MAP_N or ny >= Dims.MAP_N:
+				continue
+			if Grid.hex_dist(x, y, nx, ny) != 1:
+				continue
+			if g0 - view.ground_y(nx, ny) >= drop:
+				return true
+	return false
+
+
+## 钉扎位姿（focus=格心 / yaw=0 / zoom=1 / 指定俯角）后投影该格顶面并回拾；屏外或未命中返回 (-1,-1)。
+func _pick_at(view, cell: Vector2i, pitch_deg: float) -> Vector2i:
+	view.core._zoom = 1.0
+	view.core.yaw = 0.0
+	view.core.set_pitch(deg_to_rad(pitch_deg))
+	var w: Vector3 = view.cell_to_world(cell.x, cell.y)
+	view.core.focus = Vector3(w.x, 0.0, w.z)
+	view.core._apply_cam()
+	await _frames(2)
+	var sp: Vector2 = _sp_of(view, cell)
+	if sp.x < 0.0 or sp.x >= vp_size.x or sp.y < 0.0 or sp.y >= vp_size.y:
+		return Vector2i(-1, -1)
+	return view.pick_cell(sp.x, sp.y)
+
+
+## 行优先候选里第一个「18°/30°/42° 三角度都回拾为自身」的格（= 顶面真实可见）；没有则 (-1,-1)。
+func _visible_rep(view, cands: Array) -> Vector2i:
+	for cand in cands:
+		var c: Vector2i = cand
+		var ok := true
+		for pd in [18.0, 30.0, 42.0]:
+			var back: Vector2i = await _pick_at(view, c, pd)
+			if back != c:
+				ok = false
+				break
+		if ok:
+			return c
+	return Vector2i(-1, -1)
+
 
 ## 点击回环一致：unproject 落在屏内且 pick_cell 能还原该格（保证注入命中目标）。
 func _clickable(view, world, x: int, y: int) -> bool:
@@ -629,8 +877,8 @@ func _find_row(view, world, x0: int, y0: int, x1: int, y1: int, n: int, exclude:
 
 
 func _find_ore(view, world) -> Vector2i:
-	for y in 64:
-		for x in 64:
+	for y in world.sc.h:
+		for x in world.sc.w:
 			if world.grid.at(x, y) == Grid.COVER and world.sc.is_ore(x, y):
 				if _clickable_cover(view, x, y):
 					return Vector2i(x, y)

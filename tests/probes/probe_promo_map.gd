@@ -66,9 +66,9 @@ func _initialize() -> void:
 		ore[o.x * 1000 + o.y] = true
 
 	var lines: PackedStringArray = []
-	for y in 64:
+	for y in sc.h:
 		var row := ""
-		for x in 64:
+		for x in sc.w:
 			var ch := "."
 			if not w.grid.passable(x, y):
 				ch = "#"
@@ -85,7 +85,7 @@ func _initialize() -> void:
 					ch = "S"
 			row += ch
 		lines.append(row)
-	print("[MAP] rows y=0..63 (top=0):")
+	print("[MAP] rows y=0..%d (top=0):" % (sc.h - 1))
 	for i in lines.size():
 		print("%02d %s" % [i, lines[i]])
 	quit(0)

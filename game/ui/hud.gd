@@ -5,8 +5,27 @@ const UserSettings = preload("res://game/core/user_settings.gd")
 
 # HUD（移植 reroute/scripts/hud.lua）：顶栏（核心血条/波次倒计时/供给/热层钮/暂停钮）
 # + 右下操作模式列 + 技能钮 + 波次横幅 + 击杀赏金浮字池。
-# 纯展示层：只读模拟状态；按钮回调由 main 注入。布局为绝对像素（S 缩放口径同母版），
+# 纯展示层：只读模拟状态；按钮意图用 signal 往外发，由 main 接。布局为绝对像素（S 缩放口径同母版），
 # 窗口尺寸变化时 _layout() 重算 S 并重排；hit_regions() 是点击排除的唯一来源（main 消费）。
+
+# ---- 公开面（外部可调）----
+# 装配：setup()。其余公开方法 16 个：set_undo_vis / set_safe_insets_override / apply_ui_scale /
+# set_seed / hit_regions / set_visible_hud / set_mode / set_wall_price / dismiss_hint / hint /
+# set_heat_vis / float_bounty / banner / build_stats / update / reset。
+# ---- 探针契约（改名会破 tests/probes，勿动）----
+# 探针直读字段与常量：S / safe / DARK / TOP_H / TOP_STRIP_H / CORNER_W / CORNER_H / DOCK_W /
+# DOCK_PAD / DOCK_ROWS / top_bar / hp_bar / hp_text / wave_text / supply_text / row_name / row_cost /
+# row_icon / undo_panel / mode_buttons / skill_btn / heat_btn / pause_btn / dock / dock_rows /
+# floats / hint_panel / seed_label / banner_root / banner_title / banner_sub。
+# 要改名先跑 probe_hud / probe_input / probe_touch / probe_ui_flow。
+
+# ---- 外向信号（main 接这 6 条；HUD 不认识 main，也不存回调字典）----
+signal mode_selected(mode: String) # 点了某个操作模式钮（wall/tower/dig/fill/lower/remove/hero）
+signal pause_requested() # 顶栏暂停钮
+signal heat_toggled() # 顶栏热层钮
+signal skill_requested() # 盘内技能钮（英雄震荡波）
+signal undo_requested() # 撤销 pill
+signal worker_requested() # 矿工钮（开局成长改造：即时购买，不进模式）
 
 var S := 1.0
 
@@ -24,7 +43,7 @@ const DOCK_PAD := 10.0    # 盘内边距
 const DOCK_COLS := 3
 const DOCK_W := CELL_W * DOCK_COLS + CELL_GAP * (DOCK_COLS - 1) + DOCK_PAD * 2 # 252
 const DOCK_H := CELL_H * 3 + ROW_GAP * 2 + DOCK_PAD * 2 # 244
-const DOCK_ROWS := [["wall", "tower"], ["dig", "fill", "lower"], ["skill", "remove", "hero"]]
+const DOCK_ROWS := [["wall", "tower", "worker"], ["dig", "fill", "lower"], ["skill", "remove", "hero"]] # 开局成长改造：行 1 增矿工（3/3/3）
 const EDGE := 16.0
 const TOP_H := 56.0
 const TOP_STRIP_H := 64.0 # 点击排除条高（56 + 留白）
@@ -44,7 +63,6 @@ const BANNER_LIFE := 40 # 横幅驻留 2s（tick）
 # 探针与历史引用按 hud.DARK[key] 取色零改动；真源 = UiStyle.DARK（样式系统唯一口）。
 const DARK := UiStyle.DARK
 
-var callbacks: Dictionary = {}
 var mode := "wall"
 var CORE_HP := 1200
 var WAVE_NAMES := {}
@@ -104,9 +122,8 @@ func _ready() -> void:
 	get_viewport().size_changed.connect(_layout)
 
 
-## 由 main 注入回调并一次性构建：callbacks = { on_mode(m), on_pause(), on_heat(), on_skill() }
-func build(cb: Dictionary) -> void:
-	callbacks = cb
+## 一次性构建（main 建好节点后调；不再传回调字典——按钮意图走本类 signal）
+func setup() -> void:
 	var win := get_viewport().get_visible_rect().size
 	S = clampf(win.y / 816.0, 1.0, 1.6) * UserSettings.ui_scale
 	CORE_HP = int(Sim.BUILDINGS[Sim.B_CORE - 1]["hp"])
@@ -114,6 +131,7 @@ func build(cb: Dictionary) -> void:
 	MODE_LABELS = [
 		{ "key": "wall", "label": "墙", "cost": int(Sim.BUILDINGS[Sim.B_WALL - 1]["cost"]) },
 		{ "key": "tower", "label": "塔", "cost": int(Sim.BUILDINGS[Sim.B_TOWER - 1]["cost"]) },
+		{ "key": "worker", "label": "矿工", "cost": int(Sim.WORKER_COST) },
 		{ "key": "dig", "label": "挖矿", "cost": 0 },
 		{ "key": "fill", "label": "填高", "cost": int(Sim.FILL_COST) },
 		{ "key": "lower", "label": "挖低", "cost": int(Sim.LOWER_COST) },
@@ -225,15 +243,11 @@ func _bind_top_bar() -> void:
 
 	heat_btn = $TopBar/HeatButton
 	_style_button(heat_btn, 60.0 * S, 30.0 * S, 11.0 * S)
-	heat_btn.pressed.connect(func() -> void:
-		if callbacks.has("on_heat"):
-			callbacks["on_heat"].call())
+	heat_btn.pressed.connect(func() -> void: heat_toggled.emit())
 
 	pause_btn = $TopBar/PauseButton
 	_style_button(pause_btn, 60.0 * S, 30.0 * S, 11.0 * S)
-	pause_btn.pressed.connect(func() -> void:
-		if callbacks.has("on_pause"):
-			callbacks["on_pause"].call())
+	pause_btn.pressed.connect(func() -> void: pause_requested.emit())
 
 
 ## 绑定种子标签（Task 4）：右上角常驻小字；显隐并入 _toplevel，跟随 HUD 整体收起/复显。
@@ -284,6 +298,7 @@ func _bind_dock() -> void:
 	var specs := {
 		"wall": { "cost": int(Sim.BUILDINGS[Sim.B_WALL - 1]["cost"]), "icon": "wall" },
 		"tower": { "cost": int(Sim.BUILDINGS[Sim.B_TOWER - 1]["cost"]), "icon": "tower" },
+		"worker": { "cost": int(Sim.WORKER_COST), "icon": "worker" },
 		"dig": { "cost": 0, "icon": "ore" },
 		"fill": { "cost": int(Sim.FILL_COST), "icon": "fill" },
 		"lower": { "cost": int(Sim.LOWER_COST), "icon": "lower" },
@@ -298,14 +313,12 @@ func _bind_dock() -> void:
 			var btn: Button = get_node("ActionLayer/Btn" + str(key).capitalize())
 			_style_button(btn, CELL_W * S, CELL_H * S, 10.0 * S)
 			if key == "skill":
-				btn.pressed.connect(func() -> void:
-					if callbacks.has("on_skill"):
-						callbacks["on_skill"].call())
+				btn.pressed.connect(func() -> void: skill_requested.emit())
 				skill_btn = btn
+			elif key == "worker":
+				btn.pressed.connect(func() -> void: worker_requested.emit()) # 即时购买，不进模式
 			else:
-				btn.pressed.connect(func() -> void:
-					if callbacks.has("on_mode"):
-						callbacks["on_mode"].call(key))
+				btn.pressed.connect(func() -> void: mode_selected.emit(key))
 				mode_buttons[key] = btn
 			_toplevel.append(btn)
 			btn.set_meta("cost", int(spec["cost"]))
@@ -339,9 +352,7 @@ func _bind_undo() -> void:
 	undo_panel.add_theme_font_size_override("font_size", int(11.5 * S))
 	undo_panel.theme_type_variation = UiStyle.BTN_HUD_VAR
 	UiStyle.edge_dress(undo_panel, DARK["edge_hi"], UiStyle.RULE) # A1 光边
-	undo_panel.pressed.connect(func() -> void:
-		if callbacks.has("on_undo"):
-			callbacks["on_undo"].call())
+	undo_panel.pressed.connect(func() -> void: undo_requested.emit())
 
 
 ## 撤销窗显隐 + 倒计时文案。main 每 tick 传剩余秒（`on` 为 false 时无参调用）；
@@ -836,6 +847,22 @@ func update(world: World) -> void:
 	supply_text.text = str(world.supply)
 	supply_text.add_theme_color_override("font_color", DARK["text"] if flash else DARK["supply"])
 	_update_affordability(world.supply)
+	# 矿工钮（开局成长改造）：名称带在册数 ×n；达上限换「已满」灰字。不入 mode_buttons，
+	# 可负担性自着色（供给不足红、常态 muted）。文本变宽后手工重居中（同 set_wall_price 口径）。
+	if row_name.has("worker"):
+		var wn: int = world.workers.size()
+		var wnl: Label = row_name["worker"]
+		var wcl2: Label = row_cost["worker"]
+		var wtxt: String = "已满" if wn >= Sim.WORKER_CAP else str(Sim.WORKER_COST)
+		if wnl.text != "矿工×%d" % wn or wcl2.text != wtxt:
+			wnl.text = "矿工×%d" % wn
+			wcl2.text = wtxt
+			wnl.reset_size()
+			wcl2.reset_size()
+			wnl.position = Vector2((CELL_W * S - wnl.size.x) * 0.5, 32.0 * S)
+			wcl2.position = Vector2((CELL_W * S - wcl2.size.x) * 0.5, 47.0 * S)
+		wcl2.add_theme_color_override("font_color",
+				DARK["muted"] if wn >= Sim.WORKER_CAP else (DARK["danger"] if world.supply < Sim.WORKER_COST else DARK["muted"]))
 	_update_hint(world.tick_count)
 
 	_update_floats(world.tick_count)

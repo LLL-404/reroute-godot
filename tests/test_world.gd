@@ -22,6 +22,7 @@ func register(kit: TestKit) -> void:
 		kit.eq(w.supply, Sim.START_SUPPLY, "初始供给")
 		kit.eq(w.outcome, World.RUNNING, "初始进行中")
 		kit.eq(w.units.size(), 0, "初始无单位")
+		kit.eq(w.workers.size(), 0, "开局 0 工人（开局成长改造：购买制）")
 		kit.eq(w.buildings.size(), 1, "初始只有核心")
 		kit.eq(w.core["hp"], 1200, "核心血量")
 		kit.ok(w.building_at(sc.core.x, sc.core.y) == w.core, "核心落位")
@@ -45,40 +46,71 @@ func register(kit: TestKit) -> void:
 		kit.eq(w.supply, Sim.START_SUPPLY, "非矿覆盖无收益")
 		kit.eq(w.grid.at(sparse.x, sparse.y), Grid.OPEN, "表土挖开"))
 
+	kit.test("worker-purchase", func():
+		var w := World.new(StubScenario.new({ "size": 20 }), 1)
+		kit.eq(w.workers.size(), 0, "开局 0 工人")
+		w.apply_command(Command.worker())
+		kit.eq(w.workers.size(), 1, "买 1 矿工")
+		kit.eq(w.supply, Sim.START_SUPPLY - Sim.WORKER_COST, "扣 30")
+		kit.ok(w.grid.passable(int(w.workers[0]["x"]), int(w.workers[0]["y"])), "矿工出生在核心邻格通行格")
+		w.apply_command(Command.worker())
+		kit.eq(w.workers.size(), 2, "再买 1 矿工")
+		kit.eq(w.supply, Sim.START_SUPPLY - Sim.WORKER_COST * 2, "再扣 30")
+		w.supply = 999 # 白盒：直购到上限
+		for _i in Sim.WORKER_CAP - 2:
+			w.apply_command(Command.worker())
+		kit.eq(w.workers.size(), Sim.WORKER_CAP, "买满上限")
+		var fp := w.fingerprint()
+		w.apply_command(Command.worker())
+		kit.eq(w.workers.size(), Sim.WORKER_CAP, "超上限拒收")
+		kit.eq(w.fingerprint(), fp, "超上限零副作用")
+		w.supply = Sim.WORKER_COST - 1 # 白盒：差 1 块钱
+		w.apply_command(Command.worker())
+		kit.eq(w.workers.size(), Sim.WORKER_CAP, "缺钱拒收"))
+
 	kit.test("worker-no-ore-idles", func():
 		var w := World.new(StubScenario.new({ "size": 20 }), 1)
+		w.apply_command(Command.worker()) # 开局成长改造：先买才有工人
 		_run(w, 4) # 连续无矿：后续 tick 也不能拿 target=-1 去取矿格
 		kit.eq(w.tick_count, 4, "无矿时世界仍连续推进")
-		kit.eq(w.supply, Sim.START_SUPPLY, "无矿不产供给")
+		kit.eq(w.supply, Sim.START_SUPPLY - Sim.WORKER_COST, "无矿不产供给")
 		for wk in w.workers:
 			kit.eq(int(wk["target"]), -1, "工人保持空目标")
 			kit.eq(int(wk["state"]), Sim.W_TO_MINE, "工人原地待命"))
 
 	kit.test("worker-mining-cycle", func():
-		var w := World.new(StubScenario.new({ "size": 20, "ore": [[4, 1]] }), 1)
-		kit.eq(w.workers.size(), Sim.WORKER_COUNT, "开局 2 工人")
-		for wk in w.workers:
-			kit.ok(w.grid.passable(int(wk["x"]), int(wk["y"])), "工人出生在通行格")
-		w.apply_command({ "kind": "dig", "x": 4, "y": 1 })
-		_run(w, 2000) # 足够走完 40 储量的完整采运
-		kit.eq(w.supply, Sim.START_SUPPLY + Sim.ORE_STORE, "40 储量全数搬运入账")
+		# stub 矿格默认生来 OPEN；显式盖 COVER（Vector2i 列表）才真正走到「矿工自动挖开」路径
+		var w := World.new(StubScenario.new({ "size": 20, "ore": [[4, 1]], "cover": [Vector2i(4, 1)] }), 1)
+		w.apply_command(Command.worker())
+		w.apply_command(Command.worker())
+		kit.eq(w.grid.at(4, 1), Grid.COVER, "开局矿格覆盖")
+		_run(w, 2000) # 足够走完 40 储量的全自动采运（矿工自己挖开，无需玩家 dig）
+		kit.eq(w.grid.at(4, 1), Grid.OPEN, "矿工自动挖开了覆盖矿格")
+		kit.eq(w.supply, Sim.START_SUPPLY - Sim.WORKER_COST * 2 + Sim.ORE_STORE, "40 储量全数搬运入账（扣 2 矿工钱）")
 		kit.eq(int(w.ore_left[w.grid.idx(4, 1)]), 0, "矿格采完枯竭"))
 
 	kit.test("worker-sealed-idles", func():
 		var solids := []
 		for c in [[16, 15], [14, 15], [15, 14], [15, 16], [16, 14], [16, 16]]:
 			solids.append(Vector2i(c[0], c[1]))
-		var w := World.new(StubScenario.new({ "size": 20, "ore": [[15, 15]], "solid": solids }), 1)
-		w.apply_command({ "kind": "dig", "x": 15, "y": 15 }) # 隔空挖开：工人进不去
+		# 矿格显式盖 COVER：未挖开且密封——自动挖开也够不着（六邻全实心，没有站位）
+		var w := World.new(StubScenario.new({ "size": 20, "ore": [[15, 15]], "solid": solids, "cover": [Vector2i(15, 15)] }), 1)
+		w.apply_command(Command.worker())
 		_run(w, 600)
-		kit.eq(w.supply, Sim.START_SUPPLY, "密封矿不产供给（白嫖线死亡）")
-		kit.eq(int(w.ore_left[w.grid.idx(15, 15)]), Sim.ORE_STORE, "余量原封"))
+		kit.eq(w.supply, Sim.START_SUPPLY - Sim.WORKER_COST, "密封矿不产供给（白嫖线死亡）")
+		kit.eq(w.grid.at(15, 15), Grid.COVER, "矿格保持覆盖（工人没挖开它）")
+		kit.eq(int(w.ore_left[w.grid.idx(15, 15)]), Sim.ORE_STORE, "余量原封")
+		w.apply_command({ "kind": "dig", "x": 15, "y": 15 }) # 隔空挖开：工人依然进不去
+		_run(w, 600)
+		kit.eq(w.supply, Sim.START_SUPPLY - Sim.WORKER_COST, "密封矿仍不产供给")
+		kit.eq(int(w.ore_left[w.grid.idx(15, 15)]), Sim.ORE_STORE, "余量仍原封"))
 
 	kit.test("worker-no-build-underfoot", func():
 		var w := World.new(StubScenario.new({ "size": 20, "ore": [[4, 1]] }), 1)
+		w.supply = 999
+		w.apply_command(Command.worker())
 		var wx: int = int(w.workers[0]["x"])
 		var wy: int = int(w.workers[0]["y"])
-		w.supply = 999
 		w.try_build(Sim.B_WALL, wx, wy)
 		kit.ok(w.building_at(wx, wy) == null, "工人脚下不可建造"))
 
@@ -163,7 +195,8 @@ func register(kit: TestKit) -> void:
 		var w := World.new(sc, 1)
 		w.apply_command({ "kind": "tower", "x": sc.core.x, "y": 20 })
 		kit.eq(w.buildings[1]["build_left"], 60, "首波前施工减半 120//2")
-		w.tick_count = 60 # 白盒：越过 waves[1][1]
+		w.tick_count = 2400 # 白盒：越过 waves[0][0]（开局成长改造后首波 2400）
+		w.supply = 999 # 白盒：60 开局买完第一座塔就没钱了（开局成长改造）
 		w.apply_command({ "kind": "tower", "x": sc.core.x + 1, "y": 20 })
 		kit.eq(w.buildings[2]["build_left"], 120, "首波后不减半"))
 
@@ -172,19 +205,20 @@ func register(kit: TestKit) -> void:
 	kit.test("remove-refund", func():
 		var w := World.new(StubScenario.new(), 1)
 		w.apply_command({ "kind": "wall", "x": 3, "y": 3 })
-		kit.eq(w.supply, 295, "首面墙阶梯价扣 5")
+		kit.eq(w.supply, Sim.START_SUPPLY - 5, "首面墙阶梯价扣 5")
 		w.apply_command({ "kind": "remove", "x": 3, "y": 3 })
-		kit.eq(w.supply, 297, "即时建筑退实付 5 的 50% = 2")
+		kit.eq(w.supply, Sim.START_SUPPLY - 3, "即时建筑退实付 5 的 50% = 2")
 		kit.eq(w.grid.at(3, 3), Grid.OPEN, "拆除后通行")
 		kit.ok(w.by_cell.get(w.grid.idx(3, 3)) == null, "by_cell 清除")
 		w.apply_command({ "kind": "remove", "x": 3, "y": 3 })
-		kit.eq(w.supply, 297, "重复拆除零副作用")
+		kit.eq(w.supply, Sim.START_SUPPLY - 3, "重复拆除零副作用")
+		w.supply = 999 # 白盒：塔 60 超出 60 开局（开局成长改造），补足再测退款口径
 		w.apply_command({ "kind": "tower", "x": 5, "y": 5 })
-		kit.eq(w.supply, 237, "塔扣 60")
+		kit.eq(w.supply, 939, "塔扣 60")
 		w.apply_command({ "kind": "remove", "x": 5, "y": 5 })
-		kit.eq(w.supply, 285, "施工中退 80% = 48")
+		kit.eq(w.supply, 987, "施工中退 80% = 48")
 		w.apply_command({ "kind": "remove", "x": 0, "y": 0 })
-		kit.eq(w.supply, 285, "核心不可拆")
+		kit.eq(w.supply, 987, "核心不可拆")
 		kit.ok(w.building_at(0, 0) != null, "核心仍在"))
 
 	# ---------------- 地形改造 ----------------
@@ -193,35 +227,36 @@ func register(kit: TestKit) -> void:
 		var w := World.new(StubScenario.new(), 1)
 		w.apply_command({ "kind": "fill", "x": 3, "y": 3 })
 		kit.eq(w.grid.get_h(3, 3), 1, "填高 +1")
-		kit.eq(w.supply, 285, "填高费 15")
+		kit.eq(w.supply, Sim.START_SUPPLY - 15, "填高费 15")
 		w.apply_command({ "kind": "fill", "x": 3, "y": 3 })
 		kit.eq(w.grid.get_h(3, 3), 2, "再填 +1")
-		kit.eq(w.supply, 270, "再扣 15")
+		kit.eq(w.supply, Sim.START_SUPPLY - 30, "再扣 15")
 		w.apply_command({ "kind": "lower", "x": 3, "y": 3 })
 		kit.eq(w.grid.get_h(3, 3), 1, "挖低 -1")
-		kit.eq(w.supply, 260, "挖低扣 10"))
+		kit.eq(w.supply, Sim.START_SUPPLY - 40, "挖低扣 10"))
 
 	kit.test("fill-hmax-hmin", func():
 		var w := World.new(StubScenario.new(), 1)
+		w.supply = 999 # 白盒：60 开局不够 75 金填高序列（开局成长改造），补足再测高度边界
 		for _i in 5:
 			w.apply_command({ "kind": "fill", "x": 3, "y": 3 })
 		kit.eq(w.grid.get_h(3, 3), Sim.H_MAX, "连填到 h5")
-		kit.eq(w.supply, 225, "5 次填高 75")
+		kit.eq(w.supply, 924, "5 次填高 75")
 		w.apply_command({ "kind": "fill", "x": 3, "y": 3 })
 		kit.eq(w.grid.get_h(3, 3), Sim.H_MAX, "顶格再填被拒")
-		kit.eq(w.supply, 225, "顶格拒填不扣费")
+		kit.eq(w.supply, 924, "顶格拒填不扣费")
 		for _i in 5:
 			w.apply_command({ "kind": "lower", "x": 3, "y": 3 })
 		kit.eq(w.grid.get_h(3, 3), 0, "连挖到 h0")
-		kit.eq(w.supply, 175, "5 次挖低扣 50")
+		kit.eq(w.supply, 874, "5 次挖低扣 50")
 		w.apply_command({ "kind": "lower", "x": 3, "y": 3 })
 		kit.eq(w.grid.get_h(3, 3), -1, "继续挖到 h-1")
 		w.apply_command({ "kind": "lower", "x": 3, "y": 3 })
 		kit.eq(w.grid.get_h(3, 3), Sim.H_MIN, "连挖到 h-2")
-		kit.eq(w.supply, 155, "7 次挖低扣 70")
+		kit.eq(w.supply, 854, "7 次挖低扣 70")
 		w.apply_command({ "kind": "lower", "x": 3, "y": 3 })
 		kit.eq(w.grid.get_h(3, 3), Sim.H_MIN, "地板再挖被拒")
-		kit.eq(w.supply, 155, "地板拒挖不扣费"))
+		kit.eq(w.supply, 854, "地板拒挖不扣费"))
 
 	kit.test("lower-to-negative-min", func():
 		var w := World.new(StubScenario.new(), 1)
@@ -229,10 +264,10 @@ func register(kit: TestKit) -> void:
 		kit.eq(w.grid.get_h(3, 3), -1, "第一次挖低到 -1")
 		w.apply_command({ "kind": "lower", "x": 3, "y": 3 })
 		kit.eq(w.grid.get_h(3, 3), -2, "第二次挖低到 -2")
-		kit.eq(w.supply, 280, "两次挖低扣 20")
+		kit.eq(w.supply, Sim.START_SUPPLY - 20, "两次挖低扣 20")
 		w.apply_command({ "kind": "lower", "x": 3, "y": 3 })
 		kit.eq(w.grid.get_h(3, 3), -2, "第三次挖低无效")
-		kit.eq(w.supply, 280, "无效挖低不扣费"))
+		kit.eq(w.supply, Sim.START_SUPPLY - 20, "无效挖低不扣费"))
 
 	kit.test("fill-lower-guards", func():
 		var w := World.new(StubScenario.new({ "cover": [Vector2i(3, 3)] }), 1)
@@ -503,7 +538,7 @@ func register(kit: TestKit) -> void:
 	kit.test("convoy-reward", func():
 		var w := World.new(StubScenario.new({ "size": 20 }), 1)
 		w.apply_command({ "kind": "tower", "x": 4, "y": 4 })
-		kit.eq(w.supply, 240, "塔后供给")
+		kit.eq(w.supply, Sim.START_SUPPLY - 60, "塔后供给")
 		w.apply_command({ "kind": "spawn", "x": 4, "y": 5, "speed": 1000 })
 		w.apply_command({ "kind": "spawn", "x": 4, "y": 5, "speed": 1000 })
 		# 白盒：站桩单位死位即出生位；裸图基线不含塔、主位剩余绕塔 ⇒ 二者差 = 塔造成的绕行
@@ -516,14 +551,14 @@ func register(kit: TestKit) -> void:
 		_run(w, 21)
 		kit.eq(w.kills, 1, "第一击杀")
 		var b0: int = mini(Lua64.lshr(25 * 10 + rest0 - base0, 3), 6)
-		kit.eq(w.supply, 243 + b0, "3 + 有效绕行折算")
+		kit.eq(w.supply, Sim.START_SUPPLY - 60 + 3 + b0, "3 + 有效绕行折算")
 		kit.eq(w.convoy_earned, b0, "绕行累计")
 		_run(w, 21)
 		kit.eq(w.kills, 1, "B 仅致伤")
 		_run(w, 21)
 		kit.eq(w.kills, 2, "第二击杀")
 		var b1: int = mini(Lua64.lshr(7 * 10 + rest0 - base0, 3), 6)
-		kit.eq(w.supply, 243 + b0 + 3 + b1, "B 基础+有效绕行")
+		kit.eq(w.supply, Sim.START_SUPPLY - 60 + 6 + b0 + b1, "B 基础+有效绕行")
 		kit.eq(w.convoy_earned, b0 + b1, "绕行累计累加"))
 
 	kit.test("effdetour-semantics", func():
@@ -653,7 +688,7 @@ func register(kit: TestKit) -> void:
 		kit.eq(b.data[0], 0, "STATE_SCHEMA 大端字节 1")
 		kit.eq(b.data[1], 0, "STATE_SCHEMA 大端字节 2")
 		kit.eq(b.data[2], 0, "STATE_SCHEMA 大端字节 3")
-		kit.eq(b.data[3], 11, "STATE_SCHEMA = 11"))
+		kit.eq(b.data[3], Canon.STATE_SCHEMA, "STATE_SCHEMA = %d（随 sim/canon.gd 单源走）" % Canon.STATE_SCHEMA))
 
 	kit.test("compact-keeps-order", func():
 		var w := World.new(StubScenario.new(), 1)

@@ -16,7 +16,7 @@ extends RefCounted
 # v5（2026-10-25 墙阶梯价）：建筑行增 paid（8 字段），旧档拒载。
 # v6（2026-10-25 英雄强化）：单位行增 stun（13 字段），旧档拒载。
 # v7（2026-10-25 采矿改形 C）：state 增 workers（7 字段行）与 ore（余量表），旧档拒载。
-const FORMAT_VERSION := 7
+const FORMAT_VERSION := 8 # 2026-10-27 128 扩容（v7 及以前旧尺寸档拒载）
 
 
 ## 世界 → 存档字典。run_index 供读档还原蓝图视觉（Blueprint.pick(run_index) 派生）。
@@ -172,7 +172,8 @@ static func decode(d) -> World:
 			"carrying": int(row[5]), "mine_cd": int(row[6]),
 			"field": null, "field_rev": -1, "field_goal": -1, "pick_rev": -1,
 		})
-	if world.workers.size() != Sim.WORKER_COUNT:
+	# 开局成长改造 2026-10-28：工人改购买制（0..WORKER_CAP）；旧档 2 工人在界内自然兼容
+	if world.workers.size() > Sim.WORKER_CAP:
 		return null
 	world.ore_left = {}
 	if st["ore"].size() != sc.ore_cells.size():

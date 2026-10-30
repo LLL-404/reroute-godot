@@ -54,6 +54,8 @@ var death_fx: Array = [] # 死亡消散中的单位条目（放大下沉后移�
 var fx_quality := 2 # 特效质量（0 低 / 1 中 / 2 高）：死亡消散时长（低 = 1 tick 即移除；默认高 = 原行为）
 var hero = null # { node, px, py }
 var ring = null # { node, born }
+var fog = null # 战争迷雾位图（view._ready 注入；null 或 enabled=false 时全部查询恒真）
+var _uvis := {} # 单位 id → 最近一次是否可见（死亡消散/浮字是否播的口径；build_terrain 清）
 
 var ghost: Node3D = null
 var ghost_mi: MeshInstance3D = null
@@ -121,6 +123,9 @@ func build_terrain(pgrid: Grid) -> void:
 	terrain.grid = pgrid
 	_height_rev = pgrid.height_rev
 	terrain._rebuild_field() # 地面网格与单位 ground_y 使用同一份模拟高度
+	if fog != null:
+		fog.reset(pgrid.w) # 新局清探索记忆（开局成长改造）
+	_uvis.clear()
 
 	if dyn != null:
 		dyn.free()
@@ -611,7 +616,15 @@ func sync(world: World, tick_alpha: float = 0.0, delta: float = 0.0) -> void:
 		_height_rev = terrain.grid.height_rev
 		terrain._rebuild_field()
 	if terrain.heat_on and world.grid.rev != terrain.heat_rev:
-		terrain.rebuild_heat(world)
+		terrain.rebuild_heat(world, fog)
+	# 战争迷雾（开局成长改造）：先更新视野位图，脏了重出遮罩层；探针关雾走清理分支
+	if fog != null:
+		if fog.enabled:
+			fog.update(world)
+			if fog.dirty:
+				terrain.rebuild_fog(fog)
+		elif terrain.fog_root != null:
+			terrain.clear_fog()
 
 	# 相机位置预取：单位逐帧切级；静态件在相机变换时统一刷。
 	var cam: Camera3D = core.camera
@@ -839,12 +852,24 @@ func sync(world: World, tick_alpha: float = 0.0, delta: float = 0.0) -> void:
 			hn.rotation = Vector3(0.0, atan2(cw.x - pw.x, cw.z - pw.z), 0.0)
 
 	# 单位（真实模型 + 动作状态机；帧间插值 prev 格存视图层；受击脉冲用 tick 计龄）
+	# 战争迷雾闸门（开局成长改造）：视野圈外的敌人不建/藏节点（transform 不动，probe_sync 对拍不受影响）；
+	# 可见性快照进 _uvis——死亡消散/赏金浮字只播给「死在视野里」的敌人（攻击/受击音保留：听声辨位算迷雾玩法）
 	var useen := {}
+	var fog_on: bool = fog != null and fog.enabled
 	for u in world.units:
 		if int(u["hp"]) > 0:
 			var uid: int = u["id"]
 			useen[uid] = true
+			var uvis: bool = not fog_on or fog.is_visible(int(u["x"]), int(u["y"]))
 			var e = unit_nodes.get(uid)
+			if not uvis:
+				_uvis[uid] = false
+				if e != null:
+					(e["node"] as Node3D).visible = false
+				continue
+			_uvis[uid] = true
+			if e != null and not (e["node"] as Node3D).visible:
+				(e["node"] as Node3D).visible = true # 走出迷雾：恢复显示（插值状态原样保留）
 			var t: int = world.tick_count
 			if e == null:
 				var spawn: Dictionary = models.spawn_unit(unit_root, int(ZFORM[int(u["kind"])]))
@@ -934,6 +959,13 @@ func sync(world: World, tick_alpha: float = 0.0, delta: float = 0.0) -> void:
 		if not useen.has(uid2):
 			var e3: Dictionary = unit_nodes[uid2]
 			var kind3: int = e3["kind"]
+			var was_vis: bool = _uvis.get(uid2, false)
+			_uvis.erase(uid2)
+			if fog_on and not was_vis:
+				# 死在迷雾里：静默回收（无消散/浮字/死亡音）——视野外的战果由塔火赏金入账告知
+				(e3["node"] as Node3D).free()
+				unit_nodes.erase(uid2)
+				continue
 			audio.play_sound("zerg_death.mp3" if kind3 == Sim.E_SWARM else "orc_death.mp3", 0.85)
 			e3["dying"] = world.tick_count
 			models.play(e3["player"], "Death", false) # 模型走死亡动画（1.4s），不做放大下沉

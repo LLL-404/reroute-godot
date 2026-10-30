@@ -16,24 +16,25 @@ extends RefCounted
 const TEMPLATE_COUNT := 5
 const TEMPLATE_NAMES := ["横脊", "错行双脊", "弧脊", "斜壁", "獠牙翼"]
 const CHOKE_HALF := 1
-const CHOKE_MIN_GAP := 15 # 双咽喉中心最小间距
+const CHOKE_MIN_GAP := 30 # 双咽喉中心最小间距（2026-10-27 ×2 随 128 扩容）
+const N := Dims.MAP_N # 地图边长（2026-10-27 B1 单点化：地形段索引/边界/循环全部派生自此）
 
-# 弧脊抛物线分母：v(x) = (x-1)(62-x) 在 x∈1..62 上最大 930（中点对称）。
-const ARC_V_MAX := 930
+# 弧脊抛物线分母：v(x) = (x-1)(N-2-x) 在 x∈1..N-2 上最大（中点对称；N=64 → 30×31=930）。
+const ARC_V_MAX := (N - 2) / 2 * ((N - 2) / 2 - 1)
 
 # ============ 世界生成 2.0（自由路径）标定常量 ============
 const FREEFORM_SALT_MAX := 48 # 盐 0..47 = 自由世界；48..63 = 旧模板池兜底（16 盐余量）
 const CORE_MARGIN := 6 # 核心位距边留白（山头半径 4 + 余量）
-const MAIN_D_MIN := 47 # 主口 ↔ 核心六边距离下限（直连 ≥ 47 步 = 470 > 标定带下沿 466）
-const MAIN_D_MAX := 54 # 上限（留绕行余量 → 630 以内）
-const MAIN_GAP_MIN := 14 # 主口彼此最小六边距离
-const PERIPH_BAND := 14 # 周缘带宽度（x/y 距边 ≤ 14 视为周缘出怪区）
+const MAIN_D_MIN := 88 # 主口 ↔ 核心六边距离下限（128 图角落弧口径：中心→周缘带最远 ≈95，非 ×2 线性）
+const MAIN_D_MAX := 95 # 上限（角落弧顶；留绕行余量 → 路径带见 sweep 实测）
+const MAIN_GAP_MIN := 28 # 主口彼此最小六边距离（×2）
+const PERIPH_BAND := 28 # 周缘带宽度（×2；x/y 距边 ≤28 视为周缘出怪区）
 const SPAWN_CLEAR := 2 # 出怪口净空（3×3 再留一圈缓冲）
 const CORE_CLEAR := 5 # 核心山头净空六边半径（岩/丘/散土都不进）
 const BASIN_GAP_CORE := 3 # 盆地矩形外扩（不得触及核心山头）
 const BASIN_GAP_SPAWN := 2 # 盆地矩形外扩（不得触及主口净空）
 const BASIN_TRIES := 24
-const ROCK_LO_PERM := 60 # 岩群占比带（千分比）
+const ROCK_LO_PERM := 40 # 岩群占比带下沿（2026-10-27 128 重标定：fBm 实际密度 ~44..65‰，放宽保留离群拒绝）
 const ROCK_HI_PERM := 220
 const MOUND_LO_PERM := 20 # 微丘占比带（千分比）
 const MOUND_HI_PERM := 160
@@ -69,33 +70,33 @@ const BASE_H4_PERM := 998
 ## 默认种子冻结路径（禁改：数值、常量、抽取顺序全部复刻 2026-10-16 口径）。
 static func _generate_default(seed: int, salt: int) -> Dictionary:
 	var rng := Rng.new(seed + salt * 1000003)
-	var core_x := 30 + rng.next_int(5) # 30..34
-	var ridge_y := 40 + rng.next_int(3) # 40..42
-	var wx := 16 + rng.next_int(7) # 西咽喉中心 16..22
-	var ex := 41 + rng.next_int(7) # 东咽喉中心 41..47
+	var core_x := 60 + rng.next_int(5) # 60..64（128 图锚 ×2，2026-10-27 重新冻结）
+	var ridge_y := 80 + rng.next_int(3) # 80..82
+	var wx := 32 + rng.next_int(7) # 西咽喉中心 32..38
+	var ex := 82 + rng.next_int(7) # 东咽喉中心 82..88
 	if ex - wx < CHOKE_MIN_GAP:
 		ex = wx + CHOKE_MIN_GAP
-	var bx0 := 2 + rng.next_int(3) # 盆地贴西南角 2..4
-	var by0 := 52 + rng.next_int(3) # 52..54
+	var bx0 := 4 + rng.next_int(3) # 盆地贴西南角 4..6
+	var by0 := 104 + rng.next_int(3) # 104..106
 	var bw := 7 + rng.next_int(2) # 7..8
 	var bh := 8 + rng.next_int(2) # 8..9
 	var plug_dx := 2 + rng.next_int(bw - 3) # 上缘第 2..bw-2 列（避角）
-	var mid_y := 19 + rng.next_int(3) # 19..21
+	var mid_y := 38 + rng.next_int(3) # 38..40
 	var sparse_phase := 2 + rng.next_int(5) # 2..6
 	# 微丘（2×2 h1，南场）：避开两侧咽喉柱 ±5；行域 ridge_y+5..48 自动隔离盆地/矿带/出怪口
 	var mesa_x := -1
 	var mesa_y := -1
 	for _try in 16:
-		var mx := 9 + rng.next_int(45) # 9..53
-		var my := ridge_y + 5 + rng.next_int(48 - (ridge_y + 5) + 1) # ridge_y+5..48
+		var mx := 18 + rng.next_int(90) # 18..107
+		var my := ridge_y + 10 + rng.next_int(96 - (ridge_y + 10) + 1) # ridge_y+10..96
 		if absi(mx - wx) <= 5 or absi(mx - ex) <= 5:
 			continue
 		mesa_x = mx
 		mesa_y = my
 		break
-	if mesa_x < 0: # 兜底：双咽喉正中（间距 ≥15 时必满足 ±5 约束外）
-		mesa_x = clampi((wx + ex) / 2 - 1, 9, 53)
-		mesa_y = ridge_y + 5
+	if mesa_x < 0: # 兜底：双咽喉正中（间距 ≥30 时必满足 ±5 约束外）
+		mesa_x = clampi((wx + ex) / 2 - 1, 18, 107)
+		mesa_y = ridge_y + 10
 	return {
 		"template": 0,
 		"core_x": core_x,
@@ -148,33 +149,33 @@ static func attach_terrain(seed: int, salt: int, p: Dictionary, is_default: bool
 ## 旧模板池兜底采样（盐 0..15 域内语义）：RNG(seed+salt·1000003) 抽参数（咽喉错位/盆地/插口/矿带/微丘 16 次重试）
 static func _generate_varied_legacy(seed: int, salt: int) -> Dictionary:
 	var rng := Rng.new(seed + salt * 1000003)
-	var core_x := 28 + rng.next_int(11) # 28..38
-	var ridge_y := 39 + rng.next_int(5) # 39..43
-	var wx := 15 + rng.next_int(12) # 西咽喉中心 15..26
-	var ex := 38 + rng.next_int(14) # 东咽喉中心 38..51
+	var core_x := 56 + rng.next_int(22) # 56..77（128 锚 ×2）
+	var ridge_y := 78 + rng.next_int(9) # 78..86
+	var wx := 30 + rng.next_int(24) # 西咽喉中心 30..53
+	var ex := 76 + rng.next_int(27) # 东咽喉中心 76..102
 	if ex - wx < CHOKE_MIN_GAP:
 		ex = wx + CHOKE_MIN_GAP
-	var bx0 := 1 + rng.next_int(5) # 盆地贴西南角 1..5
-	var by0 := 50 + rng.next_int(3) # 50..52
+	var bx0 := 2 + rng.next_int(9) # 盆地贴西南角 2..10
+	var by0 := 100 + rng.next_int(5) # 100..104
 	var bw := 6 + rng.next_int(4) # 6..9
-	var bh := 7 + rng.next_int(3) # 7..9
+	var bh := 8 + rng.next_int(2) # 8..9（同自由路径：bh=7 构造性压环，裁掉）
 	var plug_dx := 2 + rng.next_int(bw - 3) # 上缘第 2..bw-2 列（避角）
-	var mid_y := 18 + rng.next_int(6) # 18..23
+	var mid_y := 36 + rng.next_int(11) # 36..46
 	var sparse_phase := 2 + rng.next_int(6) # 2..7
 	# 微丘（2×2 h1）：避开两侧咽喉柱 ±5；行域 ridge_y+5..48
 	var mesa_x := -1
 	var mesa_y := -1
 	for _try in 16:
-		var mx := 7 + rng.next_int(49) # 7..55
-		var my := ridge_y + 5 + rng.next_int(48 - (ridge_y + 5) + 1) # ridge_y+5..48
+		var mx := 14 + rng.next_int(98) # 14..111
+		var my := ridge_y + 10 + rng.next_int(96 - (ridge_y + 10) + 1) # ridge_y+10..96
 		if absi(mx - wx) <= 5 or absi(mx - ex) <= 5:
 			continue
 		mesa_x = mx
 		mesa_y = my
 		break
 	if mesa_x < 0:
-		mesa_x = clampi((wx + ex) / 2 - 1, 7, 55)
-		mesa_y = ridge_y + 5
+		mesa_x = clampi((wx + ex) / 2 - 1, 14, 111)
+		mesa_y = ridge_y + 10
 	var template := rng.next_int(TEMPLATE_COUNT) # 0..4
 	var p := {
 		"template": template,
@@ -194,7 +195,7 @@ static func _generate_varied_legacy(seed: int, salt: int) -> Dictionary:
 	}
 	match template:
 		1: # 错行双脊：西带 [ry..ry+2]、东带 [ry+2..ry+4]，分界列并集无缝
-			p["split_x"] = 26 + rng.next_int(11) # 26..36
+			p["split_x"] = 52 + rng.next_int(21) # 52..72
 		2: # 弧脊：屏障中段上拱、两缘下垂 bow 行（v(x)=(x-1)(62-x)，中点对称）
 			p["bow"] = 2 + rng.next_int(4) # 2..5
 		3: # 斜壁：屏障行随列线性升降（带符号，±5 行内）
@@ -211,7 +212,7 @@ static func _generate_varied_legacy(seed: int, salt: int) -> Dictionary:
 
 ## 该列的屏障行范围 [y0, y1]（含端点）；x 在墙体内或越界 = 无屏障（空数组）。
 static func band_rows(p: Dictionary, x: int) -> Array:
-	if x < 1 or x > 62:
+	if x < 1 or x > N - 2:
 		return []
 	var ry: int = p["ridge_y"]
 	match int(p["template"]):
@@ -220,7 +221,7 @@ static func band_rows(p: Dictionary, x: int) -> Array:
 				return [ry, ry + 2]
 			return [ry + 2, ry + 4]
 		2:
-			var v: int = (x - 1) * (62 - x)
+			var v: int = (x - 1) * (N - 2 - x)
 			var row: int = ry + int(p["bow"]) - int(p["bow"]) * v / ARC_V_MAX
 			return [row, row + 2]
 		3:
@@ -317,9 +318,9 @@ static func _generate_freeform(seed: int, salt: int) -> Dictionary:
 	var ns := seed + salt * 1000003
 	var rng := Rng.new(ns)
 	# ① 核心位（留边 CORE_MARGIN..63-CORE_MARGIN）
-	var core_x := CORE_MARGIN + rng.next_int(63 - CORE_MARGIN * 2 + 1)
-	var core_y := CORE_MARGIN + rng.next_int(63 - CORE_MARGIN * 2 + 1)
-	var side := 1 if core_y <= 31 else -1 # 朝场地内侧方向（英雄位/中场矿都朝内）
+	var core_x := CORE_MARGIN + rng.next_int(N - 1 - CORE_MARGIN * 2 + 1)
+	var core_y := CORE_MARGIN + rng.next_int(N - 1 - CORE_MARGIN * 2 + 1)
+	var side := 1 if core_y <= N / 2 - 1 else -1 # 朝场地内侧方向（英雄位/中场矿都朝内）
 	# ② 主出怪口 2..3 个（周缘带 + 与核心距离带 + 彼此间距）
 	var n_mains := 2
 	if rng.next_int(10) < 3:
@@ -327,28 +328,28 @@ static func _generate_freeform(seed: int, salt: int) -> Dictionary:
 	var mains := _pick_mains(rng, core_x, core_y, n_mains)
 	# ③ 中场矿：核心偏内侧 4..7 行处一横排 5 格（先定矿，盆地/地貌净空协商它）
 	var mid_y := core_y + side * (4 + rng.next_int(4))
-	var mid_x0 := clampi(core_x - 2, 2, 56)
+	var mid_x0 := clampi(core_x - 2, 2, N - 8)
 	var mid_ore: Array = []
 	for i in 5:
 		mid_ore.append(Vector2i(mid_x0 + i, mid_y))
-	# ④ 盆地陷阱（矩形 6..9 × 7..9；位置试抽 + 兜底扫描；避开核心/主口/中场矿）
+	# ④ 盆地陷阱（矩形 6..9 × 8..9；位置试抽 + 兜底扫描；避开核心/主口/中场矿）
 	var bw := 6 + rng.next_int(4)
-	var bh := 7 + rng.next_int(3)
+	var bh := 8 + rng.next_int(2) # 8..9（2026-10-27：bh=7 时矿块底行必压盆环=构造性废盐，裁掉）
 	var bx0 := 2
 	var by0 := 2
 	var placed := false
 	for _try in BASIN_TRIES:
-		var tx := 2 + rng.next_int(61 - bw)
-		var ty := 2 + rng.next_int(61 - bh)
+		var tx := 2 + rng.next_int(N - 3 - bw)
+		var ty := 2 + rng.next_int(N - 3 - bh)
 		if _basin_clear(tx, ty, bw, bh, core_x, core_y, mains, mid_ore):
 			bx0 = tx
 			by0 = ty
 			placed = true
 			break
 	if not placed:
-		for ty2 in range(2, 63 - bh):
+		for ty2 in range(2, N - 1 - bh):
 			var hit := false
-			for tx2 in range(2, 63 - bw):
+			for tx2 in range(2, N - 1 - bw):
 				if _basin_clear(tx2, ty2, bw, bh, core_x, core_y, mains, mid_ore):
 					bx0 = tx2
 					by0 = ty2
@@ -413,8 +414,8 @@ static func _generate_freeform(seed: int, salt: int) -> Dictionary:
 	var rocks: Array = []
 	var hills: Array = []
 	var area := 0
-	for y in range(1, 63):
-		for x in range(1, 63):
+	for y in range(1, N - 1):
+		for x in range(1, N - 1):
 			var key := str(x) + "," + str(y)
 			if prot.has(key):
 				continue
@@ -431,8 +432,8 @@ static func _generate_freeform(seed: int, salt: int) -> Dictionary:
 	for _try in 64:
 		if sparse.size() >= want:
 			break
-		var sx := 2 + rng.next_int(60)
-		var sy := 2 + rng.next_int(60)
+		var sx := 2 + rng.next_int(N - 4)
+		var sy := 2 + rng.next_int(N - 4)
 		var key2 := str(sx) + "," + str(sy)
 		if prot.has(key2):
 			continue
@@ -487,9 +488,9 @@ static func _generate_freeform(seed: int, salt: int) -> Dictionary:
 ## 抽不满（候选池被距离约束血洗）就少装几口回落，合法性交 Scenario 校验。
 static func _pick_mains(rng: Rng, cx: int, cy: int, n: int) -> Array:
 	var cand: Array = []
-	for y in range(3, 61):
-		for x in range(3, 61):
-			if x > PERIPH_BAND and x < 63 - PERIPH_BAND and y > PERIPH_BAND and y < 63 - PERIPH_BAND:
+	for y in range(3, N - 3):
+		for x in range(3, N - 3):
+			if x > PERIPH_BAND and x < N - 1 - PERIPH_BAND and y > PERIPH_BAND and y < N - 1 - PERIPH_BAND:
 				continue
 			var d := Grid.hex_dist(x, y, cx, cy)
 			if d < MAIN_D_MIN or d > MAIN_D_MAX:
@@ -499,7 +500,7 @@ static func _pick_mains(rng: Rng, cx: int, cy: int, n: int) -> Array:
 	if cand.size() > 0:
 		out.append(cand[rng.next_int(cand.size())])
 	else:
-		out.append(Vector2i(cx, 56)) # 兜底（几乎必被校验拒 → 换盐）
+		out.append(Vector2i(cx, N - 8)) # 兜底（几乎必被校验拒 → 换盐）
 	while out.size() < n:
 		var pick: Array = []
 		for c in cand:
@@ -572,9 +573,9 @@ static func _terrain_geom(p: Dictionary) -> Dictionary:
 	for ox2 in range(cx - 2, cx + 3):
 		mor.append(Vector2i(ox2, p["mid_y"]))
 	return {
-		"core": Vector2i(cx, 6),
-		"hero": Vector2i(cx, 8),
-		"mains": [Vector2i(cx - 12, 56), Vector2i(cx + 12, 56)],
+		"core": Vector2i(cx, 12),
+		"hero": Vector2i(cx, 16),
+		"mains": [Vector2i(cx - 24, 112), Vector2i(cx + 24, 112)],
 		"basin": Rect2i(bx, by, int(p["basin_w"]), int(p["basin_h"])),
 		"plug": Vector2i(bx + int(p["plug_dx"]), by),
 		"basin_ore": bor,
@@ -582,19 +583,25 @@ static func _terrain_geom(p: Dictionary) -> Dictionary:
 	}
 
 
-## 基础势场 m（0..65535）：极低频值噪声 + 域扭曲。
+## 基础势场 m（0..65535）：极低频值噪声 + 域扭曲 + 细纹理倍频。
 ## 参考 Inigo Quilez 2002《Domain Warping》(iquilezles.org/articles/warp)：
 ## 用一份低频噪声位移采样坐标（f(p + g(p))），让等值线自然弯曲而不增加频率。
 ## 关键尺度约束：基频波长 32 格、次频 20 格 —— 一个台地/丘陵的最小宽度就是这个量级。
 ## 高度带的边界总长与噪声频率成正比，频率越低碎块越少（这正是「满屏小凸台」的成因）。
+## 2026-10-28 Terrain 2.1（单调校准）：①域扭曲 ±4→±8 格（等值线更弯、团块更不规则）；
+## ②次频 20→16（128 图上 8 个团跨距，台地更碎一些）+ 两路细纹理（波长 12/7，合计权重 25%）
+## ——台地内部有了次级起伏，等高线密度上去。平滑三连兜底防碎块纪律不破
+## （细纹理仍是 C² 值噪声、波长 ≥7 格，非逐格哈希，无混叠无豹纹）。
 static func _terrain_m(x: int, y: int, ts: int) -> int:
-	var wx := Lua64.idiv(_vnoise(x + 53, y + 17, 40, 40, ts + 501) - 32767, 8192) # ±4 格
-	var wy := Lua64.idiv(_vnoise(x + 17, y + 53, 40, 40, ts + 601) - 32767, 8192)
+	var wx := Lua64.idiv(_vnoise(x + 53, y + 17, 40, 40, ts + 501) - 32767, 4096) # ±8 格
+	var wy := Lua64.idiv(_vnoise(x + 17, y + 53, 40, 40, ts + 601) - 32767, 4096)
 	var px: int = x + wx + 32
 	var py: int = y + wy + 32
 	var lo := _vnoise(px, py, 32, 32, ts + 101)
-	var mid := _vnoise(px, py, 20, 20, ts + 211)
-	return Lua64.idiv(lo * 3 + mid, 4)
+	var mid := _vnoise(px, py, 16, 16, ts + 211)
+	var fine := _vnoise(px, py, 12, 12, ts + 307)
+	var tex := _vnoise(px, py, 7, 7, ts + 401)
+	return Lua64.idiv(lo * 3 + mid * 2 + fine * 2 + tex * 2, 9)
 
 
 ## 地形特征摆放：2..4 座山丘 + 1..2 个洼地（中心/半径/幅度全由种子决定）。
@@ -603,11 +610,11 @@ static func _terrain_m(x: int, y: int, ts: int) -> int:
 ## 保护格（核心山头/主口/盆地/插口/矿邻位/布局岩丘散土/已放特征）不进特征范围。
 static func _terrain_features(seed: int, salt: int, geom: Dictionary, p: Dictionary) -> Array:
 	var prot: Array = []
-	for i in 4096:
+	for i in N * N:
 		prot.append(false)
 	var core: Vector2i = geom["core"]
-	for y in range(maxi(core.y - 9, 0), mini(core.y + 10, 64)):
-		for x in range(maxi(core.x - 9, 0), mini(core.x + 10, 64)):
+	for y in range(maxi(core.y - 9, 0), mini(core.y + 10, N)):
+		for x in range(maxi(core.x - 9, 0), mini(core.x + 10, N)):
 			if Grid.hex_dist(x, y, core.x, core.y) <= 7:
 				_terrain_mark(prot, x, y)
 	for m in geom["mains"]:
@@ -644,28 +651,30 @@ static func _terrain_features(seed: int, salt: int, geom: Dictionary, p: Diction
 			for dy in 2:
 				for dx in 2:
 					_terrain_mark(prot, mx + dx, my + dy)
+	# 2026-10-28 Terrain 2.1（单调校准④）：预算上调——山丘 3..5 座（原 2..4）、洼地 2..3 座
+	# （原 1..2）、重试 40→60、山丘半径 5..12（原 6..10，大小混搭）。保护蒙版不动。
 	var feats: Array = []
-	var wants := [2 + Lua64.mod(_hash16(seed, salt, 9311), 3),
-		1 + Lua64.mod(_hash16(seed, salt, 9313), 2)]
+	var wants := [3 + Lua64.mod(_hash16(seed, salt, 9311), 3),
+		2 + Lua64.mod(_hash16(seed, salt, 9313), 2)]
 	for pass_i in 2:
 		var placed := 0
-		for t in 40:
+		for t in 60:
 			if placed >= int(wants[pass_i]):
 				break
-			var hx: int = 3 + Lua64.mod(_hash16(seed, salt * 7 + t, 9323 + pass_i * 31), 58)
-			var hy: int = 3 + Lua64.mod(_hash16(seed, salt * 7 + t, 9337 + pass_i * 31), 58)
+			var hx: int = 3 + Lua64.mod(_hash16(seed, salt * 7 + t, 9323 + pass_i * 31), N - 6)
+			var hy: int = 3 + Lua64.mod(_hash16(seed, salt * 7 + t, 9337 + pass_i * 31), N - 6)
 			var r: int = 0
 			var amp: int = 0
 			if pass_i == 0:
-				r = 6 + Lua64.mod(_hash16(hx, hy, 9341), 5) # 半径 6..10
-				amp = 15000 + Lua64.mod(_hash16(hx, hy, 9343), 9000)
+				r = 5 + Lua64.mod(_hash16(hx, hy, 9341), 8) # 半径 5..12
+				amp = 18000 + Lua64.mod(_hash16(hx, hy, 9343), 12000)
 			else:
 				r = 4 + Lua64.mod(_hash16(hx, hy, 9347), 3) # 半径 4..6
 				amp = -(13000 + Lua64.mod(_hash16(hx, hy, 9349), 7000))
 			var ok := true
-			for y in range(maxi(hy - r - 1, 0), mini(hy + r + 2, 64)):
-				for x in range(maxi(hx - r - 1, 0), mini(hx + r + 2, 64)):
-					if Grid.hex_dist(x, y, hx, hy) <= r + 1 and bool(prot[y * 64 + x]):
+			for y in range(maxi(hy - r - 1, 0), mini(hy + r + 2, N)):
+				for x in range(maxi(hx - r - 1, 0), mini(hx + r + 2, N)):
+					if Grid.hex_dist(x, y, hx, hy) <= r + 1 and bool(prot[y * N + x]):
 						ok = false
 						break
 				if not ok:
@@ -691,14 +700,14 @@ static func _terrain_apply_features(ms: Array, feats: Array) -> void:
 		var c: Vector2i = f["c"]
 		var r: int = int(f["r"])
 		var amp: int = int(f["amp"])
-		for y in range(maxi(c.y - r, 0), mini(c.y + r + 1, 64)):
-			for x in range(maxi(c.x - r, 0), mini(c.x + r + 1, 64)):
+		for y in range(maxi(c.y - r, 0), mini(c.y + r + 1, N)):
+			for x in range(maxi(c.x - r, 0), mini(c.x + r + 1, N)):
 				var d: int = Grid.hex_dist(x, y, c.x, c.y)
 				if d > r:
 					continue
 				var jitter := Lua64.idiv(_vnoise(x, y, 12, 12, 9361) - 32767, 40) # ±819，12 格波长
 				var add: int = Lua64.idiv(amp * (r - d + 1), r + 1) + jitter
-				var i: int = y * 64 + x
+				var i: int = y * N + x
 				ms[i] = clampi(int(ms[i]) + add, 0, 65535)
 
 
@@ -710,15 +719,15 @@ static func _terrain_smooth_vote(hs: Array, passes: int) -> Array:
 	var cur: Array = hs
 	for _p in passes:
 		var nxt: Array = cur.duplicate()
-		for y in range(1, 63):
-			for x in range(1, 63):
-				var i: int = y * 64 + x
+		for y in range(1, N - 1):
+			for x in range(1, N - 1):
+				var i: int = y * N + x
 				var h0: int = int(cur[i])
 				var c_up := 0
 				var c_same := 0
 				var c_dn := 0
 				for k in 6:
-					var v: int = int(cur[Grid.ny(x, y, k) * 64 + Grid.nx(x, y, k)])
+					var v: int = int(cur[Grid.ny(x, y, k) * N + Grid.nx(x, y, k)])
 					if v == h0 + 1:
 						c_up += 1
 					elif v == h0:
@@ -740,14 +749,14 @@ static func _terrain_merge_small(hs: Array, min_area: int, passes: int) -> Array
 	var cur: Array = hs
 	for _p in passes:
 		var seen: Array = []
-		for i in 4096:
+		for i in N * N:
 			seen.append(false)
 		var nxt: Array = cur.duplicate()
-		for i in 4096:
+		for i in N * N:
 			if bool(seen[i]):
 				continue
-			var x0: int = Lua64.mod(i, 64)
-			var y0: int = Lua64.idiv(i, 64)
+			var x0: int = Lua64.mod(i, N)
+			var y0: int = Lua64.idiv(i, N)
 			if x0 == 0 or y0 == 0 or x0 == 63 or y0 == 63:
 				seen[i] = true
 				continue
@@ -759,14 +768,14 @@ static func _terrain_merge_small(hs: Array, min_area: int, passes: int) -> Array
 			while head < q.size():
 				var idx: int = q[head]
 				head += 1
-				var x: int = Lua64.mod(idx, 64)
-				var y: int = Lua64.idiv(idx, 64)
+				var x: int = Lua64.mod(idx, N)
+				var y: int = Lua64.idiv(idx, N)
 				for k in 6:
 					var nx_n: int = Grid.nx(x, y, k)
 					var ny_n: int = Grid.ny(x, y, k)
-					if nx_n < 0 or ny_n < 0 or nx_n >= 64 or ny_n >= 64:
+					if nx_n < 0 or ny_n < 0 or nx_n >= N or ny_n >= N:
 						continue
-					var ni: int = ny_n * 64 + nx_n
+					var ni: int = ny_n * N + nx_n
 					if bool(seen[ni]) or int(cur[ni]) != h0:
 						continue
 					seen[ni] = true
@@ -776,14 +785,14 @@ static func _terrain_merge_small(hs: Array, min_area: int, passes: int) -> Array
 				continue
 			var cnt: Dictionary = {}
 			for idx2 in comp:
-				var x2: int = Lua64.mod(idx2, 64)
-				var y2: int = Lua64.idiv(idx2, 64)
+				var x2: int = Lua64.mod(idx2, N)
+				var y2: int = Lua64.idiv(idx2, N)
 				for k2 in 6:
 					var nx2: int = Grid.nx(x2, y2, k2)
 					var ny2: int = Grid.ny(x2, y2, k2)
-					if nx2 < 0 or ny2 < 0 or nx2 >= 64 or ny2 >= 64:
+					if nx2 < 0 or ny2 < 0 or nx2 >= N or ny2 >= N:
 						continue
-					var ni2: int = ny2 * 64 + nx2
+					var ni2: int = ny2 * N + nx2
 					var v2: int = int(cur[ni2])
 					if v2 == h0:
 						continue
@@ -822,22 +831,22 @@ static func _terrain_base(m: int, th: Array) -> int:
 ## 7 点中值滤波：自身 + 六邻共 7 值排序取中位（边框保持；去掉孤立尖点）。
 static func _terrain_median(hs: Array) -> Array:
 	var out: Array = hs.duplicate()
-	for y in range(1, 63):
-		for x in range(1, 63):
+	for y in range(1, N - 1):
+		for x in range(1, N - 1):
 			var vals: Array = []
-			vals.append(int(hs[y * 64 + x]))
+			vals.append(int(hs[y * N + x]))
 			for k in 6:
-				vals.append(int(hs[Grid.ny(x, y, k) * 64 + Grid.nx(x, y, k)]))
+				vals.append(int(hs[Grid.ny(x, y, k) * N + Grid.nx(x, y, k)]))
 			vals.sort()
-			out[y * 64 + x] = vals[3]
+			out[y * N + x] = vals[3]
 	return out
 
 
 ## 保护格标记（洼地选址用；越界静默忽略）。
 static func _terrain_mark(prot: Array, x: int, y: int) -> void:
-	if x < 0 or y < 0 or x >= 64 or y >= 64:
+	if x < 0 or y < 0 or x >= N or y >= N:
 		return
-	prot[y * 64 + x] = true
+	prot[y * N + x] = true
 
 
 ## 负高度补足：显式放 2..4 个「洼地」（中心 -2、半径 2 内 -1）。
@@ -845,11 +854,11 @@ static func _terrain_mark(prot: Array, x: int, y: int) -> void:
 static func _terrain_depressions(hs: Array, seed: int, salt: int, geom: Dictionary,
 		mains: Array, corr: Dictionary, p: Dictionary) -> void:
 	var prot: Array = []
-	for i in 4096:
+	for i in N * N:
 		prot.append(false)
 	var core: Vector2i = geom["core"]
-	for y in range(maxi(core.y - 7, 0), mini(core.y + 8, 64)):
-		for x in range(maxi(core.x - 7, 0), mini(core.x + 8, 64)):
+	for y in range(maxi(core.y - 7, 0), mini(core.y + 8, N)):
+		for x in range(maxi(core.x - 7, 0), mini(core.x + 8, N)):
 			if Grid.hex_dist(x, y, core.x, core.y) <= 6:
 				_terrain_mark(prot, x, y)
 	for m in mains:
@@ -898,10 +907,10 @@ static func _terrain_depressions(hs: Array, seed: int, salt: int, geom: Dictiona
 				for dx in 2:
 					_terrain_mark(prot, mx + dx, my + dy)
 	var want: int = 2 + Lua64.mod(_hash16(seed, salt, 9301), 3)
-	for i in 4096: # 崖形摆布后（2026-10-25）：h≥2 格及其邻不许落洼地，防把孤峰/崖脉挖成坑
+	for i in N * N: # 崖形摆布后（2026-10-25）：h≥2 格及其邻不许落洼地，防把孤峰/崖脉挖成坑
 		if int(hs[i]) >= 2:
-			var hx: int = Lua64.mod(i, 64)
-			var hy: int = Lua64.idiv(i, 64)
+			var hx: int = Lua64.mod(i, N)
+			var hy: int = Lua64.idiv(i, N)
 			_terrain_mark(prot, hx, hy)
 			for k in 6:
 				_terrain_mark(prot, Grid.nx(hx, hy, k), Grid.ny(hx, hy, k))
@@ -909,56 +918,56 @@ static func _terrain_depressions(hs: Array, seed: int, salt: int, geom: Dictiona
 	for t in range(0, 256):
 		if placed >= want:
 			break
-		var cx: int = 1 + Lua64.mod(_hash16(seed, salt + t, 9303), 62)
+		var cx: int = 1 + Lua64.mod(_hash16(seed, salt + t, 9303), N - 2)
 		var cy: int = 1 + Lua64.mod(_hash16(seed, salt + t, 9305), 62)
 		var ok := true
-		for y in range(maxi(cy - 2, 0), mini(cy + 3, 64)):
-			for x in range(maxi(cx - 2, 0), mini(cx + 3, 64)):
-				if Grid.hex_dist(x, y, cx, cy) <= 2 and bool(prot[y * 64 + x]):
+		for y in range(maxi(cy - 2, 0), mini(cy + 3, N)):
+			for x in range(maxi(cx - 2, 0), mini(cx + 3, N)):
+				if Grid.hex_dist(x, y, cx, cy) <= 2 and bool(prot[y * N + x]):
 					ok = false
 		if not ok:
 			continue
-		for y in range(maxi(cy - 2, 0), mini(cy + 3, 64)):
-			for x in range(maxi(cx - 2, 0), mini(cx + 3, 64)):
+		for y in range(maxi(cy - 2, 0), mini(cy + 3, N)):
+			for x in range(maxi(cx - 2, 0), mini(cx + 3, N)):
 				if Grid.hex_dist(x, y, cx, cy) <= 2:
-					hs[y * 64 + x] = -1
-					prot[y * 64 + x] = true
-		hs[cy * 64 + cx] = -2
+					hs[y * N + x] = -1
+					prot[y * N + x] = true
+		hs[cy * N + cx] = -2
 		placed += 1
 
 
 ## 高度数组单点写入 / 区间钳制（越界静默忽略；高度数组口径 64×64）。
 static func _terrain_set(hs: Array, x: int, y: int, v: int) -> void:
-	if x < 0 or y < 0 or x >= 64 or y >= 64:
+	if x < 0 or y < 0 or x >= N or y >= N:
 		return
-	hs[y * 64 + x] = v
+	hs[y * N + x] = v
 
 
 static func _terrain_clamp(hs: Array, x: int, y: int, lo: int, hi: int) -> void:
-	if x < 0 or y < 0 or x >= 64 or y >= 64:
+	if x < 0 or y < 0 or x >= N or y >= N:
 		return
-	hs[y * 64 + x] = clampi(int(hs[y * 64 + x]), lo, hi)
+	hs[y * N + x] = clampi(int(hs[y * N + x]), lo, hi)
 
 
 ## 可通行蒙版（镜像 Scenario.build_grid 的阻挡口径；只用于走廊寻路，不建 Grid）。
 static func _terrain_mask(p: Dictionary, geom: Dictionary) -> Array:
 	var blocked: Array = []
-	for i in 4096:
+	for i in N * N:
 		blocked.append(false)
 	var b: Rect2i = geom["basin"]
 	var plug: Vector2i = geom["plug"]
 	# 矿格（覆盖层，不可通行）
 	for o in geom["mid_ore"]:
-		blocked[int(o.y) * 64 + int(o.x)] = true
+		blocked[int(o.y) * N + int(o.x)] = true
 	for o in geom["basin_ore"]:
-		blocked[int(o.y) * 64 + int(o.x)] = true
+		blocked[int(o.y) * N + int(o.x)] = true
 	if bool(p.get("freeform", false)):
 		for c in p["rocks"]:
-			blocked[int(c.y) * 64 + int(c.x)] = true
+			blocked[int(c.y) * N + int(c.x)] = true
 		for c in p["sparse"]:
-			blocked[int(c.y) * 64 + int(c.x)] = true
+			blocked[int(c.y) * N + int(c.x)] = true
 	else:
-		for x in range(1, 63):
+		for x in range(1, N - 1):
 			var rows: Array = band_rows(p, x)
 			if rows.size() != 2:
 				continue
@@ -967,54 +976,54 @@ static func _terrain_mask(p: Dictionary, geom: Dictionary) -> Array:
 					continue
 				if x == plug.x and y == plug.y:
 					continue
-				blocked[y * 64 + x] = true
+				blocked[y * N + x] = true
 		for c in extra_walls(p):
-			blocked[int(c.y) * 64 + int(c.x)] = true
+			blocked[int(c.y) * N + int(c.x)] = true
 	# 盆地岩环（实心/覆盖层都挡路）
 	for y in range(b.position.y, b.position.y + b.size.y):
 		for x in range(b.position.x, b.position.x + b.size.x):
 			var edge: bool = x == b.position.x or x == b.position.x + b.size.x - 1 \
 				or y == b.position.y or y == b.position.y + b.size.y - 1
 			if edge:
-				blocked[y * 64 + x] = true
+				blocked[y * N + x] = true
 	if not bool(p.get("freeform", false)):
 		var phase: int = int(p["sparse_phase"])
-		for x in range(1, 63):
+		for x in range(1, N - 1):
 			if Lua64.mod(x, 9) == phase:
-				blocked[17 * 64 + x] = true
+				blocked[34 * N + x] = true
 	# 边框 + 核心
-	for x in 64:
+	for x in N:
 		blocked[x] = true
-		blocked[63 * 64 + x] = true
-	for y in 64:
-		blocked[y * 64] = true
-		blocked[y * 64 + 63] = true
+		blocked[(N - 1) * N + x] = true
+	for y in N:
+		blocked[y * N] = true
+		blocked[y * N + (N - 1)] = true
 	var core: Vector2i = geom["core"]
-	blocked[core.y * 64 + core.x] = true
+	blocked[core.y * N + core.x] = true
 	return blocked
 
 
 ## 忽略高度的 BFS 距离场（核心为源，只向可通行格扩张；-1 = 不可达）。
 static func _terrain_bfs(mask: Array, core: Vector2i) -> Array:
 	var dist: Array = []
-	for i in 4096:
+	for i in N * N:
 		dist.append(-1)
 	var q: Array = []
-	dist[core.y * 64 + core.x] = 0
-	q.append(core.y * 64 + core.x)
+	dist[core.y * N + core.x] = 0
+	q.append(core.y * N + core.x)
 	var head := 0
 	while head < q.size():
 		var idx: int = q[head]
 		head += 1
-		var x: int = Lua64.mod(idx, 64)
-		var y: int = Lua64.idiv(idx, 64)
+		var x: int = Lua64.mod(idx, N)
+		var y: int = Lua64.idiv(idx, N)
 		var nd: int = int(dist[idx]) + 1
 		for k in 6:
 			var nx: int = Grid.nx(x, y, k)
 			var ny: int = Grid.ny(x, y, k)
-			if nx < 0 or ny < 0 or nx >= 64 or ny >= 64:
+			if nx < 0 or ny < 0 or nx >= N or ny >= N:
 				continue
-			var ni: int = ny * 64 + nx
+			var ni: int = ny * N + nx
 			if dist[ni] != -1 or _mask_blocked(mask, ni):
 				continue
 			dist[ni] = nd
@@ -1030,18 +1039,18 @@ static func _mask_blocked(mask: Array, i: int) -> bool:
 static func _terrain_path(dist: Array, mask: Array, from: Vector2i, core: Vector2i, ts: int) -> Array:
 	var path: Array = []
 	var cur := Vector2i(from.x, from.y)
-	if dist[cur.y * 64 + cur.x] < 0:
+	if dist[cur.y * N + cur.x] < 0:
 		return path
 	path.append(cur)
 	while cur != core:
-		var d: int = int(dist[cur.y * 64 + cur.x])
+		var d: int = int(dist[cur.y * N + cur.x])
 		var cand: Array = []
 		for k in 6:
 			var nx: int = Grid.nx(cur.x, cur.y, k)
 			var ny: int = Grid.ny(cur.x, cur.y, k)
-			if nx < 0 or ny < 0 or nx >= 64 or ny >= 64:
+			if nx < 0 or ny < 0 or nx >= N or ny >= N:
 				continue
-			var ni: int = ny * 64 + nx
+			var ni: int = ny * N + nx
 			if int(dist[ni]) != d - 1:
 				continue
 			if not (nx == core.x and ny == core.y) and _mask_blocked(mask, ni):
@@ -1068,22 +1077,24 @@ static func _generate_terrain(seed: int, salt: int, p: Dictionary, _is_default: 
 	var mains: Array = geom["mains"]
 	var heights: Array = []
 	var ms: Array = []
-	for y in 64:
-		for x in 64:
+	for y in N:
+		for x in N:
 			ms.append(_terrain_m(x, y, ts))
 	# ①' 区域特征叠加（山丘/洼地成片出现）；再按本图分位量化到高度层
 	_terrain_apply_features(ms, _terrain_features(seed, salt, geom, p))
-	# 逐图分位阈值（m 场整体均值随盐漂移 → 用分位保证基础带稳定）
+	# 逐图分位阈值（m 场整体均值随盐漂移 → 用分位保证基础带稳定）。
+	# 2026-10-28 Terrain 2.1：分位位置逐盐微抖——构成比例逐图可辨（单调校准③）。
+	# 抖动域已核算：相邻带不交叠（最窄 h3/h4 间隔仍 ≥3‰≈49 格）；nz 带投影 313..420 ∈[150,450]、
+	# neg 带投影 63..97 ∈[20,100]，terrain_valid 统计带不会被抖破（不引发换盐风暴）。
 	var sorted: Array = ms.duplicate()
 	sorted.sort()
 	var th: Array = []
-	th.append(int(sorted[4096 * BASE_NEG2_PERM / 1000]))
-	th.append(int(sorted[4096 * BASE_NEG1_PERM / 1000]))
-	th.append(int(sorted[4096 * BASE_H1_PERM / 1000]))
-	th.append(int(sorted[4096 * BASE_H2_PERM / 1000]))
-	th.append(int(sorted[4096 * BASE_H3_PERM / 1000]))
-	th.append(int(sorted[4096 * BASE_H4_PERM / 1000]))
-	for i in 4096:
+	for b3 in 6:
+		var base: int = [BASE_NEG2_PERM, BASE_NEG1_PERM, BASE_H1_PERM, BASE_H2_PERM, BASE_H3_PERM, BASE_H4_PERM][b3]
+		var amp: int = [5, 12, 40, 20, 8, 1][b3]
+		var jit: int = Lua64.mod(_hash16(ts, 7111 + b3 * 17, 7100), 2 * amp + 1) - amp
+		th.append(int(sorted[N * N * (base + jit) / 1000]))
+	for i in N * N:
 		heights.append(_terrain_base(int(ms[i]), th))
 	# ② 成片化三连：投票平滑 3 遍（Spokes）→ 小块合并 2 遍（<8 格并入邻块）→ 中值 1 遍（去尖点）
 	heights = _terrain_smooth_vote(heights, 3)
@@ -1105,9 +1116,9 @@ static func _generate_terrain(seed: int, salt: int, p: Dictionary, _is_default: 
 		uy = -1
 	else:
 		uy = 1
-	for y in range(maxi(core.y - 8, 0), mini(core.y + 9, 64)):
-		for x in range(maxi(core.x - 8, 0), mini(core.x + 9, 64)):
-			var i: int = y * 64 + x
+	for y in range(maxi(core.y - 8, 0), mini(core.y + 9, N)):
+		for x in range(maxi(core.x - 8, 0), mini(core.x + 9, N)):
+			var i: int = y * N + x
 			var d: int = Grid.hex_dist(x, y, core.x, core.y)
 			if kind == TERRAIN_PLAIN:
 				if d <= 5:
@@ -1180,12 +1191,12 @@ static func _generate_terrain(seed: int, salt: int, p: Dictionary, _is_default: 
 				_terrain_clamp(heights, Grid.nx(c.x, c.y, k), Grid.ny(c.x, c.y, k), 0, 2)
 		for c in path:
 			if Grid.hex_dist(c.x, c.y, core.x, core.y) == 1:
-				heights[c.y * 64 + c.x] = maxi(int(heights[c.y * 64 + c.x]), core_h_min(kind))
+				heights[c.y * N + c.x] = maxi(int(heights[c.y * N + c.x]), core_h_min(kind))
 	# ⑥a 布局地貌落高（必须放在最后：小块合并会把孤立 h1 微丘/2×2 台地当小凸台吃掉，
 	# 而建图校验要求这些格恒为 h1 —— 玩法标定的地貌必须压过视觉平滑）
 	if bool(p.get("freeform", false)):
 		for hc in p["hills"]:
-			heights[int(hc.y) * 64 + int(hc.x)] = 1
+			heights[int(hc.y) * N + int(hc.x)] = 1
 	else:
 		var mx: int = p["mesa_x"]
 		var my: int = p["mesa_y"]
@@ -1197,10 +1208,10 @@ static func _generate_terrain(seed: int, salt: int, p: Dictionary, _is_default: 
 	_terrain_cliff_forms(heights, seed, salt, geom, corr, p)
 	# ⑦ 负高度补足：限坡会把小坑压平 → 不足 20‰ 时显式放置洼地
 	var neg_now := 0
-	for i in 4096:
+	for i in N * N:
 		if int(heights[i]) < 0:
 			neg_now += 1
-	if neg_now * 1000 / 4096 < TERRAIN_NEG_LO:
+	if neg_now * 1000 / (N * N) < TERRAIN_NEG_LO:
 		_terrain_depressions(heights, seed, salt, geom, mains, corr, p)
 	# ⑦b 矿口保证（2026-10-25）：最后落定——晚于走廊/微丘/洼地，切完不再被覆盖
 	var mouth_ok := _terrain_ore_mouth(heights, geom, ts)
@@ -1208,7 +1219,7 @@ static func _generate_terrain(seed: int, salt: int, p: Dictionary, _is_default: 
 	var nz := 0
 	var neg := 0
 	var hi := 0
-	for i in 4096:
+	for i in N * N:
 		var v: int = heights[i]
 		if v != 0:
 			nz += 1
@@ -1216,8 +1227,8 @@ static func _generate_terrain(seed: int, salt: int, p: Dictionary, _is_default: 
 			neg += 1
 		if v >= 3:
 			hi += 1
-	var nz_perm := nz * 1000 / 4096
-	var neg_perm := neg * 1000 / 4096
+	var nz_perm := nz * 1000 / (N * N)
+	var neg_perm := neg * 1000 / (N * N)
 	var valid: bool = nz_perm >= TERRAIN_NZ_LO and nz_perm <= TERRAIN_NZ_HI \
 		and neg_perm >= TERRAIN_NEG_LO and neg_perm <= TERRAIN_NEG_HI \
 		and hi >= TERRAIN_HI_MIN and mouth_ok
@@ -1231,9 +1242,9 @@ static func _mouth_open_dir(heights: Array, x: int, y: int, k: int) -> bool:
 	for _step in 5:
 		cx = Grid.nx(cx, cy, k)
 		cy = Grid.ny(cx, cy, k)
-		if cx < 0 or cy < 0 or cx >= 64 or cy >= 64:
+		if cx < 0 or cy < 0 or cx >= N or cy >= N:
 			return false
-		if int(heights[cy * 64 + cx]) >= 2:
+		if int(heights[cy * N + cx]) >= 2:
 			return false
 	return true
 
@@ -1263,10 +1274,10 @@ static func _terrain_ore_mouth(heights: Array, geom: Dictionary, ts: int) -> boo
 			for _step in 6:
 				cx = Grid.nx(cx, cy, k)
 				cy = Grid.ny(cx, cy, k)
-				if cx < 0 or cy < 0 or cx >= 64 or cy >= 64:
+				if cx < 0 or cy < 0 or cx >= N or cy >= N:
 					cost = 1 << 30
 					break
-				cost = maxi(cost, int(heights[cy * 64 + cx]))
+				cost = maxi(cost, int(heights[cy * N + cx]))
 			var key := _hash16(ctr.x * 6 + k, ctr.y, ts + 17)
 			if cost < best_cost or (cost == best_cost and key < best_key):
 				best_cost = cost
@@ -1279,7 +1290,7 @@ static func _terrain_ore_mouth(heights: Array, geom: Dictionary, ts: int) -> boo
 		for _step2 in 6:
 			gx = Grid.nx(gx, gy, best_k)
 			gy = Grid.ny(gx, gy, best_k)
-			if gx < 0 or gy < 0 or gx >= 64 or gy >= 64:
+			if gx < 0 or gy < 0 or gx >= N or gy >= N:
 				break
 			_terrain_clamp(heights, gx, gy, 0, 1)
 			for n in 6:
@@ -1298,11 +1309,11 @@ static func _terrain_ore_mouth(heights: Array, geom: Dictionary, ts: int) -> boo
 static func _terrain_cliff_forms(heights: Array, seed: int, salt: int, geom: Dictionary,
 		corr: Dictionary, p: Dictionary) -> void:
 	var prot: Array = []
-	for i in 4096:
+	for i in N * N:
 		prot.append(false)
 	var core: Vector2i = geom["core"]
-	for y in range(maxi(core.y - 9, 0), mini(core.y + 10, 64)):
-		for x in range(maxi(core.x - 9, 0), mini(core.x + 10, 64)):
+	for y in range(maxi(core.y - 9, 0), mini(core.y + 10, N)):
+		for x in range(maxi(core.x - 9, 0), mini(core.x + 10, N)):
 			if Grid.hex_dist(x, y, core.x, core.y) <= 7:
 				_terrain_mark(prot, x, y)
 	for m in geom["mains"]:
@@ -1349,28 +1360,28 @@ static func _terrain_cliff_forms(heights: Array, seed: int, salt: int, geom: Dic
 			for dy in 3:
 				for dx in 3:
 					_terrain_mark(prot, mx + dx, my + dy)
-	for i in 4096: # 现有 h≥2 格不叠加（走廊肩/自然台地保持原样）
+	for i in N * N: # 现有 h≥2 格不叠加（走廊肩/自然台地保持原样）
 		if int(heights[i]) >= 2:
-			var x0: int = Lua64.mod(i, 64)
-			var y0: int = Lua64.idiv(i, 64)
+			var x0: int = Lua64.mod(i, N)
+			var y0: int = Lua64.idiv(i, N)
 			_terrain_mark(prot, x0, y0)
-	# —— 孤峰 1..2 座：心 h3 + 半环 h2 肩（3..5 格，起始向/数量全由哈希定）——
-	var want_butte := 1 + Lua64.mod(_hash16(seed, salt, 9501), 2)
+	# —— 孤峰 1..3 座（2026-10-28 Terrain 2.1：1..2→1..3，体检 hi3≤3 的种子占 19/65）：心 h3 + 半环 h2 肩（3..5 格，起始向/数量全由哈希定）——
+	var want_butte := 1 + Lua64.mod(_hash16(seed, salt, 9501), 3)
 	var placed := 0
-	for t in 24:
+	for t in 30:
 		if placed >= want_butte:
 			break
-		var cx: int = 3 + Lua64.mod(_hash16(seed, salt * 7 + t, 9503), 58)
-		var cy: int = 3 + Lua64.mod(_hash16(seed, salt * 7 + t, 9507), 58)
-		var ok := not bool(prot[cy * 64 + cx])
+		var cx: int = 3 + Lua64.mod(_hash16(seed, salt * 7 + t, 9503), N - 6)
+		var cy: int = 3 + Lua64.mod(_hash16(seed, salt * 7 + t, 9507), N - 6)
+		var ok := not bool(prot[cy * N + cx])
 		if ok:
 			for k in 6:
-				if bool(prot[Grid.ny(cx, cy, k) * 64 + Grid.nx(cx, cy, k)]):
+				if bool(prot[Grid.ny(cx, cy, k) * N + Grid.nx(cx, cy, k)]):
 					ok = false
 					break
 		if not ok:
 			continue
-		heights[cy * 64 + cx] = 3
+		heights[cy * N + cx] = 3
 		_terrain_mark(prot, cx, cy)
 		var start_k: int = Lua64.mod(_hash16(cx, cy, 9509), 6)
 		var ring_n: int = 3 + Lua64.mod(_hash16(cx, cy, 9513), 3)
@@ -1378,14 +1389,14 @@ static func _terrain_cliff_forms(heights: Array, seed: int, salt: int, geom: Dic
 			var k2 := (start_k + i2) % 6
 			var sx: int = Grid.nx(cx, cy, k2)
 			var sy: int = Grid.ny(cx, cy, k2)
-			heights[sy * 64 + sx] = 2
+			heights[sy * N + sx] = 2
 			_terrain_mark(prot, sx, sy)
 		placed += 1
 	# —— 崖脉 1 条：漂移游走 5..9 格 h3；邻格只降不升（>2 压回 2）——
 	for t in 24:
 		var sx: int = 3 + Lua64.mod(_hash16(seed, salt * 11 + t, 9521), 58)
 		var sy: int = 3 + Lua64.mod(_hash16(seed, salt * 11 + t, 9523), 58)
-		if bool(prot[sy * 64 + sx]):
+		if bool(prot[sy * N + sx]):
 			continue
 		var want_len: int = 5 + Lua64.mod(_hash16(sx, sy, 9527), 5)
 		var dir_k: int = Lua64.mod(_hash16(sx, sy, 9529), 6)
@@ -1393,10 +1404,10 @@ static func _terrain_cliff_forms(heights: Array, seed: int, salt: int, geom: Dic
 		var cx := sx
 		var cy := sy
 		for _step in want_len:
-			if cx < 1 or cy < 1 or cx > 62 or cy > 62 or bool(prot[cy * 64 + cx]):
+			if cx < 1 or cy < 1 or cx > N - 2 or cy > N - 2 or bool(prot[cy * N + cx]):
 				break
 			chain.append(Vector2i(cx, cy))
-			prot[cy * 64 + cx] = true
+			prot[cy * N + cx] = true
 			var turn: int = Lua64.mod(_hash16(cx, cy, 9531), 10)
 			if turn == 0:
 				dir_k = (dir_k + 1) % 6 # 左转 20%
@@ -1407,7 +1418,7 @@ static func _terrain_cliff_forms(heights: Array, seed: int, salt: int, geom: Dic
 		if chain.size() < 5:
 			continue
 		for c in chain:
-			heights[int(c.y) * 64 + int(c.x)] = 3
+			heights[int(c.y) * N + int(c.x)] = 3
 		for c in chain: # 坡肩整备：只降不升，h0 崖面保持 Δ3 陡壁读感
 			for k in 6:
 				_terrain_clamp(heights, Grid.nx(int(c.x), int(c.y), k), Grid.ny(int(c.x), int(c.y), k), 0, 2)

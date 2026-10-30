@@ -76,7 +76,7 @@ func _initialize() -> void:
 		var btn3: Button = b
 		check(btn3.custom_minimum_size.y >= min_h and btn3.custom_minimum_size.x >= min_w,
 			"按钮 hud/%s 触达尺寸 %.0fx%.0f" % [btn3.name, btn3.custom_minimum_size.x, btn3.custom_minimum_size.y])
-	cmp_int(total, 64, "按钮矩阵总数（6+5+2+7+34+2 + 指挥坞 8；顶栏热度/暂停 30S 高状态钮豁免——specs/mobile-ux-spec §5 修订）")
+	cmp_int(total, 65, "按钮矩阵总数（6+5+2+7+34+2 + 指挥坞 9；行 1 增矿工钮后 3/3/3；顶栏热度/暂停 30S 高状态钮豁免——specs/mobile-ux-spec §5 修订）")
 
 	# ---- 6. 触屏拖线（D1-4/6）：按下→拖动（含偏线绕行）→抬起；与鼠标路径世界状态逐字节一致 ----
 	main.view.stop_all_audio()

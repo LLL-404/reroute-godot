@@ -36,7 +36,7 @@ func _initialize() -> void:
 	var s0: int = world.supply
 	await _tap(sp)
 	cmp_int(world.buildings.size(), n0 + 1, "单指点按落 1 格建筑")
-	cmp_int(world.supply, s0 - 10, "单指点按扣费 10")
+	cmp_int(world.supply, s0 - 5, "单指点按扣费 5")
 	check(main.drag_start == Vector2i(-1, -1), "点按后拖拽起点已清")
 	check(main.touch_mode == "", "点按后手势状态归零")
 
@@ -63,7 +63,7 @@ func _initialize() -> void:
 		var s2: int = world.supply
 		await _drag_cells(view, Vector2i(row.x, row.y), Vector2i(row.x + 2, row.y))
 		cmp_int(world.buildings.size(), n2 + 3, "墙模式单指拖动建 3 格墙")
-		cmp_int(world.supply, s2 - 30, "墙模式拖线扣费 30")
+		cmp_int(world.supply, s2 - 15, "墙模式拖线扣费 15")
 
 	# ---- 4. 双指平移 = 视角平移，零建造 ----
 	main.mode = "wall" # 故意留在墙模式：双指手势必须压过建造

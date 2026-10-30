@@ -67,7 +67,7 @@ const LOD_LEVELS := 4
 const LOD_SCREEN_FRACTIONS := [0.20, 0.08, 0.03]
 const LOD_AGGRESSIVENESS := 1.3
 const LOD_HYSTERESIS := 0.10 # 回升档需超过阈值 1.10 倍，防边界抖动
-const LOD_TAN_HALF_FOV := 0.41421356 # tan(45°/2)：相机 fov 恒 45（view_core）
+const LOD_TAN_HALF_FOV := 0.41421356 # tan(45°/2)：旧固定 FOV 近似；实际 FOV 运行时读 camera.fov（view_core 取景 30°）
 
 
 ## LOD 旁支判定：lod1..lod3（校准口径只认 lod0——与 glb 化前逐像素一致）。

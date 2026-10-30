@@ -15,9 +15,9 @@ extends RefCounted
 const DEFAULT_SEED := 20261003
 # 裸图路径长标定（2026-10-16 手搓夹具实测，FlowField 直/斜 10/14 口径）：两主口 = 548。
 # 生成地图两主口路径长必须落在 ±15% 带内（难度不许因布局漂移）。
-const PATH_REF := 548
-const PATH_LO := 466 # PATH_REF × 0.85
-const PATH_HI := 630 # PATH_REF × 1.15
+const PATH_REF := 990 # 128 图 sweep 实测定案（六边距离度量非线性，见 §11.48）
+const PATH_LO := 840 # PATH_REF × 0.85
+const PATH_HI := 1140 # PATH_REF × 1.15
 const RESAMPLE_MAX := 64
 
 # 布局缓存：同 seed 的「已校验参数」进程内复用（校验含两次流场全展开，不便宜）。
@@ -64,41 +64,43 @@ var _sparse := {} # 散土 O(1) 查询表
 ## 构造剧本：固定节拍/波表常量 + 按 seed 生成布局参数（MapGen）并自校验
 func _init(p_seed: int = DEFAULT_SEED) -> void:
 	seed = p_seed
-	w = 64
-	h = 64
-	end_tick = 6400
-	hard_cap_tick = 8800
+	w = Dims.MAP_N # 2026-10-27 B1 尺寸单点化（sim/dims.gd 唯一真源）
+	h = Dims.MAP_N
+	end_tick = 8740 # 2026-10-28 开局成长改造：全表平移 +2340，自然终局 5:20→7:17
+	hard_cap_tick = 11140 # 超时判负 9:17
 	trickle_every = 300 # 开门后每 300 tick 从盆地渗 2 只虫群（开门有代价，但可守）
 	wave_scale_pct = 100
-	# 同波多条目错开 15~30 tick：怪列成"流"而不是团（总量 200 只；不随布局变奏）
+	# 同波多条目错开 15~30 tick：怪列成"流"而不是团（总量 200 只；不随布局变奏）。
+	# 2026-10-28 开局成长改造：全表 +2340（首波 3 秒→2 分钟），间隔与构成一字未动——
+	# 开局 60 供给只够 2 矿工或 1 塔，采矿成长期需要这段窗。
 	waves = [
-		[60, 1, Sim.E_SWARM, 1],
-		[160, 1, Sim.E_SWARM, 1],
-		[260, 1, Sim.E_SWARM, 1],
-		[360, 1, Sim.E_SWARM, 1],
-		[800, 1, Sim.E_SWARM, 10],
-		[830, 2, Sim.E_SWARM, 6],
-		[1700, 1, Sim.E_SWARM, 14],
-		[1700, 2, Sim.E_SWARM, 10],
-		[1850, 2, Sim.E_BEHEMOTH, 1],
-		[2700, 1, Sim.E_SWARM, 14],
-		[2700, 2, Sim.E_SWARM, 12],
-		[2850, 1, Sim.E_SWARM, 4],
-		[2850, 2, Sim.E_BEHEMOTH, 2],
-		[3700, 1, Sim.E_SWARM, 14],
-		[3700, 2, Sim.E_SWARM, 14],
-		[3850, 1, Sim.E_SWARM, 10],
-		[3850, 2, Sim.E_BEHEMOTH, 3],
-		# 末波阶段化（2026-10-25 刀③）：82 只从 160t 窗口拉到 380t（批间隔 80t）、
+		[2400, 1, Sim.E_SWARM, 1],
+		[2500, 1, Sim.E_SWARM, 1],
+		[2600, 1, Sim.E_SWARM, 1],
+		[2700, 1, Sim.E_SWARM, 1],
+		[3140, 1, Sim.E_SWARM, 10],
+		[3170, 2, Sim.E_SWARM, 6],
+		[4040, 1, Sim.E_SWARM, 14],
+		[4040, 2, Sim.E_SWARM, 10],
+		[4190, 2, Sim.E_BEHEMOTH, 1],
+		[5040, 1, Sim.E_SWARM, 14],
+		[5040, 2, Sim.E_SWARM, 12],
+		[5190, 1, Sim.E_SWARM, 4],
+		[5190, 2, Sim.E_BEHEMOTH, 2],
+		[6040, 1, Sim.E_SWARM, 14],
+		[6040, 2, Sim.E_SWARM, 14],
+		[6190, 1, Sim.E_SWARM, 10],
+		[6190, 2, Sim.E_BEHEMOTH, 3],
+		# 末波阶段化（2026-10-25 刀③）：82 只拉到 380t 窗口（批间隔 80t）、
 		# 蛮兽殿后——「末波是几何题不是经济题」的修正：分散的运河塔阵也有时间磨完
-		[4700, 1, Sim.E_SWARM, 12],
-		[4780, 1, Sim.E_SWARM, 12],
-		[4860, 1, Sim.E_SWARM, 12],
-		[4700, 2, Sim.E_SWARM, 12],
-		[4780, 2, Sim.E_SWARM, 12],
-		[4860, 2, Sim.E_SWARM, 14],
-		[5000, 1, Sim.E_BEHEMOTH, 4],
-		[5080, 2, Sim.E_BEHEMOTH, 4],
+		[7040, 1, Sim.E_SWARM, 12],
+		[7120, 1, Sim.E_SWARM, 12],
+		[7200, 1, Sim.E_SWARM, 12],
+		[7040, 2, Sim.E_SWARM, 12],
+		[7120, 2, Sim.E_SWARM, 12],
+		[7200, 2, Sim.E_SWARM, 14],
+		[7340, 1, Sim.E_BEHEMOTH, 4],
+		[7420, 2, Sim.E_BEHEMOTH, 4],
 	]
 	if _resolve_layout(p_seed):
 		return
@@ -167,11 +169,11 @@ func _apply_legacy(p: Dictionary) -> void:
 	ridge_y = p["ridge_y"]
 	var gr: Array = MapGen.gate_rows(p)
 	chokes = [Vector2i(p["choke_west"], int(gr[0])), Vector2i(p["choke_east"], int(gr[1]))]
-	core = Vector2i(cx, 6)
-	hero_spawn = Vector2i(cx, 8) # 核心门前两格（build_grid 强制 OPEN）
+	core = Vector2i(cx, 12)
+	hero_spawn = Vector2i(cx, 16) # 核心门前两格（build_grid 强制 OPEN；128 锚 ×2）
 	spawns = [
-		Vector2i(cx - 12, 56), # 西咽喉外
-		Vector2i(cx + 12, 56), # 东咽喉外
+		Vector2i(cx - 24, 112), # 西咽喉外
+		Vector2i(cx + 24, 112), # 东咽喉外
 		Vector2i(p["basin_x0"] + 3, p["basin_y0"] + 4), # 盆地内（压在矿格上）
 	]
 	basin_rect = Rect2i(p["basin_x0"], p["basin_y0"], p["basin_w"], p["basin_h"])
@@ -283,9 +285,9 @@ func height_at(x: int, y: int) -> int:
 		if _hill.has(str(x) + "," + str(y)):
 			return 1
 		return 0
-	if y <= 9 and x >= core.x - 3 and x <= core.x + 3:
+	if y <= 18 and x >= core.x - 6 and x <= core.x + 6:
 		return 3
-	if y <= 12 and x >= core.x - 2 and x <= core.x + 2:
+	if y <= 24 and x >= core.x - 4 and x <= core.x + 4:
 		return 2
 	if y == _gate_row_at(x):
 		return 1 # 咽喉口
@@ -320,7 +322,7 @@ func build_grid() -> Grid:
 					g.set_cell(x, y, Grid.COVER if (x == basin_plug.x and y == basin_plug.y) else Grid.SOLID)
 			elif _sparse.has(str(x) + "," + str(y)):
 				g.set_cell(x, y, Grid.COVER) # 自由路径散土（legacy 路径 _sparse 恒空）
-			elif not _freeform and y == 17 and x % 9 == sparse_phase:
+			elif not _freeform and y == 34 and x % 9 == sparse_phase:
 				g.set_cell(x, y, Grid.COVER) # 稀疏表土纹理：可挖但不给矿，不遮挡咽喉与建造走廊
 	g.set_cell(core.x, core.y, Grid.SOLID) # 核心占地
 	g.set_cell(hero_spawn.x, hero_spawn.y, Grid.OPEN) # 英雄落位格恒通行

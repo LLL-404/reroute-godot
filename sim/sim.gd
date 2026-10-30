@@ -10,10 +10,13 @@ const TICK_HZ := 20
 const ORE_STORE := 40
 const ORE_RATE := 5
 const ORE_RATE_TICKS := 20
-const WORKER_COUNT := 2
+# 开局成长改造（2026-10-28）：工人改购买制（原 WORKER_COUNT=2 免费开局退役）。
+# 开局 60 = 2 矿工（WORKER_COST×2）= 1 塔（塔 60 不变）——开局的主分支选择。
+const WORKER_CAP := 6 # 矿工购买上限（工人性能/画面密度软顶；矿总量 680 天然封顶收入）
+const WORKER_COST := 30
 const WORKER_SPEED_TICKS := 3
 const WORKER_LOAD := 20
-const START_SUPPLY := 300
+const START_SUPPLY := 60
 
 # 高度层（单向崖）：-2..5 整数（可挖出两层坑）；单位边可走 ⇔ 爬升 ≤ 兵种 climb_max
 # （下崖任意）；英雄无视高度。

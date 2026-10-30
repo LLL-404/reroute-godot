@@ -2,13 +2,23 @@ extends CanvasLayer
 
 # 肉鸽模式 HUD：层/波进度、阶段操作条（开波 / 三选一 / 进入下一层）、地形牌手牌。
 # 独立 CanvasLayer（layer 11），不侵入 game/hud.gd 与 game/screens.gd 的既有结构。
-# 只读 RunState，不发命令；所有动作经 cb 回调交回 main。
+# 只读 RunState，不发命令；所有动作经本类 signal 交回 main。
+
+# ---- 公开面（外部可调）----
+# 装配：setup(hud)。方法：show_run(r) / hide_run() / refresh() / flash(text)。
+# ---- 探针契约（改名会破 tests/probes，勿动）----
+# 探针直读 visible 与 S / run / root / head / bar / hand_row / toast；改名须同步 probe_rogue_ui。
 
 const UiStyle = preload("res://game/ui/ui_style.gd")
 
+# ---- 外向信号（main 接这 4 条）----
+signal start_wave_requested() # 「开始第 N 波」
+signal advance_requested() # 「进入第 N 层」
+signal card_used(cid: String) # 手牌点击
+signal card_picked(idx: int) # 三选一选牌
+
 var C: Dictionary = {}
 var S := 1.0
-var cb: Dictionary = {}
 var run = null
 
 var root: Control
@@ -19,8 +29,8 @@ var hand_row: HBoxContainer
 var toast: Label
 
 
-func init(callbacks: Dictionary, _hud) -> void:
-	cb = callbacks
+## 初始化：注入 HUD 引用（当前只做接口对齐；肉鸽 HUD 不读 HUD 控件）
+func setup(_hud_ref = null) -> void:
 	C = UiStyle.DARK
 	layer = 11
 	_recalc_s()
@@ -104,13 +114,13 @@ func refresh() -> void:
 	var ph: int = int(sm["phase"])
 	if ph == RunState.PHASE_INTRO:
 		_add_label("第 %d 层 · %s" % [int(sm["layer"]), String(run.threat_info.get("note", ""))], C["gold_hi"], 15.0)
-		_add_action("开始第 %d 波" % (int(sm["wave"]) + 1), true, func() -> void: cb["start_wave"].call())
+		_add_action("开始第 %d 波" % (int(sm["wave"]) + 1), true, func() -> void: start_wave_requested.emit())
 	elif ph == RunState.PHASE_PICK:
 		# 三选一由 hex_picker 全屏接管；这里只留一行状态，不画卡
 		_add_label("强化选择中 · 已选 %d 项构筑" % (int(sm["relics"]) + int(sm["talents"]) + int(sm["unlocked"])), C["muted"], 12.0)
 	elif ph == RunState.PHASE_LAYER_CLEAR:
 		_add_label("第 %d 层守住 · 累计击杀 %d" % [int(sm["layer"]), run.world.kills], C["hp"], 15.0)
-		_add_action("进入第 %d 层" % (int(sm["layer"]) + 1), true, func() -> void: cb["advance"].call())
+		_add_action("进入第 %d 层" % (int(sm["layer"]) + 1), true, func() -> void: advance_requested.emit())
 	elif ph == RunState.PHASE_WAVE:
 		var left: int = maxi(0, run.wave_end - run.world.tick_count)
 		_add_label("第 %d 波进行中 · 场上 %d 只 · 剩余 %d 秒" % [
@@ -128,7 +138,7 @@ func _add_hand() -> void:
 		var card: Dictionary = RewardPool.by_id(String(cid))
 		if card.is_empty():
 			continue
-		var b := _small(String(card["name"]), func() -> void: cb["use_card"].call(String(cid)))
+		var b := _small(String(card["name"]), func() -> void: card_used.emit(String(cid)))
 		b.custom_minimum_size = Vector2(int(84.0 * S), int(30.0 * S))
 		hand_row.add_child(b)
 
@@ -145,7 +155,7 @@ func _card_button(idx: int, card: Dictionary) -> Button:
 	b.add_theme_stylebox_override("normal", st)
 	b.add_theme_stylebox_override("hover", UiStyle.flat(C["btn_hover"], C["gold"], int(4 * S)))
 	b.add_theme_stylebox_override("pressed", UiStyle.flat(C["btn_pressed"], C["gold_hi"], int(4 * S)))
-	b.pressed.connect(func() -> void: cb["pick"].call(idx))
+	b.pressed.connect(func() -> void: card_picked.emit(idx))
 	return b
 
 

@@ -15,7 +15,7 @@ extends RefCounted
 #   ⑤ 阈值化拉普拉斯扩散侵蚀（崖脚塌积；场内 0.5m 预烘焙网格 + 双线性采样）；
 #   位置锚点接口：compose(bp, seed, anchor) 可把岩脊/盆地/前哨峰对齐到当局 Scenario。
 
-const HALF := 32.0 # 与 view.CELL_N/2 同源；蓝图地标用格子坐标，composer 换算世界坐标
+const HALF := Dims.MAP_HALF # 2026-10-27 B1：派生自 sim/dims.gd（原「与 view.CELL_N/2 同源」注释升级为编译期同源）
 
 # ============ 积木库（纯函数） ============
 
@@ -71,7 +71,7 @@ static func smooth01(t: float) -> float:
 
 # ============ composer：蓝图 + 种子 → 高度函数 ============
 
-const FINE_N := 129 # 场内 0.5m 采样线（-32..32）；侵蚀烘焙网格分辨率
+const FINE_N := Dims.MAP_N * 2 + 1 # 场内 0.5m 采样线（±HALF）；侵蚀烘焙网格分辨率
 const FINE_STEP := 0.5
 
 

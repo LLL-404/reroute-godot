@@ -12,11 +12,12 @@ func register(kit: TestKit) -> void:
 
 	kit.test("sim-constants", func():
 		kit.eq(Sim.TICK_HZ, 20, "TICK_HZ")
-		kit.eq(Sim.START_SUPPLY, 300, "START_SUPPLY")
+		kit.eq(Sim.START_SUPPLY, 60, "START_SUPPLY（开局成长改造：=2 矿工=1 塔）")
+		kit.eq(Sim.WORKER_COST, 30, "WORKER_COST（开局成长改造）")
+		kit.eq(Sim.WORKER_CAP, 6, "WORKER_CAP（开局成长改造，原 WORKER_COUNT=2 退役）")
 		kit.eq(Sim.ORE_STORE, 40, "ORE_STORE（改形 C）")
 		kit.eq(Sim.ORE_RATE, 5, "ORE_RATE")
 		kit.eq(Sim.ORE_RATE_TICKS, 20, "ORE_RATE_TICKS")
-		kit.eq(Sim.WORKER_COUNT, 2, "WORKER_COUNT")
 		kit.eq(Sim.WORKER_LOAD, 20, "WORKER_LOAD")
 		kit.eq(Sim.CONVOY_SHIFT, 3, "CONVOY_SHIFT")
 		kit.eq(Sim.FILL_COST, 15, "FILL_COST")
@@ -70,60 +71,61 @@ func register(kit: TestKit) -> void:
 
 	kit.test("layout-snapshot", func():
 		var sc := Scenario.new()
+		# 128 图重钉（2026-10-27 B1 扩容：冻结路径重新锚定，语义不变）
 		kit.eq(sc.seed, Scenario.DEFAULT_SEED, "默认种子 = 黄金图")
 		kit.eq(sc.seed, 20261003, "默认种子字面值")
-		kit.eq(sc.w, 64, "w")
-		kit.eq(sc.h, 64, "h")
-		kit.eq(sc.core, Vector2i(33, 6), "core")
-		kit.eq(sc.hero_spawn, Vector2i(33, 8), "hero_spawn")
-		kit.eq(sc.ridge_y, 42, "ridge_y")
-		kit.seq(sc.chokes, [Vector2i(22, 42), Vector2i(46, 42)], "chokes")
+		kit.eq(sc.w, 128, "w")
+		kit.eq(sc.h, 128, "h")
+		kit.eq(sc.core, Vector2i(63, 12), "core")
+		kit.eq(sc.hero_spawn, Vector2i(63, 16), "hero_spawn")
+		kit.eq(sc.ridge_y, 82, "ridge_y")
+		kit.seq(sc.chokes, [Vector2i(38, 82), Vector2i(87, 82)], "chokes")
 		kit.eq(sc.spawns.size(), 3, "spawns 数")
-		kit.eq(sc.spawns[0], Vector2i(21, 56), "出怪口 1")
-		kit.eq(sc.spawns[1], Vector2i(45, 56), "出怪口 2")
-		kit.eq(sc.spawns[2], Vector2i(6, 57), "盆地口")
-		kit.eq(sc.basin_rect, Rect2i(3, 53, 7, 8), "盆地矩形")
-		kit.eq(sc.basin_plug, Vector2i(8, 53), "插口")
-		kit.eq(sc.mesa, Rect2i(16, 48, 2, 2), "微丘")
+		kit.eq(sc.spawns[0], Vector2i(39, 112), "出怪口 1")
+		kit.eq(sc.spawns[1], Vector2i(87, 112), "出怪口 2")
+		kit.eq(sc.spawns[2], Vector2i(8, 109), "盆地口")
+		kit.eq(sc.basin_rect, Rect2i(5, 105, 7, 8), "盆地矩形")
+		kit.eq(sc.basin_plug, Vector2i(10, 105), "插口")
+		kit.eq(sc.mesa, Rect2i(55, 95, 2, 2), "微丘")
 		kit.eq(sc.sparse_phase, 2, "表土相位")
 		kit.eq(sc.resample_salt, 0, "默认图无需重采样")
-		kit.eq(sc.end_tick, 6400, "end_tick")
-		kit.eq(sc.hard_cap_tick, 8800, "hard_cap_tick")
+		kit.eq(sc.end_tick, 8740, "end_tick（开局成长改造：全表平移 +2340）")
+		kit.eq(sc.hard_cap_tick, 11140, "hard_cap_tick")
 		kit.eq(sc.trickle_every, 300, "trickle_every")
 		kit.eq(sc.wave_scale_pct, 100, "wave_scale_pct")
 		kit.eq(sc.mid_ore.size(), 5, "中场矿数")
 		kit.eq(sc.basin_ore.size(), 12, "盆地矿数")
 		kit.eq(sc.ore_cells.size(), 17, "矿总表（盆地在前、中场在后）")
-		kit.eq(sc.ore_cells[0], Vector2i(5, 56), "矿表首 = 盆地矿")
-		kit.eq(sc.ore_cells[16], Vector2i(35, 21), "矿表末 = 中场矿"))
+		kit.eq(sc.ore_cells[0], Vector2i(7, 108), "矿表首 = 盆地矿")
+		kit.eq(sc.ore_cells[16], Vector2i(65, 40), "矿表末 = 中场矿"))
 
 	kit.test("freeform-snapshot", func():
-		var sc := Scenario.new(20261004) # 游戏内第 1 局种子（自由路径扁平快照，2026-10-19 铸造；再调参需同步）
+		var sc := Scenario.new(20261004) # 游戏内第 1 局种子（自由路径扁平快照，2026-10-19 铸造；2026-10-27 128 扩容重钉；再调参需同步）
 		kit.eq(sc._freeform, true, "自由路径标记")
-		kit.eq(sc.resample_salt, 3, "盐")
+		kit.eq(sc.resample_salt, 0, "盐")
 		kit.eq(sc.template_id, -1, "自由路径无模板")
 		kit.eq(sc.ridge_y, -1, "自由路径无单一脊线")
 		kit.eq(sc.chokes.size(), 0, "自由路径无固定咽喉")
-		kit.eq(sc.core, Vector2i(43, 14), "核心")
-		kit.eq(sc.hero_spawn, Vector2i(43, 16), "英雄位（核心朝内 2）")
+		kit.eq(sc.core, Vector2i(41, 75), "核心")
+		kit.eq(sc.hero_spawn, Vector2i(41, 73), "英雄位（核心朝内 2）")
 		kit.eq(sc.spawns.size(), 3, "双主口 + 盆地口")
-		kit.eq(sc.spawns[0], Vector2i(14, 50), "主口 1")
-		kit.eq(sc.spawns[1], Vector2i(3, 41), "主口 2")
-		kit.eq(sc.spawns[2], Vector2i(30, 15), "盆地口（压块心矿）")
-		kit.eq(sc.basin_rect, Rect2i(27, 11, 9, 8), "盆地矩形")
-		kit.eq(sc.basin_plug, Vector2i(35, 15), "插口（右棱中）")
+		kit.eq(sc.spawns[0], Vector2i(96, 4), "主口 1")
+		kit.eq(sc.spawns[1], Vector2i(112, 27), "主口 2")
+		kit.eq(sc.spawns[2], Vector2i(97, 78), "盆地口（压块心矿）")
+		kit.eq(sc.basin_rect, Rect2i(94, 74, 9, 8), "盆地矩形")
+		kit.eq(sc.basin_plug, Vector2i(100, 81), "插口（右棱中）")
 		kit.eq(sc.mid_ore.size(), 5, "中场矿数")
-		kit.eq(sc.mid_ore[0], Vector2i(41, 21), "中场矿左缘")
-		kit.eq(sc.mid_ore[4], Vector2i(45, 21), "中场矿右缘")
+		kit.eq(sc.mid_ore[0], Vector2i(39, 68), "中场矿左缘")
+		kit.eq(sc.mid_ore[4], Vector2i(43, 68), "中场矿右缘")
 		kit.eq(sc.basin_ore.size(), 12, "盆地矿数")
 		kit.eq(sc.ore_cells.size(), 17, "矿总表（盆地在前、中场在后）")
-		kit.eq(sc._rock_arr.size(), 216, "岩群数（2026-10-25 矿台扩圈后重钉）")
-		kit.eq(sc._hill_arr.size(), 285, "微丘数")
+		kit.eq(sc._rock_arr.size(), 827, "岩群数（128 扩容重钉）")
+		kit.eq(sc._hill_arr.size(), 1512, "微丘数")
 		kit.eq(sc._sparse_arr.size(), 9, "散土数")
-		kit.eq(sc._sparse_arr[0], Vector2i(13, 30), "散土首格")
+		kit.eq(sc._sparse_arr[0], Vector2i(95, 56), "散土首格")
 		# 地形（2026-10-23 随机高度）：基地地貌三选一，不再有三级同心山头
-		kit.eq(sc.terrain_kind, MapGen.TERRAIN_SLOPE, "地形类型（山腰）")
-		kit.eq(sc.height_at(sc.core.x, sc.core.y), 2, "山腰核心 h2")
+		kit.eq(sc.terrain_kind, MapGen.TERRAIN_CLIFF, "地形类型（崖旁）")
+		kit.eq(sc.height_at(sc.core.x, sc.core.y), 0, "崖旁核心 h0")
 		kit.eq(sc.check_terrain(sc.build_grid()), "", "地形校验全绿")
 		var hcell: Vector2i = sc._hill_arr[0]
 		kit.eq(sc.height_at(hcell.x, hcell.y), 1, "微丘 h1")
@@ -141,11 +143,11 @@ func register(kit: TestKit) -> void:
 		ff.begin([sc.core])
 		while not ff.done():
 			ff.step(1 << 20)
-		kit.eq(ff.dist_at(sc.spawns[0].x, sc.spawns[0].y), 470, "主口 1 路径长")
-		kit.eq(ff.dist_at(sc.spawns[1].x, sc.spawns[1].y), 530, "主口 2 路径长")
+		kit.eq(ff.dist_at(sc.spawns[0].x, sc.spawns[0].y), 900, "主口 1 路径长")
+		kit.eq(ff.dist_at(sc.spawns[1].x, sc.spawns[1].y), 950, "主口 2 路径长")
 		kit.eq(ff.dist_at(sc.spawns[2].x, sc.spawns[2].y), -1, "盆地口密闭")
 		# 指纹（自由分支铸造值；默认图不受影响）
-		kit.eq(sc.fingerprint(Canon.new()), 3771210114, "自由路径指纹（2026-10-25 末波阶段化后重录）"))
+		kit.eq(sc.fingerprint(Canon.new()), 3034864498, "自由路径指纹（2026-10-28 Terrain 2.1 地形校准后重钉）"))
 
 	kit.test("waves-contract", func():
 		var sc := Scenario.new()
@@ -162,12 +164,12 @@ func register(kit: TestKit) -> void:
 				last = wv[0]
 			if wv[3] > max_batch:
 				max_batch = wv[3]
-			if wv[0] >= 4600:
+			if wv[0] >= 6940:
 				finale += wv[3]
 		kit.eq(sc.waves.size(), 25, "波次条目数")
 		kit.eq(total, 200, "敌军总量")
-		kit.eq(first, 60, "首条 tick")
-		kit.eq(last, 5080, "末条 tick（阶段化后蛮兽殿后至 5080）")
+		kit.eq(first, 2400, "首条 tick（开局成长改造：3 秒→2 分钟）")
+		kit.eq(last, 7420, "末条 tick（阶段化后蛮兽殿后至 7420）")
 		kit.eq(max_batch, 14, "单批上限")
 		kit.eq(finale, 82, "末波开闸总量"))
 
@@ -296,7 +298,7 @@ func register(kit: TestKit) -> void:
 		var g := sc.build_grid()
 		kit.eq(g.at(0, 0), Grid.SOLID, "西北角边境")
 		kit.eq(g.at(sc.core.x, 0), Grid.SOLID, "北边境")
-		kit.eq(g.at(63, 63), Grid.SOLID, "东南角边境")
+		kit.eq(g.at(127, 127), Grid.SOLID, "东南角边境")
 		kit.eq(g.at(sc.core.x, sc.core.y), Grid.SOLID, "核心占地")
 		kit.eq(g.at(sc.hero_spawn.x, sc.hero_spawn.y), Grid.OPEN, "英雄落位格恒通行")
 		kit.eq(g.at(sc.spawns[0].x, sc.spawns[0].y), Grid.OPEN, "主出怪口 1 通行")
@@ -310,11 +312,11 @@ func register(kit: TestKit) -> void:
 		kit.eq(g.at(sc.basin_rect.position.x + sc.basin_rect.size.x - 1, sc.basin_rect.position.y + sc.basin_rect.size.y - 1), Grid.SOLID, "盆地岩环角")
 		kit.eq(g.at(sc.basin_plug.x, sc.basin_plug.y), Grid.COVER, "插口是唯一覆盖格")
 		kit.eq(g.at(4, 55), Grid.OPEN, "盆地内腔非矿格通行")
-		kit.eq(g.at(33, 21), Grid.COVER, "中场矿")
-		kit.eq(g.at(35, 21), Grid.COVER, "中场矿右缘")
+		kit.eq(g.at(63, 40), Grid.COVER, "中场矿")
+		kit.eq(g.at(65, 40), Grid.COVER, "中场矿右缘")
 		kit.eq(g.at(30, 21), Grid.OPEN, "矿带外通行")
-		kit.eq(g.at(2, 17), Grid.COVER, "稀疏表土（可挖不给矿）")
-		kit.eq(g.at(3, 17), Grid.OPEN, "表土纹理间断")
+		kit.eq(g.at(2, 34), Grid.COVER, "稀疏表土（可挖不给矿）")
+		kit.eq(g.at(3, 34), Grid.OPEN, "表土纹理间断")
 		kit.ok(g.rev > 0, "建图有实心/覆盖写入")
 		kit.eq(g.get_h(sc.core.x, 6), sc.height_at(sc.core.x, 6), "高度落盘：核心格 = 地貌高度")
 		kit.eq(g.get_h(sc.spawns[0].x, sc.spawns[0].y), 0, "高度落盘：主口 1 h0")
@@ -343,6 +345,13 @@ func register(kit: TestKit) -> void:
 		var neg_hi := 0
 		var path_lo := 1 << 30
 		var path_hi := 0
+		# 多样性聚合（2026-10-28 Terrain 2.1 软断言，§11.51）：f8=8×8 高差≤1 平窗占比‰、
+		# e=|Δh|≥1 邻接边密度‰（半邻接表 ÷ w·h·3）。旧生成器 f8 avg≈840/e≈110（单调实锤）；
+		# 校准后 711/142。钉带留足余量：抓「回退旧参数」，不卡逐图抖动。
+		var f8_sum := 0
+		var f8_max := 0
+		var e_sum := 0
+		var e_min := 1 << 30
 		for i in 64:
 			var s := Scenario.DEFAULT_SEED + i
 			var sc := Scenario.new(s)
@@ -357,6 +366,7 @@ func register(kit: TestKit) -> void:
 			var slope_nonzero := false
 			var nz := 0
 			var neg := 0
+			var e := 0
 			for y in sc.h:
 				for x in sc.w:
 					var d := Grid.hex_dist(x, y, sc.core.x, sc.core.y)
@@ -371,12 +381,38 @@ func register(kit: TestKit) -> void:
 						cliff_high = true
 					if sc.terrain_kind == MapGen.TERRAIN_SLOPE and d <= 3 and v != 0:
 						slope_nonzero = true
+					for k in 3: # 半邻接表：每条边只记一次
+						var nx: int = Grid.nx(x, y, k)
+						var ny: int = Grid.ny(x, y, k)
+						if nx < 0 or ny < 0 or nx >= sc.w or ny >= sc.h:
+							continue
+						if absi(v - sc.height_at(nx, ny)) >= 1:
+							e += 1
 			if sc.terrain_kind == MapGen.TERRAIN_PLAIN:
 				kit.ok(plain_zero, "种子 %d 平原核心 5 圈非全 0" % s)
 			elif sc.terrain_kind == MapGen.TERRAIN_CLIFF:
 				kit.ok(cliff_high, "种子 %d 崖旁核心 4..6 圈无 h≥3" % s)
 			else:
 				kit.ok(slope_nonzero, "种子 %d 山腰核心 3 圈全 0" % s)
+			# 8×8 非重叠平窗（步距 8；与体检口径步距 4 不同，聚合量级一致）
+			var win := 0
+			var flat := 0
+			for wy in range(0, sc.h - 8, 8):
+				for wx in range(0, sc.w - 8, 8):
+					var mn := 99
+					var mx := -99
+					for dy in 8:
+						for dx in 8:
+							var v2 := sc.height_at(wx + dx, wy + dy)
+							mn = mini(mn, v2)
+							mx = maxi(mx, v2)
+					win += 1
+					if mx - mn <= 1:
+						flat += 1
+			f8_sum += flat * 1000 / win
+			f8_max = maxi(f8_max, flat * 1000 / win)
+			e_sum += e * 1000 / (sc.w * sc.h * 3)
+			e_min = mini(e_min, e * 1000 / (sc.w * sc.h * 3))
 			nz_lo = mini(nz_lo, nz * 1000 / (sc.w * sc.h))
 			nz_hi = maxi(nz_hi, nz * 1000 / (sc.w * sc.h))
 			neg_lo = mini(neg_lo, neg * 1000 / (sc.w * sc.h))
@@ -394,7 +430,12 @@ func register(kit: TestKit) -> void:
 		kit.ok(kinds[0] > 0 and kinds[1] > 0 and kinds[2] > 0, "三类地貌覆盖 %s" % str(kinds))
 		kit.ok(nz_lo >= MapGen.TERRAIN_NZ_LO and nz_hi <= MapGen.TERRAIN_NZ_HI, "非零占比 [%d,%d]‰ 越带" % [nz_lo, nz_hi])
 		kit.ok(neg_lo >= MapGen.TERRAIN_NEG_LO and neg_hi <= MapGen.TERRAIN_NEG_HI, "负高度占比 [%d,%d]‰ 越带" % [neg_lo, neg_hi])
-		kit.ok(path_lo >= Scenario.PATH_LO and path_hi <= Scenario.PATH_HI, "路径长 [%d,%d] 越带" % [path_lo, path_hi]))
+		kit.ok(path_lo >= Scenario.PATH_LO and path_hi <= Scenario.PATH_HI, "路径长 [%d,%d] 越带" % [path_lo, path_hi])
+		# 多样性软带（Terrain 2.1 实测 64 种子：f8 avg 711 [608,822] / e avg 142 [85,163]）
+		kit.ok(f8_sum / 64 <= 780, "平窗均值 %d‰ 单调回退（带 ≤780）" % (f8_sum / 64))
+		kit.ok(f8_max <= 870, "最平图 %d‰ 单调回退（带 ≤870）" % f8_max)
+		kit.ok(e_sum / 64 >= 125, "边界密度均值 %d‰ 单调回退（带 ≥125）" % (e_sum / 64))
+		kit.ok(e_min >= 70, "最糊图边界密度 %d‰ 单调回退（带 ≥70）" % e_min))
 
 	kit.test("cliff-forms-64-seed-sweep", func():
 		# 崖形摆布（2026-10-25 §11.45，软保证）：h≥3 连通分量 ≤3 格=孤峰、≥5 格=崖脉。
@@ -467,11 +508,11 @@ func register(kit: TestKit) -> void:
 
 	kit.test("is-ore", func():
 		var sc := Scenario.new()
-		kit.ok(sc.is_ore(33, 21), "中场矿是矿")
-		kit.ok(sc.is_ore(31, 21), "中场矿带左缘")
-		kit.ok(sc.is_ore(35, 21), "中场矿带右缘")
-		kit.ok(sc.is_ore(5, 56), "盆地矿左上")
-		kit.ok(sc.is_ore(7, 59), "盆地矿右下")
+		kit.ok(sc.is_ore(63, 40), "中场矿是矿")
+		kit.ok(sc.is_ore(61, 40), "中场矿带左缘")
+		kit.ok(sc.is_ore(65, 40), "中场矿带右缘")
+		kit.ok(sc.is_ore(7, 108), "盆地矿左上")
+		kit.ok(sc.is_ore(9, 111), "盆地矿右下")
 		kit.ok(not sc.is_ore(30, 21), "矿带外不是矿")
 		kit.ok(not sc.is_ore(sc.basin_plug.x, sc.basin_plug.y), "插口不是矿")
 		kit.ok(not sc.is_ore(4, 55), "盆地内腔非矿格不是矿")
@@ -482,7 +523,7 @@ func register(kit: TestKit) -> void:
 		var a := Scenario.new()
 		var b := Scenario.new()
 		kit.eq(a.fingerprint(canon), b.fingerprint(canon), "同种子两次指纹不一致")
-		kit.eq(a.fingerprint(canon), 2137177064, "指纹 vs 引擎现值（2026-10-25 末波阶段化九次基线）")
+		kit.eq(a.fingerprint(canon), 1694319073, "指纹 vs 引擎现值（2026-10-28 Terrain 2.1 地形校准后重钉）")
 		var third := Scenario.new(20261004)
 		kit.ok(a.fingerprint(canon) != third.fingerprint(canon), "换种子指纹没变")
 		var mutated := Scenario.new()

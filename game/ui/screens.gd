@@ -4,9 +4,39 @@ extends CanvasLayer
 # / 存档（3 槽，读|存双模式）/ 设置（音频 / 显示 / 画质 / 性能 四组）五屏 + 通用确认弹窗。
 # 游戏流转即屏状态：进行中 = current_page()==""；暂停 = "pause"；结算 = "gameover"；
 # 标题 = "title"；存档页 = "slots"；设置页 = "settings"。
-# 页面懒建缓存复用；切换带 0.18s 淡入；按钮回调由 main 注入；存档/设置模块直接 preload。
+# 页面懒建缓存复用；切换带 0.18s 淡入；按钮意图走本类 signal，拉取型取数走 Callable 字段；
+# 存档/设置模块直接 preload。
 # 口径说明：母版 Shell.resume 走 ScreenManager:Back()，而 Back 在"栈<=1 拒绝"的保护下
 # 无法弹出单元素栈（对局=空栈模型下的疑点）；本版按 Shell 自身注释"弹栈到空"语义实现 resume=close_all。
+
+# ---- 公开面（外部可调）----
+# 装配：setup(hud)。流转：open_title / open_pause / resume / close_all / open_gameover /
+# open_slots / open_settings / open_quit_confirm / current_page / handle_key / update。
+# 确认弹窗：open_confirm / confirm_open / close_confirm。黑幕：veil_show / veil_fade_out / veil_hide。
+# 缩放：apply_ui_scale。取数口（要返回值，故为 Callable 字段而非 signal）：
+# seed_text_provider / stats_provider / load_slot_provider / save_slot_provider。
+# ---- 探针契约（改名会破 tests/probes，勿动）----
+# 探针直读 S / pages / current / slots_mode / confirm_layer / confirm_text / go_title / go_body
+# 与上列方法；改名须同步 probe_ui_flow / probe_save / probe_touch / probe_seed / probe_smoke。
+
+# ---- 外向信号（main 接这些；壳不认识 main，也不存回调字典）----
+signal start_match_requested(seed_text: String) # 标题「经典对局」
+signal start_rogue_requested(seed_text: String) # 标题「肉鸽」
+signal restart_requested() # 暂停/结算「重开」
+signal resume_requested() # 暂停「继续」/ ESC
+signal to_title_requested() # 回标题
+signal pause_requested() # 进行中 ESC → 暂停
+signal quit_requested() # 退出游戏（二次确认后）
+signal video_changed(cfg: Dictionary) # 画面/画质改动（main 立即应用）
+signal ui_changed(pct: int) # UI 缩放改动
+signal seed_changed(text: String) # 标题种子框改动
+signal shake_toggled(on: bool) # 震屏开关
+
+# 取数回调（要返回值，signal 带不了）：main 注入；未注入 = 安全默认值
+var seed_text_provider: Callable # () -> String 标题种子框回填
+var stats_provider: Callable # () -> Array [局数, 最佳波次, 胜场]
+var load_slot_provider: Callable # (slot) -> bool 读档是否成功
+var save_slot_provider: Callable # (slot) -> bool 存档是否成功
 
 const SaveIO = preload("res://game/core/save_io.gd")
 const UserSettings = preload("res://game/core/user_settings.gd")
@@ -27,7 +57,6 @@ const PAGE_PATHS := {
 }
 
 var S := 1.0
-var cb: Dictionary = {}
 var hud = null # HUD 实例（复用它的大盘色板/build_stats/theme）
 var C: Dictionary = {}
 var host: Control
@@ -57,9 +86,8 @@ var veil_root: Control = null
 var veil_label: Label = null
 
 
-## 初始化：注入回调、HUD 引用、缩放、层级，并绑定壳场景节点（结构在 screens.tscn）
-func init(callbacks: Dictionary, hud_ref) -> void:
-	cb = callbacks
+## 初始化：注入 HUD 引用、缩放、层级，并绑定壳场景节点（结构在 screens.tscn）
+func setup(hud_ref) -> void:
 	hud = hud_ref
 	C = UiStyle.DARK # v2.3：色板真源归 UiStyle（壳层不再依赖 hud 取色）
 	_recalc_s()
@@ -219,7 +247,7 @@ func open_settings(from: String) -> void:
 
 ## 退出确认（标题「退出游戏」按钮 / Android 返回键共用）
 func open_quit_confirm() -> void:
-	open_confirm("确定退出游戏？", func() -> void: cb["quit"].call())
+	open_confirm("确定退出游戏？", func() -> void: quit_requested.emit())
 
 
 ## 当前页名（"" = 对局中；main 消费做流转判定）
@@ -236,10 +264,10 @@ func handle_key(keycode: int) -> bool:
 		close_confirm()
 		return true
 	if current == "pause":
-		cb["resume"].call()
+		resume_requested.emit()
 		return true
 	elif current == "":
-		cb["pause"].call()
+		pause_requested.emit()
 		return true
 	elif current == "slots":
 		_show(slots_from)
@@ -471,7 +499,7 @@ func _dress_check_row(body: VBoxContainer, key: String, fn: Callable) -> void:
 func _on_shake_toggled(on: bool) -> void:
 	_cfg["screen_shake"] = on
 	_apply_settings()
-	cb["shake_toggled"].call(on)
+	shake_toggled.emit(on)
 
 
 ## 设置页分组标题绑定：左金标 + 组名 + 右侧通栏细线。
@@ -558,14 +586,14 @@ func _bind_title(p: Control) -> void:
 	seed_lbl.custom_minimum_size = Vector2(40.0 * S, 0)
 	var seed_input: LineEdit = seed_row.get_node("SeedInput")
 	_dress_seed_input(seed_input)
-	seed_input.text = String(cb["get_seed_text"].call()) # 回填上次保存的种子文本
+	seed_input.text = String(seed_text_provider.call()) if seed_text_provider.is_valid() else "" # 回填上次保存的种子文本
 	seed_input.text_changed.connect(func(t: String) -> void:
-		cb["seed_changed"].call(t))
+		seed_changed.emit(t))
 
 	_dress_menu_row(p.get_node("Col/BtnRogue"), 1, true, func() -> void:
-		cb["start_rogue"].call(seed_input.text))
+		start_rogue_requested.emit(seed_input.text))
 	_dress_menu_row(p.get_node("Col/BtnStart"), 2, false, func() -> void:
-		cb["start_match"].call(seed_input.text))
+		start_match_requested.emit(seed_input.text))
 	_dress_menu_row(p.get_node("Col/BtnContinue"), 3, false, func() -> void:
 		open_slots("load", "title"))
 	_dress_menu_row(p.get_node("Col/BtnSettings"), 4, false, func() -> void:
@@ -608,15 +636,15 @@ func _bind_pause(p: Control) -> void:
 	_dress_title_bar(p.get_node(base + "/TitleBar"), p.get_node(base + "/TitleBar/Title"), 44.0)
 	_dress_rule(p.get_node(base + "/Rule"))
 	_dress_button(p.get_node(base + "/BtnResume"), true, 260.0 * S, 46.0 * S, 14.0 * S, func() -> void:
-		cb["resume"].call())
+		resume_requested.emit())
 	_dress_button(p.get_node(base + "/BtnSave"), false, 260.0 * S, 44.0 * S, 12.5 * S, func() -> void:
 		open_slots("save", "pause"))
 	_dress_button(p.get_node(base + "/BtnSettingsPause"), false, 260.0 * S, 44.0 * S, 12.5 * S, func() -> void:
 		open_settings("pause"))
 	_dress_button(p.get_node(base + "/BtnRestart"), false, 260.0 * S, 44.0 * S, 12.5 * S, func() -> void:
-		cb["restart"].call())
+		restart_requested.emit())
 	_dress_button(p.get_node(base + "/BtnToTitle"), false, 260.0 * S, 44.0 * S, 12.5 * S, func() -> void:
-		cb["to_title"].call())
+		to_title_requested.emit())
 
 
 ## 绑定结算页（胜负标题 + 统计文案 + 再来一局 / 回标题；结构在 pages/gameover.tscn）
@@ -632,9 +660,9 @@ func _bind_gameover(p: Control) -> void:
 	go_body.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	go_body.custom_minimum_size = Vector2(380.0 * S, 0)
 	_dress_button(p.get_node(base + "/BtnAgain"), true, 240.0 * S, 46.0 * S, 14.0 * S, func() -> void:
-		cb["restart"].call())
+		restart_requested.emit())
 	_dress_button(p.get_node(base + "/BtnToTitle2"), false, 240.0 * S, 44.0 * S, 12.5 * S, func() -> void:
-		cb["to_title"].call())
+		to_title_requested.emit())
 
 
 ## 绑定存档页（3 槽：读档|存档双模式 + 删除 + 状态行；结构在 pages/slots.tscn）
@@ -740,10 +768,10 @@ func _bind_settings(p: Control) -> void:
 func _refresh_title() -> void:
 	var btn: Button = pages["title"].find_child("BtnContinue", true, false)
 	btn.disabled = not SaveIO.has_any()
-	# 战绩卡三数（cb["get_stats"] → main._stats_card；读数失败显示 0 不炸壳）
+	# 战绩卡三数（stats_provider → main._stats_card；读数失败显示 0 不炸壳）
 	var st: Array = [0, 0, 0]
-	if cb.has("get_stats"):
-		st = cb["get_stats"].call()
+	if stats_provider.is_valid():
+		st = stats_provider.call()
 	var page: Control = pages["title"]
 	var lr: Label = page.get_node("Col/StatsRow/LblRuns")
 	lr.text = "局数 %d" % int(st[0])
@@ -791,7 +819,7 @@ func _set_slot_status(text: String) -> void:
 	status.text = text
 
 
-## 槽位点击：读档走 cb.load_slot；存档走空槽直存或覆盖确认
+## 槽位点击：读档走 load_slot_provider；存档走空槽直存或覆盖确认
 func _on_slot_pressed(slot: int) -> void:
 	var info := SaveIO.slot_info(slot)
 	if slots_mode == "load":
@@ -800,7 +828,7 @@ func _on_slot_pressed(slot: int) -> void:
 		if not info.get("ok", false):
 			_set_slot_status(str(info.get("reason", "存档损坏")))
 			return
-		var ok: bool = cb["load_slot"].call(slot)
+		var ok: bool = load_slot_provider.call(slot) if load_slot_provider.is_valid() else false
 		if not ok:
 			_set_slot_status("存档损坏或版本不符")
 			_refresh_slots()
@@ -814,7 +842,7 @@ func _on_slot_pressed(slot: int) -> void:
 
 ## 执行存档并回报状态（覆盖确认 / 空槽直存共用）
 func _do_save(slot: int) -> void:
-	var ok: bool = cb["save_slot"].call(slot)
+	var ok: bool = save_slot_provider.call(slot) if save_slot_provider.is_valid() else false
 	_set_slot_status("已保存到槽 %d" % slot if ok else "存档写入失败")
 	_refresh_slots()
 
@@ -892,13 +920,13 @@ func _on_ui_changed(v: float) -> void:
 	_cfg["ui_pct"] = int(v)
 	_set_val_label("ui_pct", int(v))
 	UserSettings.save_cfg(_cfg)
-	cb["ui_changed"].call(int(v))
+	ui_changed.emit(int(v))
 
 
 ## 视频/画质改动统一出口：落盘 + 通知 main 立即应用 + 选项钮/滑杆回填
 func _commit_video() -> void:
 	UserSettings.save_cfg(_cfg)
-	cb["video_changed"].call(_cfg)
+	video_changed.emit(_cfg)
 	_refresh_chips()
 	_sync_video_sliders()
 

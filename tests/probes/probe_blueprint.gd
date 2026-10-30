@@ -92,6 +92,8 @@ func _initialize() -> void:
 	check(str(Blueprint.pick(7)[0]["name"]) == "canyon", "pick 模 6 循环")
 
 	# ---- 拍2 视觉联动锚点面（自由路径）：岩野山体 / 2D 盆地 / 四侧出怪口豁口 ----
+	# 128 图几何（2026-10-27 扩容，HALF 32→64）：场沿 ±63.5；canyon 预设 ridge 带 z=-22.5、
+	# basin 带 z=-6；测试点随迁：口位 ±56（场沿内侧）、评价点 ±72（场外环山带）。
 	check(Blueprint.gate_side(0.0, 28.0) == 0 and Blueprint.gate_side(0.0, -28.0) == 1
 		and Blueprint.gate_side(28.0, 0.0) == 2 and Blueprint.gate_side(-28.0, 0.0) == 3, "侧别分类 南/北/东/西")
 	var bp: Dictionary = Blueprint.get_preset("canyon")
@@ -99,22 +101,22 @@ func _initialize() -> void:
 	# 岩野山体：聚类点抬高、远点逐位不变；ridge_off 关闭预设岩脊条带
 	var with_rp: Callable = Blueprint.compose(bp, 4242, { "ridge_off": true, "ridge_pts": [[0.0, 0.0, 3.0, 1.5]] })[0]
 	check(float(with_rp.call(0.0, 0.0)) > float(base.call(0.0, 0.0)) + 0.2, "ridge_pts 山包抬高")
-	check(absf(float(with_rp.call(25.0, -25.0)) - float(base.call(25.0, -25.0))) < 1e-9, "ridge_pts 远点不变")
+	check(absf(float(with_rp.call(25.0, 25.0)) - float(base.call(25.0, 25.0))) < 1e-9, "ridge_pts 远点不变")
 	var off: Callable = Blueprint.compose(bp, 4242, { "ridge_off": true })[0]
-	check(float(off.call(0.0, 9.5)) < float(base.call(0.0, 9.5)) - 0.1, "ridge_off 关闭预设岩脊")
-	# 2D 盆地：中心凹陷；同 z 远端不再吃 z 向条带
-	var b2: Callable = Blueprint.compose(bp, 4242, { "basin_wx": -11.5, "basin_wz": -1.5, "basin_sig": 4.0 })[0]
-	check(float(b2.call(-11.5, -1.5)) < float(base.call(-11.5, -1.5)) - 0.5, "2D 盆地中心凹陷")
-	check(absf(float(b2.call(20.0, -1.5)) - float(base.call(20.0, -1.5))) < 0.1, "2D 盆地无横贯条带")
+	check(float(off.call(0.0, -22.5)) < float(base.call(0.0, -22.5)) - 0.1, "ridge_off 关闭预设岩脊")
+	# 2D 盆地：中心凹陷；同 z 远端不再吃 z 向条带（中心挪离预设 basin 带 z=-6）
+	var b2: Callable = Blueprint.compose(bp, 4242, { "basin_wx": -11.5, "basin_wz": 20.0, "basin_sig": 4.0 })[0]
+	check(float(b2.call(-11.5, 20.0)) < float(base.call(-11.5, 20.0)) - 0.5, "2D 盆地中心凹陷")
+	check(absf(float(b2.call(20.0, 20.0)) - float(base.call(20.0, 20.0))) < 0.1, "2D 盆地无横贯条带")
 	# 四侧出怪口：同点南北/东西锚互比（环山体豁口只开在口所在侧）
-	var a_s: Callable = Blueprint.compose(bp, 4242, { "gate_pts": [Vector2(0.0, 28.0)] })[0]
-	var a_n: Callable = Blueprint.compose(bp, 4242, { "gate_pts": [Vector2(0.0, -28.0)] })[0]
-	check(float(a_s.call(0.0, 42.0)) < float(a_n.call(0.0, 42.0)) - 0.2, "南口豁开（北口锚不误开）")
-	check(float(a_n.call(0.0, -42.0)) < float(a_s.call(0.0, -42.0)) - 0.2, "北口豁开（南口锚不误开）")
-	var a_e: Callable = Blueprint.compose(bp, 4242, { "gate_pts": [Vector2(28.0, 0.0)] })[0]
-	var a_w: Callable = Blueprint.compose(bp, 4242, { "gate_pts": [Vector2(-28.0, 0.0)] })[0]
-	check(float(a_e.call(42.0, 0.0)) < float(a_w.call(42.0, 0.0)) - 0.2, "东口豁开（西口锚不误开）")
-	check(float(a_w.call(-42.0, 0.0)) < float(a_e.call(-42.0, 0.0)) - 0.2, "西口豁开（东口锚不误开）")
+	var a_s: Callable = Blueprint.compose(bp, 4242, { "gate_pts": [Vector2(0.0, 56.0)] })[0]
+	var a_n: Callable = Blueprint.compose(bp, 4242, { "gate_pts": [Vector2(0.0, -56.0)] })[0]
+	check(float(a_s.call(0.0, 72.0)) < float(a_n.call(0.0, 72.0)) - 0.2, "南口豁开（北口锚不误开）")
+	check(float(a_n.call(0.0, -72.0)) < float(a_s.call(0.0, -72.0)) - 0.2, "北口豁开（南口锚不误开）")
+	var a_e: Callable = Blueprint.compose(bp, 4242, { "gate_pts": [Vector2(56.0, 0.0)] })[0]
+	var a_w: Callable = Blueprint.compose(bp, 4242, { "gate_pts": [Vector2(-56.0, 0.0)] })[0]
+	check(float(a_e.call(72.0, 0.0)) < float(a_w.call(72.0, 0.0)) - 0.2, "东口豁开（西口锚不误开）")
+	check(float(a_w.call(-72.0, 0.0)) < float(a_e.call(-72.0, 0.0)) - 0.2, "西口豁开（东口锚不误开）")
 
 	# 确定性：同预设同种子两次组合逐样本一致（同容器逐位比较，规避 f32/f64 截断假阴性）
 	var comp2: Array = Blueprint.compose(Blueprint.get_preset("dusk"), 12345, {})

@@ -71,7 +71,7 @@ func _initialize() -> void:
 	check(shell.current_page() == "" and main.paused == false, "重开后回对局")
 	cmp_int(main.run_index, run1 + 1, "重开 run_index+1")
 	check(main.world != old_world, "重开换新世界")
-	check(main.world.supply == 300, "新局供给复位 300")
+	check(main.world.supply == 60, "新局供给复位 60（2026-10-28 START_SUPPLY=60，旧 300 已废止）")
 
 	# ---- 8. 手动终局（胜）→ 结算屏 ----
 	var w = main.world

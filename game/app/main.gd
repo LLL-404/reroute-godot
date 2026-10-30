@@ -2,6 +2,16 @@ extends Node3D
 
 # 《改道》Godot 版主循环：20Hz 固定步长模拟、世界到视图同步与输入分发。
 # 对局生命周期统一在这里管理；模拟规则归 sim/，绘制、HUD、页面、音频归 game/ 对应模块。
+# 唯一写模拟的入口：world.apply_command(Command.xxx(...))；未知 kind 在正式包按空操作。
+
+# ---- 公开面（外部可调）----
+# 流转与管理 11 个：start_match / start_rogue / pause_game / resume_game / restart_game / to_title /
+# load_game / save_game / new_game / can_undo_build / do_undo_build。
+# 输入与查询 9 个：in_hud_region / mode_valid / line_cells / set_mode / apply_mode_at /
+# pointer_down / pointer_up / update_ghost / toggle_heat。
+# ---- 探针契约（改名会破 tests/probes，勿动）----
+# 探针直读字段：view / world / sc / run / run_ui / hex / hud / shell / danger / paused / mode /
+# heat_on / run_index / tower_pick / terrain_card，并直接调上面这 20 个公开方法。
 
 const Blueprint = preload("res://game/core/blueprint.gd")
 const Selfcheck = preload("res://game/app/selfcheck.gd")
@@ -13,22 +23,18 @@ const HudScene = preload("res://game/ui/hud.tscn") # HUD 场景（结构在 tscn
 const ScreensScene = preload("res://game/ui/screens.tscn") # 界面壳场景（五页面 + 确认弹窗 + 过渡黑幕）
 const RunUiScene = preload("res://game/ui/run_ui.tscn") # 肉鸽 HUD 场景（结构在 tscn）
 const HexPickerScene = preload("res://game/ui/hex_picker.tscn") # 三选一面板场景（结构在 tscn）
+const CameraControlScript = preload("res://game/view/camera_control.gd") # 相机操作层（输入 → 相机意图）
 
 const TICK_DT := 1.0 / 20.0
 const MAX_CATCHUP := 5 # 单帧最多补的 tick 数（追平上限，超出丢弃积压）
 const BASE_SEED := 20261003
 const SEED_RETRY_MAX := 256 # 种子顺延上限：撞上死图（64 盐耗尽）就 +1 再试，最多这么多次
-const CAM_PAN_SPEED := 24.0 # WASD 平移速度（世界单位/秒）
-const CAM_ROT_SPEED := 1.5 # Q/E 旋转速度（rad/s）
-const CAM_KEYS := [KEY_W, KEY_A, KEY_S, KEY_D, KEY_Q, KEY_E] # 相机键（不参与对局操作）
 # ---- 触屏手势（Android/iOS；桌面鼠标路径完全不受影响）----
 const TOUCH_SLOP := 14.0 # 单指点按判定：位移超过此逻辑像素即视为拖动（平移）
-const TOUCH_PINCH_STEP := 0.14 # 双指缩放单帧变化上限（防抖动跳变）
-const TOUCH_ROT_DEADZONE := 0.04 # 双指旋转单帧死区（rad；滤手指抖动）
-const TOUCH_ROT_LIMIT := 0.5 # 双指旋转单帧上限（rad；两指接近重合时角度噪声过大）
 const MENU_FPS := 60 # 菜单/标题/结算限帧（压风扇/GPU）；对局态 = 玩家上限（默认 0 不限，vsync 全速——用户口径 2026-10-17/18）
 
 var view = null # View（preload 脚本实例）；动态引用
+var camera_control = null # 相机操作层（game/view/camera_control.gd）
 var world: World = null
 var sc: Scenario = null
 var run: RunState = null # 非空 = 当前是肉鸽局（world/sc 指向 run 内部实例）
@@ -52,18 +58,12 @@ var mode := "wall"
 var drag_start := Vector2i(-1, -1) # 拖拽起始格
 var mouse_pos := Vector2(-1.0, -1.0)
 var heat_on := false
-var cam_keys := {} # 按下的相机键（WASD/QE；事件驱动，无 OS 轮询）
-var rmb_panning := false # 右键拖拽平移中
-var rmb_last := Vector2.ZERO # 右键拖拽上一帧位置（用位置差算位移，不依赖 relative）
 # ---- 触屏手势状态 ----
 var touch_pts := {} # 活跃手指 index → 屏幕位置
 var touch_mode := "" # "" 空闲 / "single" 单指 / "multi" 双指以上
 var touch_start := Vector2.ZERO # 首指落点（点按判定基准）
 var touch_dragging := false # 单指已越过 TOUCH_SLOP（判定为拖动）
 var touch_wall := false # 本次单指手势正在拖墙线
-var _g_prev := Vector2.ZERO # 双指上一帧中点
-var _g_dist := 1.0 # 双指上一帧间距
-var _g_ang := 0.0 # 双指上一帧连线夹角
 ## HUD 命中区提供者（R5 注入；未注入 = 无 HUD 区域）
 var hud_regions_provider: Callable
 var _last_back_ms := 0 # Android 返回键双入口（通知 / ui_cancel 动作）去抖时间戳
@@ -80,6 +80,8 @@ var _seed_shift_msg := "" # 种子顺延提示文案（暂存；显示接线在�
 ## 初始化：建 HUD/壳、开新局、显示标题屏；自检模式触发 export 验收
 func _ready() -> void:
 	view = $View
+	# 相机操作层：输入翻译与相机状态都在这里；main 只注入「能否操控」判定
+	camera_control = CameraControlScript.new(view, Callable(self, "_camera_free"))
 	_is_probe_run = _detect_probe_run()
 	_settings = UserSettings.load_cfg()
 	# 隐私门（合规）：冷启动且未同意 → 先弹窗；此时不建 HUD/壳/肉鸽 UI、不开局、不播开屏，
@@ -101,6 +103,7 @@ func _boot() -> void:
 	_setup_run_ui()
 	if _is_probe_run:
 		view.core.shake_on = false # 震屏会抖偏截图：探针/selfcheck/headless 一律不启用（像素校验口径）
+		view.fog.enabled = false # 迷雾遮罩会吃掉截图像素断言（check_shots 口径）：探针一律关雾
 		UserSettings.apply_audio(_settings) # 探针只应用音量（显示/画质保持默认，保 gate 截图口径）
 	else:
 		UserSettings.apply_all(_settings) # 启动即应用玩家设置（音量 bus / 显示模式 / 分辨率 / 垂直同步）
@@ -197,7 +200,7 @@ func _run_selfcheck() -> void:
 	get_tree().quit(code)
 
 
-## HUD 构建与接线（口径同母版 main.Start：hud.init + 回调注入）。
+## HUD 构建与接线（HUD 只管发 signal，具体动作全在 main）。
 func _setup_hud() -> void:
 	hud_layer = CanvasLayer.new()
 	hud_layer.name = "HudLayer"
@@ -205,13 +208,13 @@ func _setup_hud() -> void:
 	add_child(hud_layer)
 	hud = HudScene.instantiate()
 	hud_layer.add_child(hud)
-	hud.build({
-		"on_mode": Callable(self, "_on_hud_mode"),
-		"on_pause": Callable(self, "_on_hud_pause"),
-		"on_heat": Callable(self, "_on_hud_heat"),
-		"on_skill": Callable(self, "_on_hud_skill"),
-		"on_undo": Callable(self, "_on_hud_undo"),
-	})
+	hud.setup()
+	hud.mode_selected.connect(_on_hud_mode)
+	hud.pause_requested.connect(_on_hud_pause)
+	hud.heat_toggled.connect(_on_hud_heat)
+	hud.skill_requested.connect(_on_hud_skill)
+	hud.undo_requested.connect(_on_hud_undo)
+	hud.worker_requested.connect(_on_hud_worker)
 	hud_regions_provider = Callable(hud, "hit_regions")
 	view.on_float = Callable(hud, "float_bounty")
 	danger = preload("res://game/ui/danger_vignette.gd").new()
@@ -219,28 +222,28 @@ func _setup_hud() -> void:
 	add_child(danger)
 
 
-## 界面壳构建与接线（口径同母版 main.Start：Shell.init 注入回调）。
+## 界面壳构建与接线（壳只发 signal / 提供取数口，具体动作全在 main）。
 func _setup_shell() -> void:
 	shell = ScreensScene.instantiate()
 	shell.name = "Shell"
 	add_child(shell)
-	shell.init({
-		"start_match": Callable(self, "_ui_start_match"),
-		"start_rogue": Callable(self, "_ui_start_rogue"),
-		"restart": Callable(self, "restart_game"),
-		"resume": Callable(self, "resume_game"),
-		"to_title": Callable(self, "to_title"),
-		"pause": Callable(self, "pause_game"),
-		"quit": Callable(self, "_quit_game"),
-		"load_slot": Callable(self, "load_game"),
-		"save_slot": Callable(self, "save_game"),
-		"video_changed": Callable(self, "_on_video_changed"),
-		"ui_changed": Callable(self, "_on_ui_changed"),
-		"get_seed_text": Callable(self, "_seed_text"),
-		"seed_changed": Callable(self, "_on_seed_changed"),
-		"shake_toggled": Callable(self, "_on_shake_toggled"),
-		"get_stats": Callable(self, "_stats_card"),
-	}, hud)
+	shell.setup(hud)
+	shell.start_match_requested.connect(_ui_start_match)
+	shell.start_rogue_requested.connect(_ui_start_rogue)
+	shell.restart_requested.connect(restart_game)
+	shell.resume_requested.connect(resume_game)
+	shell.to_title_requested.connect(to_title)
+	shell.pause_requested.connect(pause_game)
+	shell.quit_requested.connect(_quit_game)
+	shell.video_changed.connect(_on_video_changed)
+	shell.ui_changed.connect(_on_ui_changed)
+	shell.seed_changed.connect(_on_seed_changed)
+	shell.shake_toggled.connect(_on_shake_toggled)
+	# 取数口（要返回值，signal 带不了）
+	shell.seed_text_provider = Callable(self, "_seed_text")
+	shell.stats_provider = Callable(self, "_stats_card")
+	shell.load_slot_provider = Callable(self, "load_game")
+	shell.save_slot_provider = Callable(self, "save_game")
 
 
 ## 肉鸽 HUD 构建与接线（独立 CanvasLayer，不侵入 hud/screens）
@@ -248,18 +251,18 @@ func _setup_run_ui() -> void:
 	run_ui = RunUiScene.instantiate()
 	run_ui.name = "RunUi"
 	add_child(run_ui)
-	run_ui.init({
-		"start_wave": Callable(self, "_run_start_wave"),
-		"pick": Callable(self, "_run_pick"),
-		"refresh": Callable(self, "_run_refresh"),
-		"skip": Callable(self, "_run_skip"),
-		"advance": Callable(self, "_run_advance"),
-		"use_card": Callable(self, "_run_use_card"),
-	}, hud)
+	run_ui.setup(hud)
+	run_ui.start_wave_requested.connect(_run_start_wave)
+	run_ui.advance_requested.connect(_run_advance)
+	run_ui.card_used.connect(_run_use_card)
+	run_ui.card_picked.connect(_run_pick)
 	hex = HexPickerScene.instantiate()
 	hex.name = "HexPicker"
 	add_child(hex)
-	hex.init({ "sfx": Callable(view, "play_sound") }, hud)
+	hex.setup(Callable(view, "play_sound"), hud)
+	hex.card_picked.connect(_run_pick)
+	hex.refresh_requested.connect(_run_refresh)
+	hex.skip_requested.connect(_run_skip)
 
 
 # ---------------- 屏幕流转（页状态 = 游戏状态：进行中 = 空态） ----------------
@@ -565,7 +568,7 @@ func _persist_stats(won: bool) -> void:
 	UserSettings.save_cfg(_settings)
 
 
-## 标题页战绩卡取数（screens 经 cb["get_stats"] 调用）。
+## 标题页战绩卡取数（screens 经 stats_provider 调用）。
 func _stats_card() -> Array:
 	return [int(_settings.get("runs", 0)), int(_settings.get("best_wave", 0)), int(_settings.get("wins", 0))]
 
@@ -650,6 +653,10 @@ func load_game(slot: int) -> bool:
 	view.apply_blueprint(picked[0], picked[1], _visual_anchor())
 	view.is_ore = Callable(sc, "is_ore")
 	view.build_terrain(world.grid)
+	# 战争迷雾记忆还原（开局成长改造）：槽位旁路字段；缺失/尺寸不符 → 后续 sync 按现存实体重推导
+	var fog_bytes := SaveIO.slot_fog(slot)
+	if fog_bytes.size() > 0:
+		view.fog.restore(fog_bytes)
 	view.sync(world)
 	acc = 0.0
 	drag_start = Vector2i(-1, -1)
@@ -670,7 +677,7 @@ func load_game(slot: int) -> bool:
 func save_game(slot: int) -> bool:
 	if world == null or world.outcome != World.RUNNING:
 		return false
-	var ok := SaveIO.save_slot(slot, world, run_index)
+	var ok := SaveIO.save_slot(slot, world, run_index, view.fog.snapshot()) # 迷雾位图旁路字段（探针关雾=空数组不写）
 	print("[Game] 存档 槽=", slot, " ok=", ok, " tick=", world.tick_count)
 	return ok
 
@@ -767,13 +774,24 @@ func _on_hud_heat() -> void:
 ## HUD 回调：英雄技能按钮 → 下发冲击波命令（冷却/终局守卫在模拟层）
 func _on_hud_skill() -> void:
 	if world != null and int(world.hero["skill_cd"]) == 0:
-		world.apply_command({ "kind": "shock" }) # 冷却/终局守卫在模拟层
+		world.apply_command(Command.shock()) # 冷却/终局守卫在模拟层
 		view.play_sound("orc_chief_roar.mp3", 0.9)
 
 
 ## HUD 回调：撤销按钮 → 撤销最近一次建造（同 Ctrl+Z）
 func _on_hud_undo() -> void:
 	do_undo_build()
+
+
+## HUD 回调：矿工钮 → 即时购买一名矿工（开局成长改造）。
+## 上限/缺钱守卫在模拟层（try_buy_worker 零副作用拒单）；到账音沿用收金音。
+func _on_hud_worker() -> void:
+	if world == null:
+		return
+	var n_before: int = world.workers.size()
+	world.apply_command(Command.worker())
+	if world.workers.size() > n_before:
+		view.play_sound("gold_collect.mp3", 0.6)
 
 
 # ---------------- 建造撤销（5s 全额退款；只由玩家输入触发） ----------------
@@ -806,7 +824,7 @@ func do_undo_build() -> bool:
 	var ok := can_undo_build()
 	if ok:
 		for c in _undo_cells:
-			world.apply_command({ "kind": "undo_build", "x": c.x, "y": c.y })
+			world.apply_command(Command.undo_build(c.x, c.y))
 		view.play_sound("building_remove.mp3", 0.6)
 		_sync_wall_price()
 	_undo_cells = []
@@ -846,8 +864,8 @@ func _visual_anchor() -> Dictionary:
 	var nm := maxi(sc.spawns.size() - 1, 0) # 主口数（末位 = 盆地口）
 	for i in sc.spawns.size():
 		var s: Vector2i = sc.spawns[i]
-		var wx := float(s.x) - 31.5 + 0.5 * float(s.y & 1) # 格 x → 世界 x（六边 odd-r：奇行 +0.5）
-		var wz := float(s.y) - 31.5
+		var wx := float(s.x) - (Dims.MAP_HALF - 0.5) + 0.5 * float(s.y & 1) # 格 x → 世界 x（六边 odd-r：奇行 +0.5）
+		var wz := float(s.y) - (Dims.MAP_HALF - 0.5)
 		gates.append(wx)
 		if i < nm:
 			gate_pts.append(Vector2(wx, wz)) # 视觉门只对主口开（盆地口在场内，无外沿豁口）
@@ -863,8 +881,8 @@ func _visual_anchor() -> Dictionary:
 	a["gate_pts"] = gate_pts
 	a["ridge_off"] = true
 	a["ridge_pts"] = _rock_ridges()
-	a["basin_wx"] = bcx - 31.5 + 0.5 * float(int(round(bcy)) & 1)
-	a["basin_wz"] = bcy - 31.5
+	a["basin_wx"] = bcx - (Dims.MAP_HALF - 0.5) + 0.5 * float(int(round(bcy)) & 1)
+	a["basin_wz"] = bcy - (Dims.MAP_HALF - 0.5)
 	a["basin_sig"] = float(maxi(br.size.x, br.size.y)) * 0.42
 	return a
 
@@ -881,8 +899,8 @@ func _rock_ridges() -> Array:
 		var key: int = (cc.x / 8) * 8 + cc.y / 8
 		var t: Array = b.get(key, [0, 0.0, 0.0, 0.0])
 		t[0] += 1
-		t[1] += float(cc.x) - 31.5 + 0.5 * float(cc.y & 1)
-		t[2] += float(cc.y) - 31.5
+		t[1] += float(cc.x) - (Dims.MAP_HALF - 0.5) + 0.5 * float(cc.y & 1)
+		t[2] += float(cc.y) - (Dims.MAP_HALF - 0.5)
 		t[3] += float(sc.height_at(cc.x, cc.y))
 		b[key] = t
 	var keys: Array = b.keys()
@@ -1078,10 +1096,6 @@ func _open_hex() -> void:
 		"supply": run.world.supply,
 		"refresh_cost": cost,
 		"can_refresh": cost > 0,
-	}, {
-		"pick": Callable(self, "_run_pick"),
-		"refresh": Callable(self, "_run_refresh"),
-		"skip": Callable(self, "_run_skip"),
 	})
 
 
@@ -1117,29 +1131,7 @@ func _check_outcome() -> void:
 ## 相机操控：WASD 平移 / QE 旋转（右键拖拽在 _unhandled_input 里直接跟手）。
 ## 纯表现层（不进模拟/指纹）；标题、暂停、结算下冻结视角。
 func _update_camera(dt: float) -> void:
-	if not _camera_free():
-		return
-	var mvx := 0.0
-	var mvy := 0.0
-	if cam_keys.has(KEY_D):
-		mvx += 1.0
-	if cam_keys.has(KEY_A):
-		mvx -= 1.0
-	if cam_keys.has(KEY_W):
-		mvy += 1.0
-	if cam_keys.has(KEY_S):
-		mvy -= 1.0
-	if mvx != 0.0 or mvy != 0.0:
-		view.camera_pan(mvx, mvy, CAM_PAN_SPEED * dt)
-	var rot := 0.0
-	if cam_keys.has(KEY_Q):
-		rot += 1.0
-	if cam_keys.has(KEY_E):
-		rot -= 1.0
-	if rot != 0.0:
-		view.camera_rotate(rot * CAM_ROT_SPEED * dt)
-	# 震屏放最后：pan/rotate 各自会 _apply_cam()，震动必须叠在它们之上，否则被覆盖
-	view.update_shake(dt)
+	camera_control.update(dt) # 键位状态与震屏顺序都搬进了操作层
 
 
 # ---------------- 输入（移植 main.lua：拖拽放墙/塔、点覆盖层挖矿、点建筑拆除） ----------------
@@ -1174,29 +1166,30 @@ func _unhandled_input(event: InputEvent) -> void:
 			else:
 				pointer_up(mb.position)
 		elif mb.button_index == MOUSE_BUTTON_RIGHT:
+			var hud_blocked := in_hud_region(mb.position.x, mb.position.y)
 			if mb.pressed and drag_start.x >= 0:
 				_cancel_drag() # 拖拽中右键 = 取消本次建造（不落子、不进平移）
-				rmb_panning = false
+				camera_control.rmb_button(false, mb.position, hud_blocked)
 			else:
-				rmb_panning = mb.pressed and not in_hud_region(mb.position.x, mb.position.y)
-			rmb_last = mb.position
+				# HUD 区内不启动平移；位置始终刷新（口径不变）
+				camera_control.rmb_button(mb.pressed, mb.position, hud_blocked)
+		elif mb.button_index == MOUSE_BUTTON_MIDDLE:
+			# 中键 = 上下俯仰 / 左右旋转；HUD 区与左键建造拖拽期间不启动
+			var mid_blocked := in_hud_region(mb.position.x, mb.position.y) or (mb.pressed and drag_start.x >= 0)
+			camera_control.mmb_button(mb.pressed, mb.position, mid_blocked)
 		elif (mb.button_index == MOUSE_BUTTON_WHEEL_UP or mb.button_index == MOUSE_BUTTON_WHEEL_DOWN) and mb.pressed:
 			if _camera_free() and not in_hud_region(mb.position.x, mb.position.y):
-				view.camera_zoom(0.9 if mb.button_index == MOUSE_BUTTON_WHEEL_UP else 1.1)
+				camera_control.wheel_step(mb.button_index == MOUSE_BUTTON_WHEEL_UP)
 	elif event is InputEventMouseMotion:
 		var mm: InputEventMouseMotion = event
 		mouse_pos = mm.position
-		if rmb_panning:
-			var d := mm.position - rmb_last
-			rmb_last = mm.position
-			if d != Vector2.ZERO:
-				view.camera_pan_pixels(d.x, d.y)
+		camera_control.motion(mm.position)
 	elif event is InputEventKey:
 		var mk: InputEventKey = event
 		if mk.echo:
 			return
 		if not mk.pressed:
-			cam_keys.erase(mk.keycode)
+			camera_control.key_up(mk.keycode)
 			return
 		var kc := mk.keycode
 		if kc == KEY_ESCAPE or mk.is_action(&"ui_cancel"):
@@ -1212,8 +1205,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		if mk.keycode == KEY_TAB:
 			toggle_heat()
 			return
-		if CAM_KEYS.has(mk.keycode):
-			cam_keys[mk.keycode] = true
+		camera_control.key_down(mk.keycode)
 	elif event.is_action_pressed("ui_cancel"):
 		_android_back_handle() # 安卓返回的动作事件形态（非键盘）
 		get_viewport().set_input_as_handled()
@@ -1296,44 +1288,15 @@ func _touch_up(idx: int, p: Vector2) -> void:
 	view.set_focus(Vector2i(-1, -1))
 
 
-## 双指基线（按手指 index 升序取前两根）。
+## 双指基线（按手指 index 升序取前两根）→ 操作层记录中点/间距/夹角。
 func _gesture_reset() -> void:
-	var ks := touch_pts.keys()
-	ks.sort()
-	if ks.size() < 2:
-		return
-	var a: Vector2 = touch_pts[ks[0]]
-	var b: Vector2 = touch_pts[ks[1]]
-	_g_prev = (a + b) * 0.5
-	_g_dist = maxf(a.distance_to(b), 1.0)
-	_g_ang = atan2(b.y - a.y, b.x - a.x)
+	camera_control.gesture_reset(touch_pts)
 
 
-## 双指增量：中点位移 = 平移（抓取感，与右键拖拽同向）；间距比 = 缩放（拉开=拉近）；
-## 连线转角 = 旋转（顺时针拧 = 场景顺时针转）。单帧幅度都夹住，防抖。
+## 双指增量：中点位移 = 平移；间距比 = 缩放（拉开=拉近）；连线转角 = 旋转。
+## 单帧幅度都夹住，防抖（实现已搬入操作层）。
 func _gesture_update() -> void:
-	var ks := touch_pts.keys()
-	ks.sort()
-	if ks.size() < 2:
-		return
-	var a: Vector2 = touch_pts[ks[0]]
-	var b: Vector2 = touch_pts[ks[1]]
-	var c := (a + b) * 0.5
-	var d := maxf(a.distance_to(b), 1.0)
-	var ang := atan2(b.y - a.y, b.x - a.x)
-	if _camera_free():
-		var dp := c - _g_prev
-		if dp != Vector2.ZERO:
-			view.camera_pan_pixels(dp.x, dp.y)
-		var r := clampf(d / _g_dist, 1.0 - TOUCH_PINCH_STEP, 1.0 + TOUCH_PINCH_STEP)
-		if absf(r - 1.0) > 0.002:
-			view.camera_zoom(1.0 / r) # 间距变大 = 拉近
-		var da := wrapf(ang - _g_ang, -PI, PI)
-		if absf(da) > TOUCH_ROT_DEADZONE and absf(da) < TOUCH_ROT_LIMIT:
-			view.camera_rotate(da)
-	_g_prev = c
-	_g_dist = d
-	_g_ang = ang
+	camera_control.gesture_update(touch_pts)
 
 
 ## 相机操控是否可用（标题/暂停/结算冻结；滚轮缩放与 WASD 同口径）
@@ -1357,8 +1320,18 @@ func in_hud_region(x: float, y: float) -> bool:
 	return false
 
 
+## 该格是否已探索（战争迷雾，开局成长改造）：迷雾关/未初始化 = 恒真。
+## 未探索不可建/挖/填/挖低；英雄移动豁免——探路正是英雄的职责。
+func _cell_explored(x: int, y: int) -> bool:
+	if view == null or view.fog == null:
+		return true
+	return view.fog.is_explored(x, y)
+
+
 ## 模式合法性（口径同母版 mode_valid；非法 = 幽灵红色 + 命令被模拟层守卫拒绝）。
 func mode_valid(m: String, x: int, y: int) -> bool:
+	if m != "hero" and not _cell_explored(x, y):
+		return false # 未探索只许派英雄（幽灵同步变红）
 	if m == "wall" or m == "tower":
 		var bk: int = Sim.B_WALL if m == "wall" else _current_tower_kind()
 		var def: Dictionary = world.bdef(bk)
@@ -1475,7 +1448,7 @@ func _order_ore_dig(x: int, y: int) -> bool:
 	if stand.x < 0:
 		return false
 	_ore_intent = { "ore": Vector2i(x, y), "stand": stand }
-	world.apply_command({ "kind": "hero", "x": stand.x, "y": stand.y })
+	world.apply_command(Command.hero(stand.x, stand.y))
 	return true
 
 
@@ -1492,12 +1465,16 @@ func _tick_ore_intent() -> void:
 	var hy := int(world.hero["y"])
 	if Grid.hex_dist(hx, hy, ore.x, ore.y) > 1:
 		return # 还没走到（被顶开/绕路）：保留意图，等英雄靠近
-	world.apply_command({ "kind": "dig", "x": ore.x, "y": ore.y })
+	world.apply_command(Command.dig(ore.x, ore.y))
 	_ore_intent = {}
 
 
 ## 在指定格执行当前模式对应的命令（填/挖成功 → 对应地形音；D1-7）。
 func apply_mode_at(m: String, x: int, y: int) -> void:
+	# 未探索权威拦截（战争迷雾）：sim 不认识探索态，改图命令必须在 view 入口拦下。
+	# 英雄豁免（探路）；隔空挖矿的意图单也在这里一并拦住——未探索格连"是不是矿"都不该读。
+	if m != "hero" and not _cell_explored(x, y):
+		return
 	# M2-a：矿格不接受隔空开挖，改为派英雄去邻格（D02）；普通土方保持原口径。
 	if m == "dig" and _is_locked_ore(x, y):
 		_order_ore_dig(x, y)
@@ -1506,14 +1483,21 @@ func apply_mode_at(m: String, x: int, y: int) -> void:
 	var h_before: int = world.grid.get_h(x, y)
 	if m == "wall":
 		var b_before = world.building_at(x, y) # FO-1 完成判据：真实放墙成功（specs/onboarding-spec）
-		world.apply_command({ "kind": m, "x": x, "y": y })
+		world.apply_command(Command.wall(x, y))
 		if b_before == null and world.building_at(x, y) != null and _onboard == OnboardStage.WALL:
 			_fo_enter_follow()
 		return
 	if m == "tower" and run != null:
-		world.apply_command({ "kind": "build", "bkind": _current_tower_kind(), "x": x, "y": y })
+		world.apply_command(Command.build(_current_tower_kind(), x, y))
 		return
-	world.apply_command({ "kind": m, "x": x, "y": y })
+	# 显式映射：UI 模式名恰好与 kind 同名，但这里不再靠「同名巧合」直接传字符串
+	match m:
+		"dig": world.apply_command(Command.dig(x, y))
+		"tower": world.apply_command(Command.tower(x, y))
+		"fill": world.apply_command(Command.fill(x, y))
+		"lower": world.apply_command(Command.lower(x, y))
+		"remove": world.apply_command(Command.remove(x, y))
+		"hero": world.apply_command(Command.hero(x, y))
 	if m == "remove":
 		_sync_wall_price() # 拆墙回收名额（阶梯价回落）
 	if m == "fill" and world.grid.get_h(x, y) > h_before:
@@ -1564,7 +1548,8 @@ func pointer_down(pos: Vector2) -> void:
 	if cell.x < 0:
 		return
 	if terrain_card != "" and run != null:
-		if run.use_terrain(terrain_card, cell.x, cell.y):
+		# 地形牌落点同样受迷雾约束（未探索不落牌，牌保留待选）
+		if _cell_explored(cell.x, cell.y) and run.use_terrain(terrain_card, cell.x, cell.y):
 			terrain_card = ""
 			run_ui.refresh()
 		return

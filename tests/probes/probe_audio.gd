@@ -123,7 +123,7 @@ func _initialize() -> void:
 
 	# 放塔 → build_stone_place（母版 view3d L705）
 	var c0: int = _cnt(view, "build_stone_place.mp3")
-	var tower_cell: Vector2i = _find_open(w, 0, 0, 63, 63)
+	var tower_cell: Vector2i = _find_open(w, 0, 0, Dims.MAP_N - 1, Dims.MAP_N - 1)
 	check(tower_cell.x >= 0, "塔格扫描")
 	if tower_cell.x >= 0:
 		w.apply_command({ "kind": "tower", "x": tower_cell.x, "y": tower_cell.y })
@@ -163,9 +163,12 @@ func _initialize() -> void:
 	cmp_int(_cnt(view, "orc_chief_roar.mp3") - c4, 1, "技能 → 怒吼 1 次")
 
 	# ---- 8. D1-7 新音效事件链 ----
+	# 白盒补供给：首座塔（60）已花光新经济开局 60（2026-10-28），后续放墙/填高/挖低/
+	# 第二座塔会因 supply 不足被零副作用拒绝 → 音效全 0 假红。本闸测音效链不测经济。
+	w.supply = 300
 	# 放墙 → wall_place（建筑登记检测）
 	var c5: int = _cnt(view, "wall_place.mp3")
-	var wall_cell: Vector2i = _find_open(w, 0, 0, 63, 63)
+	var wall_cell: Vector2i = _find_open(w, 0, 0, Dims.MAP_N - 1, Dims.MAP_N - 1)
 	check(wall_cell.x >= 0, "墙格扫描")
 	if wall_cell.x >= 0:
 		w.apply_command({ "kind": "wall", "x": wall_cell.x, "y": wall_cell.y })
@@ -174,10 +177,10 @@ func _initialize() -> void:
 
 	# 同帧连放两墙（一次 sync）→ 帧内去重 1 次
 	var c5b: int = _cnt(view, "wall_place.mp3")
-	var wall2: Vector2i = _find_open(w, 0, 0, 63, 63)
+	var wall2: Vector2i = _find_open(w, 0, 0, Dims.MAP_N - 1, Dims.MAP_N - 1)
 	if wall2.x >= 0:
 		w.apply_command({ "kind": "wall", "x": wall2.x, "y": wall2.y })
-	var wall3: Vector2i = _find_open(w, 0, 0, 63, 63)
+	var wall3: Vector2i = _find_open(w, 0, 0, Dims.MAP_N - 1, Dims.MAP_N - 1)
 	check(wall2.x >= 0 and wall3.x >= 0, "双墙格扫描")
 	if wall3.x >= 0:
 		w.apply_command({ "kind": "wall", "x": wall3.x, "y": wall3.y })
@@ -205,7 +208,7 @@ func _initialize() -> void:
 
 	# 塔开火 → tower_shot（冷却跳升检测；白盒补完施工 + 射程内放敌）
 	var c10: int = _cnt(view, "tower_shot.mp3")
-	var tw_cell: Vector2i = _find_open(w, 0, 0, 63, 63)
+	var tw_cell: Vector2i = _find_open(w, 0, 0, Dims.MAP_N - 1, Dims.MAP_N - 1)
 	check(tw_cell.x >= 0, "塔格扫描(开火)")
 	if tw_cell.x >= 0:
 		w.apply_command({ "kind": "tower", "x": tw_cell.x, "y": tw_cell.y })
@@ -291,8 +294,8 @@ func _find_ore_cover(view, world) -> Vector2i:
 
 ## 可填可挖的平地格（passable、无建筑、无单位、非英雄格、H_MIN < h < H_MAX）
 func _find_flat(world) -> Vector2i:
-	for y in 64:
-		for x in 64:
+	for y in world.sc.h:
+		for x in world.sc.w:
 			if not world.grid.passable(x, y):
 				continue
 			if world.building_at(x, y) != null:
@@ -315,7 +318,7 @@ func _find_near(world, cx: int, cy: int, r: int) -> Vector2i:
 		for dx in range(-r, r + 1):
 			var x := cx + dx
 			var y := cy + dy
-			if x < 0 or y < 0 or x >= 64 or y >= 64:
+			if x < 0 or y < 0 or x >= world.sc.w or y >= world.sc.h:
 				continue
 			if not world.grid.passable(x, y):
 				continue

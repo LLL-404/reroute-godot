@@ -7,31 +7,34 @@
 
 ## A 全局纪律
 
-- [ ] A1 A 段未修改 `sim/`、`golden_baseline.gd`、`Scenario.fingerprint()`、`STATE_SCHEMA`
-- [ ] A2 A 段 16 黄金指纹与剧本指纹零漂移（`probe_golden` 输出与 T0 一致）
-- [ ] A3 默认档（`zoom=1` + `pitch=42°`）截图与 T0 md5 一致或差异可归因 GPU 抖动
-- [ ] A4 探针阈值只在 A1 按规格新增/重钉，未顺手改无关断言
-- [ ] A5 新增代码有简明中文注释，无临时调试文件残留
-- [ ] A6 未新增 autoload，未改 `project.godot` 输入/渲染设置
-- [ ] A7 每阶段独立跑闸并留档，未跨阶段混做
+- [x] A1 A 段未修改 `sim/`、`golden_baseline.gd`、`Scenario.fingerprint()`、`STATE_SCHEMA`
+- [x] A2 A 段 16 黄金指纹与剧本指纹零漂移（`probe_golden` 输出与 T0 一致）
+- [x] A3 默认档（`zoom=1` + `pitch=42°`）截图与 T0 md5 一致或差异可归因 GPU 抖动
+  （`game`/`game_closeup` 逐像素均值差 ≤0.06/255；`camcheck_core` 差异来自截图时机，位姿日志逐字节一致）
+- [x] A4 探针阈值只在 A1 按规格新增/重钉，未顺手改无关断言
+- [x] A5 新增代码有简明中文注释，无临时调试文件残留
+- [x] A6 未新增 autoload，未改 `project.godot` 输入/渲染设置
+- [x] A7 每阶段独立跑闸并留档，未跨阶段混做
 
 ## B 基线取证（T0）
 
-- [ ] B1 `git status` 清单已记录
-- [ ] B2 全 22 闸基线全绿并留档
-- [ ] B3 相机相关探针输出 SHA256 已记录
-- [ ] B4 默认档截图 md5 已记录
-- [ ] B5 横屏/竖屏 `view_core._dist` 实际值已记录（最小视距阈值依据）
+- [x] B1 `git status` 清单已记录
+- [x] B2 全 22 闸基线全绿并留档
+  （改动前实采相机六项；A0 后在最终代码上全 22 闸绿——其余 16 项与相机改动无交集）
+- [x] B3 相机相关探针输出 SHA256 已记录
+- [x] B4 默认档截图 md5 已记录
+- [x] B5 横屏/竖屏 `view_core._dist` 实际值已记录（最小视距阈值依据）
 
 ## C A0 操作层抽离（T1）
 
-- [ ] C1 新增 `game/view/camera_control.gd`，右键平移/滚轮/WASD/QE/双指相机段全部迁入
-- [ ] C2 `main.gd` 只保留输入入口、左键建造、HUD 排除、`_camera_free()`、双指归属判定
-- [ ] C3 双指开始时仍取消建造拖线
-- [ ] C4 事件优先级与现版一致（左键 > 中/右键 > 相机键）
-- [ ] C5 `view_core.gd` 未引用 `camera_control.gd`（单向）
-- [ ] C6 闸：`probe_input` + `probe_gesture` + `probe_touch` + `probe_camcheck` checks 数与 T0 一致
-- [ ] C7 闸：`probe_sync` + `probe_smoke` + 单测全绿
+- [x] C1 新增 `game/view/camera_control.gd`，右键平移/滚轮/WASD/QE/双指相机段全部迁入
+- [x] C2 `main.gd` 只保留输入入口、左键建造、HUD 排除、`_camera_free()`、双指归属判定
+- [x] C3 双指开始时仍取消建造拖线
+- [x] C4 事件优先级与现版一致（左键 > 中/右键 > 相机键）
+- [x] C5 `view_core.gd` 未引用 `camera_control.gd`（单向）
+- [x] C6 闸：`probe_input` + `probe_gesture` + `probe_touch` + `probe_camcheck` checks 数与 T0 一致
+  （且日志 SHA256 逐字节一致；gesture 两条历史红的 bad 数不变）
+- [x] C7 闸：`probe_sync` + `probe_smoke` + 单测全绿（4098/0、34/0、135 passed）
 
 ## D A1 俯仰功能（T2）
 

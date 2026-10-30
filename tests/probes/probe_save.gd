@@ -30,7 +30,7 @@ func _initialize() -> void:
 	var page_title: Control = shell.pages["title"]
 
 	# ---- A. 接线与初始态 ----
-	check(shell.cb.has("quit") and shell.cb.has("load_slot") and shell.cb.has("save_slot"), "壳回调接线齐（quit/load_slot/save_slot）")
+	check(shell.has_signal("quit_requested") and shell.load_slot_provider.is_valid() and shell.save_slot_provider.is_valid(), "壳接线齐（quit 信号 + load/save 取数口）")
 	var btn_continue: Button = page_title.find_child("BtnContinue", true, false)
 	check(btn_continue != null and btn_continue.disabled, "无存档时「继续对局」禁用")
 
@@ -184,11 +184,10 @@ func _initialize() -> void:
 	check(not shell.confirm_open() and shell.current_page() == "title", "ESC 取消退出确认")
 	await _click_btn(page_title, "BtnQuit")
 	var called := [false]
-	var old_quit: Callable = shell.cb["quit"]
-	shell.cb["quit"] = func() -> void: called[0] = true # spy：防真退
+	shell.quit_requested.disconnect(Callable(main, "_quit_game")) # 摘掉真退，换成 spy
+	shell.quit_requested.connect(func() -> void: called[0] = true)
 	await _click_btn(shell.confirm_layer, "BtnConfirmOk")
-	check(called[0], "「确定」触发 quit 回调")
-	shell.cb["quit"] = old_quit
+	check(called[0], "「确定」触发 quit 信号")
 
 	# ---- I. 安卓返回路由 ----
 	main._last_back_ms = 0

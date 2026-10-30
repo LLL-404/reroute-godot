@@ -12,7 +12,7 @@ extends RefCounted
 #   与矿格余量表（sc.ore_cells 位置序）——挖开不再即时入账 ⇒ 旧档拒载。
 # 常量来源：Lua 版 scripts/sim/canon.lua 逐行对照；>=2^63 的期望值已转带符号十进制
 # （GDScript 大 hex 字面量会被钳位，见 lua64.gd 头注）。
-const STATE_SCHEMA := 11
+const STATE_SCHEMA := 12 # 2026-10-27 128 扩容（尺寸入指纹 → 旧回放作废）
 const FNV_OFFSET := 2166136261 # 0x811C9DC5
 const FNV_PRIME := 16777619 # 0x01000193
 const MASK32 := 4294967296 # 0x100000000
